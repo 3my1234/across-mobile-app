@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "owner": "3my1991",
+    "name": "Atlantic Express",
+    "slug": "across-test",
+    "scheme": "across-test",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/atlantic-express-logo.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "splash": {
+      "image": "./assets/atlantic-express-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8FBFA"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.atlanticexpress.mobile"
+    },
+    "android": {
+      "package": "com.atlanticexpress.mobile",
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/atlantic-express-logo.png",
+        "backgroundColor": "#0F3D35"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-web-browser",
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Atlantic Express to access your photos for product reviews."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "f0f25b15-2667-496f-8d69-ebc8f5c729d8"
+      }
+    }
+  }
+}

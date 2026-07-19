@@ -1,0 +1,41 @@
+0000000000000000000000000000000000000000 97dfe67bb56b1466d9b0764def1d53a8aec2b9aa EMMA <obazeemmmanuel2@gmail.com> 1783284383 +0100	commit (initial): Initial Across mobile app
+97dfe67bb56b1466d9b0764def1d53a8aec2b9aa d2f7d2892cb765ef56b12dd44b382064e4be09e8 EMMA <obazeemmmanuel2@gmail.com> 1783285006 +0100	commit: Configure EAS development builds
+d2f7d2892cb765ef56b12dd44b382064e4be09e8 0be280a14c9039998cc8212a9a43420f9cc17e5b EMMA <obazeemmmanuel2@gmail.com> 1783343972 +0100	commit: Stabilize preview startup
+0be280a14c9039998cc8212a9a43420f9cc17e5b c0c4a8e980c64458f9d8dcd7bdd63baa6ec2d3be EMMA <obazeemmmanuel2@gmail.com> 1783357611 +0100	commit: Fix Expo native module versions
+c0c4a8e980c64458f9d8dcd7bdd63baa6ec2d3be 5fd75831065d17fb510ee36e313947402911db52 EMMA <obazeemmmanuel2@gmail.com> 1783419151 +0100	commit: Fix Privy OAuth redirect path
+5fd75831065d17fb510ee36e313947402911db52 b59a33453b906b220e3aadbb4e55e958066ba1b6 EMMA <obazeemmmanuel2@gmail.com> 1783435924 +0100	commit: Add categories fees and password visibility
+b59a33453b906b220e3aadbb4e55e958066ba1b6 bb0c1a1fe526fdb3265de97b2e2081128df45602 EMMA <obazeemmmanuel2@gmail.com> 1783467026 +0100	commit: Redesign app with AliExpress-style bottom navigation, cart tab, account screen, and product details.
+bb0c1a1fe526fdb3265de97b2e2081128df45602 fd2bccc85f151ee94c2c234a4ad61ae51ad66709 EMMA <obazeemmmanuel2@gmail.com> 1783468496 +0100	commit: Add product reviews with photo uploads and richer product detail screen.
+fd2bccc85f151ee94c2c234a4ad61ae51ad66709 46a6df0ffc4415352df5058fdfce0d11ff2ae99b EMMA <obazeemmmanuel2@gmail.com> 1783476451 +0100	commit: Keep bottom navigation above the device system navigation bar using safe area insets.
+46a6df0ffc4415352df5058fdfce0d11ff2ae99b 07077a70fa30a599877a5a1e39fd04c57cbc57d6 EMMA <obazeemmmanuel2@gmail.com> 1783515971 +0100	commit: Match AliExpress-like header and product card layout on Home.
+07077a70fa30a599877a5a1e39fd04c57cbc57d6 d65a643f74daf7b704124355abf066828bad0c9b EMMA <obazeemmmanuel2@gmail.com> 1783585155 +0100	commit: Normalize mobile media URLs
+d65a643f74daf7b704124355abf066828bad0c9b 6b47dacf959a39056de42e4c0e14a97c4baafc73 EMMA <obazeemmmanuel2@gmail.com> 1783790655 +0100	commit: Add pull refresh and add-to-cart guidance
+6b47dacf959a39056de42e4c0e14a97c4baafc73 9bd2ed3ad39901ae083ab3042f64d746dc75f2e9 EMMA <obazeemmmanuel2@gmail.com> 1783955677 +0100	commit: Rebrand
+9bd2ed3ad39901ae083ab3042f64d746dc75f2e9 6e0413b57a841efa7fdb1b7f1c54f52661139347 EMMA <obazeemmmanuel2@gmail.com> 1784018285 +0100	commit: AddStampDuty
+6e0413b57a841efa7fdb1b7f1c54f52661139347 fd12bf333e611a191696e4c985aaff761e5a2852 EMMA <obazeemmmanuel2@gmail.com> 1784019002 +0100	commit: FixAppJson
+fd12bf333e611a191696e4c985aaff761e5a2852 dfb4732756b47fc0f49c66f17cc31c83c29845ca EMMA <obazeemmmanuel2@gmail.com> 1784119673 +0100	commit: DynamicTrackingAndNotifications
+dfb4732756b47fc0f49c66f17cc31c83c29845ca 1f17ff60386bb05ebdc513b61c2714cd4760679a EMMA <obazeemmmanuel2@gmail.com> 1784163285 +0100	commit: RefactorAppToComponents
+1f17ff60386bb05ebdc513b61c2714cd4760679a 9c17182e82c1d837a6447e6c5a55e2afdb5e14e3 EMMA <obazeemmmanuel2@gmail.com> 1784164791 +0100	commit: FixGoogleSignIn
+9c17182e82c1d837a6447e6c5a55e2afdb5e14e3 9f326341c4615cea0c96e92764dd1ff66fe5cee9 EMMA <obazeemmmanuel2@gmail.com> 1784198394 +0100	commit: FixesV2
+9f326341c4615cea0c96e92764dd1ff66fe5cee9 f52d207aa6f668176a6ddc41842c4da3c36813a2 EMMA <obazeemmmanuel2@gmail.com> 1784214630 +0100	commit: TypeScriptFix
+f52d207aa6f668176a6ddc41842c4da3c36813a2 47cef21b3c048462157a2f6efabeb25ac04614c7 EMMA <obazeemmmanuel2@gmail.com> 1784222547 +0100	commit: CollapseFix
+47cef21b3c048462157a2f6efabeb25ac04614c7 568e5032216ecaf04df9ea95033153f8347f10df EMMA <obazeemmmanuel2@gmail.com> 1784225406 +0100	commit: SwitchEASOwner
+568e5032216ecaf04df9ea95033153f8347f10df 74e1cc496a835c9dc94420a53d086ea13b96fc88 EMMA <obazeemmmanuel2@gmail.com> 1784226724 +0100	commit: SwitchTo3my1991
+74e1cc496a835c9dc94420a53d086ea13b96fc88 04b45357b2990159cb9fca8f6d0992c8dcac2a49 EMMA <obazeemmmanuel2@gmail.com> 1784227474 +0100	commit: ResetProjectId
+04b45357b2990159cb9fca8f6d0992c8dcac2a49 a283153fd9961f852b240af862774cbf0ab22e0c EMMA <obazeemmmanuel2@gmail.com> 1784228203 +0100	commit: FixSlugAndProjectId
+a283153fd9961f852b240af862774cbf0ab22e0c a3551f2668d9f28c112bf50619c95b22c4067d9c EMMA <obazeemmmanuel2@gmail.com> 1784245871 +0100	commit: FixScheme
+a3551f2668d9f28c112bf50619c95b22c4067d9c 94dcafd6812666bb39b385c6c6bd8cc245983083 EMMA <obazeemmmanuel2@gmail.com> 1784246411 +0100	commit: UseAcrossTestScheme
+94dcafd6812666bb39b385c6c6bd8cc245983083 fe931fd0c5aa5e43ec7371258c697dc2b347c76d EMMA <obazeemmmanuel2@gmail.com> 1784267297 +0100	commit: AliExpressHeader
+fe931fd0c5aa5e43ec7371258c697dc2b347c76d d42a9e9631419706654a23e79f9e1d752a74a537 EMMA <obazeemmmanuel2@gmail.com> 1784273661 +0100	commit: RemoveDuplicateHook
+d42a9e9631419706654a23e79f9e1d752a74a537 075c7f3280e17190c382ac624b026301d09fd282 EMMA <obazeemmmanuel2@gmail.com> 1784319886 +0100	commit: Add Flutterwave payment UX
+075c7f3280e17190c382ac624b026301d09fd282 a5addee17a9be4221f29fd6726d450f35ce13874 EMMA <obazeemmmanuel2@gmail.com> 1784366190 +0100	commit: Fix session auto-logout race condition and AliExpress-style sticky header layout
+a5addee17a9be4221f29fd6726d450f35ce13874 5292e24d8718add7bfa78600260958774d6dba71 EMMA <obazeemmmanuel2@gmail.com> 1784374473 +0100	commit: Fix product loading (await+retry), AliExpress scroll (logo fades, search+categories slide up), checkout error handling
+5292e24d8718add7bfa78600260958774d6dba71 821691d946759a104a13443a7dcf9f2a47244c90 EMMA <obazeemmmanuel2@gmail.com> 1784374971 +0100	commit: Fix: Await product loading on startup, simplfy AliExpress scroll (logo shrinks, search+categories fixed), better checkout error messages
+821691d946759a104a13443a7dcf9f2a47244c90 ae8ca4276609194531e4e4424031bacdeb5f5cc5 EMMA <obazeemmmanuel2@gmail.com> 1784383698 +0100	commit: Fix: Search+categories now MOVE UP (translateY) to fill logo space on scroll, matching AliExpress exactly
+ae8ca4276609194531e4e4424031bacdeb5f5cc5 95f7653c21ef9401e6b32e6cb69ea130ceb045bf EMMA <obazeemmmanuel2@gmail.com> 1784388651 +0100	commit: Fix search: filter visible products by query instead of opening first match
+95f7653c21ef9401e6b32e6cb69ea130ceb045bf 19da294d1ee7d2803171ad443b746bb68bdee11b EMMA <obazeemmmanuel2@gmail.com> 1784409043 +0100	commit: Add XP rewards UI (balance display, daily claim button) and Support tickets tab (create ticket, view messages) with new Support nav item
+19da294d1ee7d2803171ad443b746bb68bdee11b 0bfe001021b1be1328cc55aa12b8f7e7c3c72ef1 EMMA <obazeemmmanuel2@gmail.com> 1784410286 +0100	commit: Remove escrow tab from nav, keep only Home/Cart/Account/Track/Support
+0bfe001021b1be1328cc55aa12b8f7e7c3c72ef1 7676de2770ae23c70531a355b0696f4d69500134 EMMA <obazeemmmanuel2@gmail.com> 1784416326 +0100	commit: Add notification bell with badge and dropdown, poll every 15s, mark read/all read
+7676de2770ae23c70531a355b0696f4d69500134 b39b91ecfc74fd6af132423de8480db52c6c2f88 EMMA <obazeemmmanuel2@gmail.com> 1784417813 +0100	commit: Add profile editing (name, phone, region, DOB, avatar URL) with location detection in account tab
+b39b91ecfc74fd6af132423de8480db52c6c2f88 ef7681a747fc5f2b0699d12881235013cc9b4048 EMMA <obazeemmmanuel2@gmail.com> 1784449148 +0100	commit: Fix: remove escrow tab/code, fix scroll translate (-40 max), add profile pic picker, add Flutterwave logo to pay button, loadProfile on session, fix totals without stamp duty/shipping
+ef7681a747fc5f2b0699d12881235013cc9b4048 c5d345e1ac687429a9d4c4444941082430e6e621 EMMA <obazeemmmanuel2@gmail.com> 1784475773 +0100	commit: Fix: cart clears on payment success, success alert + track update, notifications poll every 10s, profile saves only non-empty fields, track shows Order Placed
