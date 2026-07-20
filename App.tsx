@@ -525,12 +525,7 @@ function AcrossApp() {
         </View>
       )}
 
-      {activeTab !== "home" && (
-        <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
-          <Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>{NAV_ITEMS.find(i => i.key === activeTab)?.label ?? "Atlantic Express"}</Text>
-          <Text style={{ marginTop: 2, color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>{activeTab === "cart" ? `${totals.items} items` : "Atlantic Express"}</Text>
-        </View>
-      )}
+      {/* Non-home pages: removed heading as requested */}
 
       <View style={s.content}>
         {activeTab === "home" && (
