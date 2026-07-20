@@ -264,9 +264,6 @@ function AcrossApp() {
   async function authenticate(path: string, payload: Record<string, string>) {
     setBusy(true);
     try {
-      if (detectedCountryCode && detectedCountryCode !== "NG") {
-        throw new Error(`This app is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`);
-      }
       const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify(payload) });
       const d = await r.json().catch(() => ({}));
       if (d.requires_email_verification) {
@@ -280,10 +277,6 @@ function AcrossApp() {
 
   async function authenticateWithGoogle() {
     if (!PRIVY_APP_ID || PRIVY_APP_ID.startsWith("REPLACE_ME")) { Alert.alert("Privy not configured"); return; }
-    if (detectedCountryCode && detectedCountryCode !== "NG") {
-      Alert.alert("Unavailable", `This app is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`);
-      return;
-    }
     setOauthBusy(true); setBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
@@ -327,10 +320,6 @@ function AcrossApp() {
 
   async function checkout() {
     if (!token || cart.length === 0) return;
-    if (detectedCountryCode && detectedCountryCode !== "NG") {
-      Alert.alert("Unavailable", `This app is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`);
-      return;
-    }
     setBusy(true); try {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
       const r = await fetch(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
@@ -472,7 +461,7 @@ function AcrossApp() {
       if (profileAvatar) body.avatar_url = profileAvatar;
       if (Object.keys(body).length === 0) throw new Error("No fields to update");
       const r = await fetch(`${API_URL}/api/v1/profile`, {
-        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
         body: JSON.stringify(body)
       });
       if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.message || "Failed to save"); }
@@ -504,7 +493,7 @@ function AcrossApp() {
       setProfileAvatar(avatarUrl);
       // Save avatar URL
       await fetch(`${API_URL}/api/v1/profile`, {
-        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
         body: JSON.stringify({ avatar_url: avatarUrl })
       });
       await loadProfile();
