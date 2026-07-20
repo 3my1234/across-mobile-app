@@ -51,12 +51,13 @@ export function StartupErrorScreen({ message }: { message: string }) {
 interface AuthProps {
   mode: AuthMode;
   busy: boolean;
+  noticeText?: string;
   onModeChange: (m: AuthMode) => void;
   onSubmit: (p: string, b: Record<string, string>) => Promise<void>;
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ mode, busy, onModeChange, onSubmit, onGoogle }: AuthProps) {
+export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onGoogle }: AuthProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -82,6 +83,12 @@ export function AuthScreen({ mode, busy, onModeChange, onSubmit, onGoogle }: Aut
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>Shop China. Pay in Naira. Track to your door.</Text>
                 <Text style={s.authCopy}>Sign in to access your cart, escrow protection, saved cards, and delivery tracking.</Text>
+                {!!noticeText && (
+                  <View style={s.authNotice}>
+                    <Ionicons name="alert-circle-outline" size={16} color="#B54708" />
+                    <Text style={s.authNoticeText}>{noticeText}</Text>
+                  </View>
+                )}
                 <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
                 <Pressable style={s.gmailButton} onPress={() => onModeChange("gmail")}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>Use Gmail</Text></Pressable>
                 <Pressable style={s.gmailButton} onPress={onGoogle} disabled={busy}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{busy ? "Opening..." : "Sign in with Google"}</Text></Pressable>

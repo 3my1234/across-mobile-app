@@ -79,15 +79,19 @@ function AcrossApp() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [profileRegion, setProfileRegion] = useState("");
+  const [profileAddress, setProfileAddress] = useState("");
+  const [profileCity, setProfileCity] = useState("");
+  const [profileState, setProfileState] = useState("");
+  const [profilePostalCode, setProfilePostalCode] = useState("");
   const [profileDob, setProfileDob] = useState("");
   const [profileAvatar, setProfileAvatar] = useState("");
+  const [detectedCountryCode, setDetectedCountryCode] = useState("");
+  const [detectedCountryName, setDetectedCountryName] = useState("");
 
   const categories = useMemo(() => {
     const names = new Set<string>();
@@ -121,6 +125,21 @@ function AcrossApp() {
     restoreSession();
     bootTimer.current = setTimeout(() => setStage(prev => prev === "booting" ? "auth" : prev), SESSION_TIMEOUT);
     return () => { if (bootTimer.current) clearTimeout(bootTimer.current); };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const response = await fetch("https://ipapi.co/json/");
+        const data = await response.json();
+        if (!mounted) return;
+        setDetectedCountryCode(String(data.country_code || "").toUpperCase());
+        setDetectedCountryName(String(data.country_name || ""));
+        if (data.country_name && !profileRegion) setProfileRegion(String(data.country_name));
+      } catch {}
+    })();
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -193,21 +212,37 @@ function AcrossApp() {
 
   async function clearSession() {
     await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(EXPIRY_KEY)]);
-    setToken(null); setProducts([]); setCart([]); setQuote(null); setPaymentState("idle"); setPaymentMessage("");
-    // Clear all user-specific data to prevent cross-user data leakage
+    setToken(null);
+    setProducts([]);
+    setCart([]);
+    setQuote(null);
+    setPaymentState("idle");
+    setPaymentMessage("");
+    setXpBalance(0);
+    setXpClaimed(false);
+    setSupportTickets([]);
+    setSupportSubject("");
+    setSupportMessage("");
+    setSelectedTicket(null);
+    setTicketMessages([]);
+    setNotifications([]);
+    setUnreadCount(0);
+    setShowNotifications(false);
     setProfile(null);
     setProfileName("");
     setProfilePhone("");
     setProfileRegion("");
+    setProfileAddress("");
+    setProfileCity("");
+    setProfileState("");
+    setProfilePostalCode("");
     setProfileDob("");
     setProfileAvatar("");
-    setXpBalance(0);
-    setXpClaimed(false);
-    setNotifications([]);
-    setUnreadCount(0);
-    setOrders([]);
-    setSelectedOrder(null);
-    setSupportTickets([]);
+    setEditingProfile(false);
+    setSelectedProduct(null);
+    setSearchQuery("");
+    setSelectedCategory("All");
+    stopPaymentPolling();
   }
 
   async function logout() {
@@ -229,8 +264,15 @@ function AcrossApp() {
   async function authenticate(path: string, payload: Record<string, string>) {
     setBusy(true);
     try {
-      const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (detectedCountryCode && detectedCountryCode !== "NG") {
+        throw new Error(`This app is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`);
+      }
+      const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify(payload) });
       const d = await r.json().catch(() => ({}));
+      if (d.requires_email_verification) {
+        Alert.alert("Verify your email", "We sent you a verification email. Confirm it before signing in.");
+        return;
+      }
       if (!r.ok) throw new Error(d.message ?? "Auth failed");
       await saveSession(d);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
@@ -238,6 +280,10 @@ function AcrossApp() {
 
   async function authenticateWithGoogle() {
     if (!PRIVY_APP_ID || PRIVY_APP_ID.startsWith("REPLACE_ME")) { Alert.alert("Privy not configured"); return; }
+    if (detectedCountryCode && detectedCountryCode !== "NG") {
+      Alert.alert("Unavailable", `This app is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`);
+      return;
+    }
     setOauthBusy(true); setBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
@@ -254,7 +300,7 @@ function AcrossApp() {
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
       if (!privyToken) throw new Error("Could not get access token");
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ privy_token: privyToken }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ privy_token: privyToken }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.message || "Verification failed");
       await saveSession(d); setOauthBusy(false);
@@ -281,9 +327,13 @@ function AcrossApp() {
 
   async function checkout() {
     if (!token || cart.length === 0) return;
+    if (detectedCountryCode && detectedCountryCode !== "NG") {
+      Alert.alert("Unavailable", `This app is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`);
+      return;
+    }
     setBusy(true); try {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
-      const r = await fetch(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ country_code: "NG", items }) });
+      const r = await fetch(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
       if (r.status === 401) { await logout(); return; }
       if (!r.ok) { const errData = await r.json().catch(() => ({})); throw new Error(errData.message || "Checkout failed"); }
       const q = await r.json() as Quote;
@@ -297,7 +347,7 @@ function AcrossApp() {
     if (!token || !q) return; setBusy(true);
     try {
       const redirectUrl = "across-test://payments/flutterwave";
-      const r = await fetch(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
+      const r = await fetch(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.message || "Payment setup failed");
       const checkoutLink = d.checkout_link || d.response?.data?.link;
@@ -397,6 +447,10 @@ function AcrossApp() {
         setProfileName(d.full_name || "");
         setProfilePhone(d.phone || "");
         setProfileRegion(d.region || "");
+        setProfileAddress(d.address || "");
+        setProfileCity(d.city || "");
+        setProfileState(d.state || "");
+        setProfilePostalCode(d.postal_code || "");
         setProfileDob(d.date_of_birth ? d.date_of_birth.slice(0, 10) : "");
         setProfileAvatar(d.avatar_url || "");
       }
@@ -410,6 +464,10 @@ function AcrossApp() {
       if (profileName) body.full_name = profileName;
       if (profilePhone) body.phone = profilePhone;
       if (profileRegion) body.region = profileRegion;
+      if (profileAddress) body.address = profileAddress;
+      if (profileCity) body.city = profileCity;
+      if (profileState) body.state = profileState;
+      if (profilePostalCode) body.postal_code = profilePostalCode;
       if (profileDob) body.date_of_birth = profileDob;
       if (profileAvatar) body.avatar_url = profileAvatar;
       if (Object.keys(body).length === 0) throw new Error("No fields to update");
@@ -454,13 +512,17 @@ function AcrossApp() {
   }
 
   useEffect(() => {
-    if (stage === "app" && token && !profileRegion) {
-      try { fetch("https://ipapi.co/json/").then(r => r.json()).then(d => { if (d.country_name) setProfileRegion(d.country_name); }).catch(() => {}); } catch {}
+    if (stage === "app" && token && !profileRegion && detectedCountryName) {
+      setProfileRegion(detectedCountryName);
     }
-  }, [stage, token, profileRegion]);
+  }, [stage, token, profileRegion, detectedCountryName]);
+
+  const countryNotice = detectedCountryCode && detectedCountryCode !== "NG"
+    ? `Service is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`
+    : "";
 
   if (stage === "booting") return <LaunchScreen />;
-  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} onModeChange={setAuthMode} onSubmit={authenticate} onGoogle={authenticateWithGoogle} />;
+  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -609,6 +671,10 @@ function AcrossApp() {
                 <TextInput style={s.input} value={profileName} onChangeText={setProfileName} placeholder="Full name" />
                 <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} placeholder="Phone number" keyboardType="phone-pad" />
                 <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} placeholder="Region" />
+                <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} placeholder="Street address" />
+                <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} placeholder="City" />
+                <TextInput style={s.input} value={profileState} onChangeText={setProfileState} placeholder="State" />
+                <TextInput style={s.input} value={profilePostalCode} onChangeText={setProfilePostalCode} placeholder="Postal code" />
                 <TextInput style={s.input} value={profileDob} onChangeText={setProfileDob} placeholder="Date of birth (YYYY-MM-DD)" />
                 <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
                   <Pressable style={[s.secondaryButton, { flex: 1 }]} onPress={() => setEditingProfile(false)}><Text style={s.secondaryButtonText}>Cancel</Text></Pressable>

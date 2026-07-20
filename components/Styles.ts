@@ -15,6 +15,8 @@ export const s = StyleSheet.create({
   authPanel: { borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 12, padding: 18, backgroundColor: "rgba(255,255,255,0.98)" },
   authTitle: { color: "#191919", fontSize: 25, lineHeight: 30, fontWeight: "900" },
   authCopy: { marginTop: 10, marginBottom: 18, color: "#8C8C8C", fontSize: 14, lineHeight: 21 },
+  authNotice: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: "#FFFAEB", borderWidth: 1, borderColor: "#FEDF89" },
+  authNoticeText: { flex: 1, color: "#B54708", fontSize: 13, fontWeight: "700", lineHeight: 18 },
   input: { height: 48, marginTop: 12, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 10, paddingHorizontal: 12, backgroundColor: "#FFFFFF", color: "#191919", fontWeight: "700" },
   passwordWrap: { height: 48, marginTop: 12, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 10, paddingLeft: 12, paddingRight: 6, backgroundColor: "#FFFFFF", flexDirection: "row", alignItems: "center" },
   passwordInput: { flex: 1, height: "100%", color: "#191919", fontWeight: "700" },
