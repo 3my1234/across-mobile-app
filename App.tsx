@@ -79,6 +79,8 @@ function AcrossApp() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -192,6 +194,20 @@ function AcrossApp() {
   async function clearSession() {
     await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(EXPIRY_KEY)]);
     setToken(null); setProducts([]); setCart([]); setQuote(null); setPaymentState("idle"); setPaymentMessage("");
+    // Clear all user-specific data to prevent cross-user data leakage
+    setProfile(null);
+    setProfileName("");
+    setProfilePhone("");
+    setProfileRegion("");
+    setProfileDob("");
+    setProfileAvatar("");
+    setXpBalance(0);
+    setXpClaimed(false);
+    setNotifications([]);
+    setUnreadCount(0);
+    setOrders([]);
+    setSelectedOrder(null);
+    setSupportTickets([]);
   }
 
   async function logout() {
@@ -525,7 +541,12 @@ function AcrossApp() {
         </View>
       )}
 
-      {/* Non-home pages: removed heading as requested */}
+      {activeTab !== "home" && (
+        <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
+          <Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>{NAV_ITEMS.find(i => i.key === activeTab)?.label ?? "Atlantic Express"}</Text>
+          <Text style={{ marginTop: 2, color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>{activeTab === "cart" ? `${totals.items} items` : "Atlantic Express"}</Text>
+        </View>
+      )}
 
       <View style={s.content}>
         {activeTab === "home" && (
