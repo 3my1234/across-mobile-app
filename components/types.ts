@@ -40,7 +40,7 @@ export type Review = {
 export type ReviewSummary = { count: number; average_rating: number };
 
 export type Tab = "home" | "cart" | "account" | "track" | "escrow" | "support";
-export type AuthMode = "welcome" | "signin" | "signup" | "gmail";
+export type AuthMode = "welcome" | "signin" | "signup";
 export type AppStage = "booting" | "auth" | "app";
 
 export type SupportTicket = {

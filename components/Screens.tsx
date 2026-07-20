@@ -64,12 +64,11 @@ export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onG
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const isWelcome = mode === "welcome";
-  const title = mode === "signin" ? "Welcome back" : mode === "signup" ? "Create your Atlantic Express account" : "Continue with Gmail";
+  const title = mode === "signin" ? "Welcome back" : "Create your Atlantic Express account";
 
   async function submit() {
     if (mode === "signin") await onSubmit("/api/v1/auth/login", { email, password });
     else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password });
-    else if (mode === "gmail") await onSubmit("/api/v1/auth/gmail", { full_name: fullName, email });
   }
 
   return (
@@ -90,7 +89,6 @@ export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onG
                   </View>
                 )}
                 <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
-                <Pressable style={s.gmailButton} onPress={() => onModeChange("gmail")}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>Use Gmail</Text></Pressable>
                 <Pressable style={s.gmailButton} onPress={onGoogle} disabled={busy}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{busy ? "Opening..." : "Sign in with Google"}</Text></Pressable>
                 <Pressable style={s.textButton} onPress={() => onModeChange("signin")}><Text style={s.textButtonText}>I have an account</Text></Pressable>
               </View>
@@ -98,9 +96,9 @@ export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onG
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} placeholder="Full name" autoCapitalize="words" style={s.input} />}
-                <TextInput value={email} onChangeText={setEmail} placeholder={mode === "gmail" ? "Gmail" : "Email"} keyboardType="email-address" autoCapitalize="none" style={s.input} />
+                <TextInput value={email} onChangeText={setEmail} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                {mode !== "gmail" && (<View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>)}
+                {mode !== "signin" && (<View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>)}
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
                 <Pressable style={s.textButton} onPress={() => onModeChange("welcome")}><Text style={s.textButtonText}>Back</Text></Pressable>
               </View>
