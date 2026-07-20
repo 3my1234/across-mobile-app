@@ -2,6 +2,7 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:8080"
 export const TOKEN_KEY = "across.accessToken";
 export const EXPIRY_KEY = "across.accessTokenExpiresAt";
 export const LOGO = require("../assets/atlantic-express-logo.png");
+export const FLUTTERWAVE_LOGO = require("../assets/Flutterwave_Logo.png");
 export const AUTH_TIMEOUT_MS = Number.parseInt(process.env.EXPO_PUBLIC_AUTH_TIMEOUT_MS || "12000", 10);
 
 export const FALLBACK_IMAGES = [

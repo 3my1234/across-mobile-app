@@ -14,7 +14,7 @@ import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Component, ReactNode } from "react";
 
 import { Product, CartItem, Quote, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
-import { API_URL, TOKEN_KEY, EXPIRY_KEY, LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT, defaultCategories } from "./components/config";
+import { API_URL, TOKEN_KEY, EXPIRY_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT, defaultCategories } from "./components/config";
 import { money, fetchWithTimeout, sleep } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -627,8 +627,8 @@ function AcrossApp() {
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total) : money(totals.payablePreview)}</Text></View>
                 <Pressable style={[s.primaryButton, busy && s.disabled]} onPress={checkout} disabled={busy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Image source={{ uri: "https://res.cloudinary.com/demo/image/upload/v1/flutterwave_logo.png" }} style={{ width: 20, height: 20 }} />
-                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : "Pay with Flutterwave"}</Text>
+                    <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
+                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : "Pay using Flutterwave"}</Text>
                   </View>
                 </Pressable>
                 {paymentMessage ? <Text style={{ marginTop: 10, color: paymentState === "failed" ? "#B42318" : "#30423D", fontWeight: "700" }}>{paymentMessage}</Text> : null}
