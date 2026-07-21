@@ -265,12 +265,12 @@ function AcrossApp() {
     setBusy(true);
     try {
       const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify(payload) });
-      const d = await r.json().catch(() => ({}));
+      const d = await readResponseBody(r);
       if (d.requires_email_verification) {
         Alert.alert("Verify your email", "We sent you a verification email. Confirm it before signing in.");
         return;
       }
-      if (!r.ok) throw new Error(d.message ?? "Auth failed");
+      if (!r.ok) throw new Error(formatHttpError(r, d, "Auth failed"));
       await saveSession(d);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
@@ -294,8 +294,8 @@ function AcrossApp() {
       const privyToken = await getPrivyAccessTokenWithRetry();
       if (!privyToken) throw new Error("Could not get access token");
       const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ privy_token: privyToken }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.message || "Verification failed");
+      const d = await readResponseBody(r);
+      if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
       await saveSession(d); setOauthBusy(false);
     } catch (e) { setOauthBusy(false); Alert.alert("Sign-in failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
@@ -303,6 +303,21 @@ function AcrossApp() {
   async function getPrivyAccessTokenWithRetry() {
     for (let i = 0; i < 10; i++) { const t = await getAccessToken().catch(() => null); if (t) return t; await sleep(500); }
     return null;
+  }
+
+  async function readResponseBody(response: Response) {
+    const text = await response.text().catch(() => "");
+    if (!text.trim()) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { message: text };
+    }
+  }
+
+  function formatHttpError(response: Response, body: any, fallback: string) {
+    const message = body?.message || body?.error || body?.detail || body?.msg || fallback;
+    return `${message} (HTTP ${response.status})`;
   }
 
   function getCartQuantity(sku: string) { return cart.find(i => i.product.sku === sku)?.quantity ?? 0; }
