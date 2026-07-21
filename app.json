@@ -1,9 +1,9 @@
 {
   "expo": {
-    "owner": "3my1991",
+    "owner": "atlantic-express",
     "name": "Atlantic Express",
-    "slug": "across-test",
-    "scheme": "across-test",
+    "slug": "across",
+    "scheme": "across",
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/atlantic-express-logo.png",
@@ -46,7 +46,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "f0f25b15-2667-496f-8d69-ebc8f5c729d8"
+        "projectId": "99011f08-ee05-4d96-b3fd-0088e26d4f76"
       }
     }
   }
