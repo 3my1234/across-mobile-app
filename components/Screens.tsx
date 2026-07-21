@@ -54,10 +54,11 @@ interface AuthProps {
   noticeText?: string;
   onModeChange: (m: AuthMode) => void;
   onSubmit: (p: string, b: Record<string, string>) => Promise<void>;
+  onResend: (email: string) => Promise<void>;
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onGoogle }: AuthProps) {
+export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onResend, onGoogle }: AuthProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -98,8 +99,9 @@ export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onG
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                {mode !== "signin" && (<View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>)}
+                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
+                {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
                 <Pressable style={s.textButton} onPress={() => onModeChange("welcome")}><Text style={s.textButtonText}>Back</Text></Pressable>
               </View>
             )}

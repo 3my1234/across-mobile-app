@@ -13,7 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Component, ReactNode } from "react";
 
-import { Product, CartItem, Quote, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
+import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
 import { API_URL, TOKEN_KEY, EXPIRY_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT, defaultCategories } from "./components/config";
 import { money, fetchWithTimeout, sleep } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
@@ -69,6 +69,7 @@ function AcrossApp() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [xpBalance, setXpBalance] = useState(0);
   const [xpClaimed, setXpClaimed] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
@@ -154,11 +155,13 @@ function AcrossApp() {
     }
   }, [oauthState]);
 
-  // Poll notifications every 10s when logged in
   useEffect(() => {
     if (stage !== "app" || !token) return;
-    loadNotifications();
-    const interval = setInterval(loadNotifications, 10000);
+    void claimDailyXP(token, false);
+    void loadXPBalance(token);
+    void loadOrders(token);
+    void loadNotifications(token);
+    const interval = setInterval(() => { void loadNotifications(token); }, 10000);
     return () => clearInterval(interval);
   }, [stage, token]);
 
@@ -173,18 +176,17 @@ function AcrossApp() {
       if (!r.ok) { await clearSession(); setStage("auth"); return; }
       setToken(storedToken);
       await loadProducts();
-      loadXPBalance().catch(() => {});
       loadProfile().catch(() => {});
       setStage("app");
     } catch { await clearSession(); setStage("auth"); }
   }
 
-  async function loadNotifications() {
-    if (!token) return;
+  async function loadNotifications(authToken: string | null = token) {
+    if (!authToken) return;
     try {
       const [listR, countR] = await Promise.all([
-        fetch(`${API_URL}/api/v1/notifications`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API_URL}/api/v1/notifications/unread-count`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_URL}/api/v1/notifications`, { headers: { Authorization: `Bearer ${authToken}` } }),
+        fetch(`${API_URL}/api/v1/notifications/unread-count`, { headers: { Authorization: `Bearer ${authToken}` } })
       ]);
       if (listR.ok) setNotifications((await listR.json()).notifications || []);
       if (countR.ok) setUnreadCount((await countR.json()).unread_count || 0);
@@ -218,6 +220,7 @@ function AcrossApp() {
     setQuote(null);
     setPaymentState("idle");
     setPaymentMessage("");
+    setOrders([]);
     setXpBalance(0);
     setXpClaimed(false);
     setSupportTickets([]);
@@ -267,12 +270,44 @@ function AcrossApp() {
       const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify(payload) });
       const d = await readResponseBody(r);
       if (d.requires_email_verification) {
+        setAuthMode("signin");
         Alert.alert("Verify your email", "We sent you a verification email. Confirm it before signing in.");
+        return;
+      }
+      if (r.status === 409) {
+        Alert.alert("Account conflict", d?.message || "An account already uses these details.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Sign in", onPress: () => setAuthMode("signin") },
+          { text: "Resend email", onPress: () => { void resendVerification(payload.email || ""); } }
+        ]);
         return;
       }
       if (!r.ok) throw new Error(formatHttpError(r, d, "Auth failed"));
       await saveSession(d);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
+  }
+
+  async function resendVerification(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      Alert.alert("Email required", "Enter your email address first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/api/v1/auth/resend-verification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
+        body: JSON.stringify({ email: normalizedEmail })
+      });
+      const d = await readResponseBody(r);
+      if (!r.ok) throw new Error(formatHttpError(r, d, "Could not resend verification"));
+      Alert.alert("Verification email", d?.message || "If the account exists, a verification email has been sent.");
+    } catch (e) {
+      Alert.alert("Failed", e instanceof Error ? e.message : "Could not resend verification");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function authenticateWithGoogle() {
@@ -350,7 +385,7 @@ function AcrossApp() {
     const q = quoteData || quote;
     if (!token || !q) return; setBusy(true);
     try {
-      const redirectUrl = "across-test://payments/flutterwave";
+      const redirectUrl = "across://payments/flutterwave";
       const r = await fetch(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.message || "Payment setup failed");
@@ -389,7 +424,7 @@ function AcrossApp() {
       const state = String(d.payment_state || "pending");
       if (state === "settled" || state === "released") {
         setPaymentState("settled"); setPaymentMessage("Payment confirmed!");
-        loadNotifications();
+        await Promise.all([loadNotifications(token), loadXPBalance(token), loadOrders(token)]);
         return true;
       }
       setPaymentState("waiting"); setPaymentMessage("Waiting for Flutterwave to confirm.");
@@ -406,19 +441,39 @@ function AcrossApp() {
     }
   }
 
-  async function claimDailyXP() {
-    if (!token) return; setBusy(true);
+  async function claimDailyXP(authToken: string | null = token, showFeedback = true) {
+    if (!authToken) return;
+    if (showFeedback) setBusy(true);
     try {
-      const r = await fetch(`${API_URL}/api/v1/xp/daily-login`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json();
-      if (d.claimed) { setXpClaimed(true); setXpBalance(prev => prev + d.xp); Alert.alert("XP Earned!", d.message); loadNotifications(); }
-      else { setXpClaimed(true); Alert.alert("Already claimed", d.message); }
-    } catch { Alert.alert("Failed", "Could not claim daily XP"); } finally { setBusy(false); }
+      const r = await fetch(`${API_URL}/api/v1/xp/daily-login`, { method: "POST", headers: { Authorization: `Bearer ${authToken}` } });
+      const d = await readResponseBody(r);
+      if (!r.ok) throw new Error(formatHttpError(r, d, "Could not claim daily XP"));
+      setXpClaimed(true);
+      await Promise.all([loadXPBalance(authToken), loadNotifications(authToken)]);
+      if (showFeedback) Alert.alert(d.claimed ? "XP Earned!" : "Already claimed", d.message || "Daily XP updated");
+    } catch (e) {
+      if (showFeedback) Alert.alert("Failed", e instanceof Error ? e.message : "Could not claim daily XP");
+    } finally {
+      if (showFeedback) setBusy(false);
+    }
   }
 
-  async function loadXPBalance() {
-    if (!token) return;
-    try { const r = await fetch(`${API_URL}/api/v1/xp/balance`, { headers: { Authorization: `Bearer ${token}` } }); if (r.ok) { const d = await r.json(); setXpBalance(d.xp || 0); } } catch {}
+  async function loadXPBalance(authToken: string | null = token) {
+    if (!authToken) return;
+    try { const r = await fetch(`${API_URL}/api/v1/xp/balance`, { headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); setXpBalance(d.xp || 0); } } catch {}
+  }
+
+  async function loadOrders(authToken: string | null = token) {
+    if (!authToken) return;
+    try {
+      const r = await fetch(`${API_URL}/api/v1/orders`, { headers: { Authorization: `Bearer ${authToken}` } });
+      if (r.ok) setOrders((await r.json()).orders || []);
+    } catch {}
+  }
+
+  async function refreshOrders() {
+    setRefreshing(true);
+    try { await loadOrders(); } finally { setRefreshing(false); }
   }
 
   async function loadSupportTickets() {
@@ -526,7 +581,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onGoogle={authenticateWithGoogle} />;
+  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -689,7 +744,7 @@ function AcrossApp() {
             <View style={s.panel}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: "#FF4747" }}>{xpBalance} XP</Text><Text style={{ color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>= ₦{xpBalance} discount</Text></View>
-                <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={claimDailyXP} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
+                <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
             </View>
             <View style={s.quickLinks}>
@@ -707,22 +762,34 @@ function AcrossApp() {
         )}
 
         {activeTab === "track" && (
-          <ScrollView contentContainerStyle={[s.screenPad, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshHomeData} tintColor="#FF4747" />}>
-            <View style={s.panel}><Text style={s.kicker}>Track</Text><Text style={s.panelTitle}>Order progress</Text></View>
-            {paymentState === "settled" || paymentState === "waiting" ? (
-              <View style={s.panel}>
-                <Text style={{ color: "#12805F", fontWeight: "900", fontSize: 16 }}>✅ Order Placed!</Text>
-                <Text style={{ marginTop: 8, color: "#595959" }}>{paymentMessage || "Your payment is being processed."}</Text>
-              </View>
-            ) : null}
-            <View style={s.timeline}>{TRACKING_STAGES.map((st, i) => {
-              const done = paymentState === "settled" && i === 0;
-              return (<View key={st} style={s.timelineItem}>
-                <View style={[s.dot, done && s.doneDot]} />
-                {i !== TRACKING_STAGES.length - 1 && <View style={[s.line, done && s.doneLine]} />}
-                <View style={s.timelineText}><Text style={s.timelineTitle}>{st}</Text></View>
-              </View>);
-            })}</View>
+          <ScrollView contentContainerStyle={[s.screenPad, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshOrders} tintColor="#FF4747" />}>
+            <View style={s.panel}><Text style={s.kicker}>Orders</Text><Text style={s.panelTitle}>Purchase history and tracking</Text></View>
+            {orders.length === 0 ? (
+              <View style={s.panel}><Text style={{ color: "#8C8C8C" }}>No orders found yet. Pull down to refresh after payment.</Text></View>
+            ) : orders.map(order => {
+              const currentIndex = Math.max(0, (TRACKING_STAGES as readonly string[]).indexOf(order.current_tracking_stage));
+              return (
+                <View key={order.id} style={s.panel}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.panelTitle}>{order.items_summary || `${order.item_count} item(s)`}</Text>
+                      <Text style={{ marginTop: 4, color: "#8C8C8C", fontSize: 12 }}>{new Date(order.created_at).toLocaleString()}</Text>
+                    </View>
+                    <Text style={{ color: order.order_status === "Paid" ? "#12805F" : "#B54708", fontWeight: "900" }}>{order.order_status}</Text>
+                  </View>
+                  <Text style={{ marginTop: 10, color: "#191919", fontWeight: "900" }}>{money(order.total_amount)}</Text>
+                  {!!order.package_label && <Text style={{ marginTop: 4, color: "#66736F", fontSize: 12 }}>Package: {order.package_label}</Text>}
+                  <View style={[s.timeline, { marginTop: 16 }]}>{TRACKING_STAGES.map((stageName, index) => {
+                    const done = index <= currentIndex;
+                    return (<View key={stageName} style={s.timelineItem}>
+                      <View style={[s.dot, done && s.doneDot]} />
+                      {index !== TRACKING_STAGES.length - 1 && <View style={[s.line, done && s.doneLine]} />}
+                      <View style={s.timelineText}><Text style={s.timelineTitle}>{stageName}</Text>{stageName === order.current_tracking_stage && <Text style={{ color: "#12805F", fontSize: 12, fontWeight: "800" }}>Current stage</Text>}</View>
+                    </View>);
+                  })}</View>
+                </View>
+              );
+            })}
           </ScrollView>
         )}
 

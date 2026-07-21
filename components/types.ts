@@ -27,6 +27,21 @@ export type Quote = {
   currency: string;
 };
 
+export type OrderSummary = {
+  id: string;
+  currency: string;
+  total_amount: number;
+  shipping_fee: number;
+  customs_fee: number;
+  vat_fee: number;
+  order_status: string;
+  current_tracking_stage: string;
+  package_label: string;
+  created_at: string;
+  item_count: number;
+  items_summary: string;
+};
+
 export type Review = {
   id: string;
   rating: number;
