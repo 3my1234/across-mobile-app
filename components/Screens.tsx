@@ -82,7 +82,7 @@ export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onR
             {isWelcome ? (
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>Shop China. Pay in Naira. Track to your door.</Text>
-                <Text style={s.authCopy}>Sign in to access your cart, escrow protection, saved cards, and delivery tracking.</Text>
+                <Text style={s.authCopy}>Sign in to access your cart, secure payments, saved details, and delivery tracking.</Text>
                 {!!noticeText && (
                   <View style={s.authNotice}>
                     <Ionicons name="alert-circle-outline" size={16} color="#B54708" />
