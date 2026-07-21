@@ -161,6 +161,7 @@ function AcrossApp() {
     void loadXPBalance(token);
     void loadOrders(token);
     void loadNotifications(token);
+    void loadProfile(token);
     const interval = setInterval(() => { void loadNotifications(token); }, 10000);
     return () => clearInterval(interval);
   }, [stage, token]);
@@ -176,7 +177,7 @@ function AcrossApp() {
       if (!r.ok) { await clearSession(); setStage("auth"); return; }
       setToken(storedToken);
       await loadProducts();
-      loadProfile().catch(() => {});
+      loadProfile(storedToken).catch(() => {});
       setStage("app");
     } catch { await clearSession(); setStage("auth"); }
   }
@@ -208,7 +209,7 @@ function AcrossApp() {
     await SecureStore.setItemAsync(EXPIRY_KEY, String(s.expires_at));
     setToken(s.access_token);
     await loadProducts();
-    loadProfile().catch(() => {});
+    loadProfile(s.access_token).catch(() => {});
     setStage("app");
   }
 
@@ -496,80 +497,103 @@ function AcrossApp() {
   }
 
   // ---- Profile ----
-  async function loadProfile() {
-    if (!token) return;
+  async function loadProfile(authToken: string | null = token) {
+    if (!authToken) return;
     try {
-      const r = await fetch(`${API_URL}/api/v1/profile`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) {
-        const d = await r.json();
-        setProfile(d);
-        setProfileName(d.full_name || "");
-        setProfilePhone(d.phone || "");
-        setProfileRegion(d.region || "");
-        setProfileAddress(d.address || "");
-        setProfileCity(d.city || "");
-        setProfileState(d.state || "");
-        setProfilePostalCode(d.postal_code || "");
-        setProfileDob(d.date_of_birth ? d.date_of_birth.slice(0, 10) : "");
-        setProfileAvatar(d.avatar_url || "");
-      }
-    } catch {}
+      const response = await fetch(`${API_URL}/api/v1/profile`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const data = await readResponseBody(response);
+      if (!response.ok) throw new Error(formatHttpError(response, data, "Could not load profile"));
+      setProfile(data);
+      setProfileName(data.full_name || "");
+      setProfilePhone(data.phone || "");
+      setProfileRegion(data.region || "");
+      setProfileAddress(data.address || "");
+      setProfileCity(data.city || "");
+      setProfileState(data.state || "");
+      setProfilePostalCode(data.postal_code || "");
+      setProfileDob(data.date_of_birth ? data.date_of_birth.slice(0, 10) : "");
+      setProfileAvatar(data.avatar_url || "");
+    } catch (error) {
+      console.warn("Profile load failed", error);
+    }
   }
 
   async function saveProfile() {
-    if (!token) return; setBusy(true);
+    if (!token) { Alert.alert("Session expired", "Please sign in again."); return; }
+    setBusy(true);
     try {
-      const body: any = {};
-      if (profileName) body.full_name = profileName;
-      if (profilePhone) body.phone = profilePhone;
-      if (profileRegion) body.region = profileRegion;
-      if (profileAddress) body.address = profileAddress;
-      if (profileCity) body.city = profileCity;
-      if (profileState) body.state = profileState;
-      if (profilePostalCode) body.postal_code = profilePostalCode;
-      if (profileDob) body.date_of_birth = profileDob;
-      if (profileAvatar) body.avatar_url = profileAvatar;
-      if (Object.keys(body).length === 0) throw new Error("No fields to update");
-      const r = await fetch(`${API_URL}/api/v1/profile`, {
-        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
+      const body: any = {
+        full_name: profileName.trim(),
+        phone: profilePhone.trim(),
+        region: profileRegion.trim(),
+        address: profileAddress.trim(),
+        city: profileCity.trim(),
+        state: profileState.trim(),
+        postal_code: profilePostalCode.trim(),
+        date_of_birth: profileDob.trim()
+      };
+      if (profileAvatar.startsWith("https://") || profileAvatar.startsWith("http://")) body.avatar_url = profileAvatar;
+      const response = await fetch(`${API_URL}/api/v1/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
         body: JSON.stringify(body)
       });
-      if (!r.ok) { const err = await r.json().catch(() => ({})); throw new Error(err.message || "Failed to save"); }
-      Alert.alert("Saved", "Profile updated");
+      const data = await readResponseBody(response);
+      if (!response.ok) throw new Error(formatHttpError(response, data, "Failed to save profile"));
+      Alert.alert("Saved", "Your profile has been updated.");
       setEditingProfile(false);
-      await loadProfile();
-    } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
+      await loadProfile(token);
+    } catch (error) {
+      Alert.alert("Profile not saved", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function pickAvatar() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed", "Allow access to your photo library."); return; }
+    if (!token) { Alert.alert("Session expired", "Please sign in again."); return; }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) { Alert.alert("Permission needed", "Allow access to your photo library."); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (result.canceled || !result.assets[0]) return;
+
     const asset = result.assets[0];
+    const previousAvatar = profileAvatar;
+    const mimeType = asset.mimeType || "image/jpeg";
+    const filename = asset.fileName || `avatar-${Date.now()}.jpg`;
     setProfileAvatar(asset.uri);
-    // Upload via presign
+    setBusy(true);
     try {
-      const presignR = await fetch(`${API_URL}/api/v1/uploads/presign`, {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ filename: "avatar.jpg", mimeType: asset.mimeType || "image/jpeg", scope: "profile" })
+      const presignResponse = await fetch(`${API_URL}/api/v1/uploads/presign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ filename, mimeType, scope: "profile" })
       });
-      const presignD = await presignR.json();
-      if (!presignR.ok) throw new Error(presignD.message || "Upload prep failed");
-      const blob = await fetch(asset.uri).then(r => r.blob());
-      const uploadR = await fetch(presignD.uploadUrl, { method: "PUT", headers: { "Content-Type": asset.mimeType || "image/jpeg" }, body: blob });
-      if (!uploadR.ok) throw new Error("Upload failed");
-      const avatarUrl = presignD.viewUrl || presignD.publicUrl;
-      setProfileAvatar(avatarUrl);
-      // Save avatar URL
-      await fetch(`${API_URL}/api/v1/profile`, {
-        method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
+      const presign = await readResponseBody(presignResponse);
+      if (!presignResponse.ok) throw new Error(formatHttpError(presignResponse, presign, "Upload preparation failed"));
+      if (!presign.uploadUrl || !(presign.viewUrl || presign.publicUrl)) throw new Error("Upload service returned an incomplete response");
+
+      const blob = await fetch(asset.uri).then(response => response.blob());
+      const uploadResponse = await fetch(presign.uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: blob });
+      if (!uploadResponse.ok) throw new Error(`Image upload failed (HTTP ${uploadResponse.status})`);
+
+      const avatarUrl = presign.viewUrl || presign.publicUrl;
+      const saveResponse = await fetch(`${API_URL}/api/v1/profile`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
         body: JSON.stringify({ avatar_url: avatarUrl })
       });
-      await loadProfile();
-    } catch (e) { Alert.alert("Upload failed", e instanceof Error ? e.message : ""); }
+      const saveData = await readResponseBody(saveResponse);
+      if (!saveResponse.ok) throw new Error(formatHttpError(saveResponse, saveData, "Profile picture could not be saved"));
+      setProfileAvatar(avatarUrl);
+      await loadProfile(token);
+    } catch (error) {
+      setProfileAvatar(previousAvatar);
+      Alert.alert("Upload failed", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setBusy(false);
+    }
   }
-
   useEffect(() => {
     if (stage === "app" && token && !profileRegion && detectedCountryName) {
       setProfileRegion(detectedCountryName);
