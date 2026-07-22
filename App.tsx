@@ -69,6 +69,7 @@ function AcrossApp() {
   const scrollY = useRef(new Animated.Value(0)).current;
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistedDetectedRegion = useRef(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [xpBalance, setXpBalance] = useState(0);
   const [xpClaimed, setXpClaimed] = useState(false);
@@ -93,6 +94,9 @@ function AcrossApp() {
   const [profileAvatar, setProfileAvatar] = useState("");
   const [detectedCountryCode, setDetectedCountryCode] = useState("");
   const [detectedCountryName, setDetectedCountryName] = useState("");
+  const [detectedRegionName, setDetectedRegionName] = useState("");
+  const [detectedCityName, setDetectedCityName] = useState("");
+  const [detectedPostalCode, setDetectedPostalCode] = useState("");
 
   const categories = useMemo(() => {
     const names = new Set<string>();
@@ -137,7 +141,9 @@ function AcrossApp() {
         if (!mounted) return;
         setDetectedCountryCode(String(data.country_code || "").toUpperCase());
         setDetectedCountryName(String(data.country_name || ""));
-        if (data.country_name && !profileRegion) setProfileRegion(String(data.country_name));
+        setDetectedRegionName(String(data.region || data.country_name || ""));
+        setDetectedCityName(String(data.city || ""));
+        setDetectedPostalCode(String(data.postal || ""));
       } catch {}
     })();
     return () => { mounted = false; };
@@ -242,6 +248,7 @@ function AcrossApp() {
     setProfilePostalCode("");
     setProfileDob("");
     setProfileAvatar("");
+    persistedDetectedRegion.current = false;
     setEditingProfile(false);
     setSelectedProduct(null);
     setSearchQuery("");
@@ -316,7 +323,7 @@ function AcrossApp() {
     setOauthBusy(true); setBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
-      await loginWithOAuth({ provider: "google", redirectUri: "/oauth" });
+      await loginWithOAuth({ provider: "google" });
     } catch (e: any) {
       const msg = e?.message || "";
       if (msg.toLowerCase().includes("already logged in") && privyUser) { await finishPrivyLogin(); return; }
@@ -329,11 +336,15 @@ function AcrossApp() {
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
       if (!privyToken) throw new Error("Could not get access token");
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ privy_token: privyToken }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ privy_token: privyToken }) });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
       await saveSession(d); setOauthBusy(false);
-    } catch (e) { setOauthBusy(false); Alert.alert("Sign-in failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
+    } catch (e) {
+      setOauthBusy(false);
+      await privyLogout().catch(() => undefined);
+      Alert.alert("Sign-in failed", e instanceof Error ? e.message : "");
+    } finally { setBusy(false); }
   }
 
   async function getPrivyAccessTokenWithRetry() {
@@ -353,7 +364,9 @@ function AcrossApp() {
 
   function formatHttpError(response: Response, body: any, fallback: string) {
     const message = body?.message || body?.error || body?.detail || body?.msg || fallback;
-    return `${message} (HTTP ${response.status})`;
+    const code = body?.code ? ` [${body.code}]` : "";
+    const requestId = body?.request_id ? ` Request: ${body.request_id}` : "";
+    return `${message}${code} (HTTP ${response.status}).${requestId}`;
   }
 
   function getCartQuantity(sku: string) { return cart.find(i => i.product.sku === sku)?.quantity ?? 0; }
@@ -595,10 +608,33 @@ function AcrossApp() {
     }
   }
   useEffect(() => {
-    if (stage === "app" && token && !profileRegion && detectedCountryName) {
-      setProfileRegion(detectedCountryName);
-    }
-  }, [stage, token, profileRegion, detectedCountryName]);
+    if (stage !== "app" || !token || !profile || persistedDetectedRegion.current) return;
+    const locationUpdate = {
+      ...(!profile.region && detectedRegionName ? { region: detectedRegionName } : {}),
+      ...(!profile.state && detectedRegionName ? { state: detectedRegionName } : {}),
+      ...(!profile.city && detectedCityName ? { city: detectedCityName } : {}),
+      ...(!profile.postal_code && detectedPostalCode ? { postal_code: detectedPostalCode } : {})
+    };
+    if (Object.keys(locationUpdate).length === 0) return;
+    persistedDetectedRegion.current = true;
+    if (locationUpdate.region) setProfileRegion(locationUpdate.region);
+    if (locationUpdate.state) setProfileState(locationUpdate.state);
+    if (locationUpdate.city) setProfileCity(locationUpdate.city);
+    if (locationUpdate.postal_code) setProfilePostalCode(locationUpdate.postal_code);
+    void (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/profile`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
+          body: JSON.stringify(locationUpdate)
+        });
+        if (!response.ok) persistedDetectedRegion.current = false;
+        else await loadProfile(token);
+      } catch {
+        persistedDetectedRegion.current = false;
+      }
+    })();
+  }, [stage, token, profile, detectedRegionName, detectedCityName, detectedPostalCode, detectedCountryCode]);
 
   const countryNotice = detectedCountryCode && detectedCountryCode !== "NG"
     ? `Service is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`
@@ -770,6 +806,7 @@ function AcrossApp() {
                 <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: "#FF4747" }}>{xpBalance} XP</Text><Text style={{ color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>= ₦{xpBalance} discount</Text></View>
                 <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
+              <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>New accounts receive 100 XP. Purchase rewards: below ₦1,000 = 10 XP; ₦1,000–₦9,999 = 100 XP; ₦10,000–₦99,999 = 500 XP; ₦100,000–₦499,999 = 1,000 XP; ₦500,000+ = 2,500 XP.</Text>
             </View>
             <View style={s.quickLinks}>
               {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
@@ -862,7 +899,7 @@ function AcrossApp() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
             <Pressable key={item.key} style={s.bottomNavItem} onPress={() => setActiveTab(item.key)}>
-              <View style={s.bottomNavIconWrap}><Ionicons name={active ? item.activeIcon : item.icon} size={22} color={active ? "#FF4747" : "#8C8C8C"} />{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
+              <View style={s.bottomNavIconWrap}>{item.key === "account" && profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 24, height: 24, borderRadius: 12, borderWidth: active ? 2 : 0, borderColor: "#FF4747", backgroundColor: "#F0F0F0" }} /> : <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={active ? "#FF4747" : "#8C8C8C"} />}{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
               <Text style={[s.bottomNavLabel, active && s.bottomNavLabelActive]}>{item.label}</Text>
             </Pressable>
           ); })}
