@@ -81,6 +81,9 @@ function AcrossApp() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
+  const [claimingReward, setClaimingReward] = useState(false);
+  const [rewardClaimed, setRewardClaimed] = useState<Set<string>>(new Set());
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -481,8 +484,60 @@ function AcrossApp() {
     if (!authToken) return;
     try {
       const r = await fetch(`${API_URL}/api/v1/orders`, { headers: { Authorization: `Bearer ${authToken}` } });
-      if (r.ok) setOrders((await r.json()).orders || []);
+      if (r.ok) {
+        const data = await r.json();
+        const ordersList = data.orders || [];
+        setOrders(ordersList);
+        // Check for orders at "Delivered" stage that need confirmation
+        const deliveredOrder = ordersList.find((o: OrderSummary) =>
+          o.current_tracking_stage === "Delivered" && o.order_status !== "Completed"
+        );
+        if (deliveredOrder) setDeliveryConfirmOrder(deliveredOrder);
+      }
     } catch {}
+  }
+
+  // ---- Delivery Confirm ----
+  async function confirmDelivery(orderId: string) {
+    if (!token) return;
+    setBusy(true);
+    try {
+      // Call the auto-confirm endpoint for this specific order
+      const r = await fetch(`${API_URL}/api/v1/admin/batches/confirm-delivered`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ order_ids: [orderId] })
+      });
+      if (!r.ok) throw new Error("Confirmation failed");
+      setDeliveryConfirmOrder(null);
+      Alert.alert("Confirmed!", "Thank you! You've earned ₦500 off your next order. Leave a review to claim it.");
+      await loadOrders(token);
+      await loadNotifications(token);
+    } catch (e) {
+      Alert.alert("Failed", e instanceof Error ? e.message : "Could not confirm delivery");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ---- Review Reward Claim ----
+  async function claimReviewReward(orderId: string) {
+    if (!token || rewardClaimed.has(orderId)) return;
+    setClaimingReward(true);
+    try {
+      const r = await fetch(`${API_URL}/api/v1/orders/${orderId}/claim-review-reward`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!r.ok) throw new Error("Reward claim failed");
+      setRewardClaimed(prev => new Set(prev).add(orderId));
+      Alert.alert("Reward Claimed!", "₦500 off your next order has been applied.");
+      await loadNotifications(token);
+    } catch (e) {
+      Alert.alert("Failed", e instanceof Error ? e.message : "Could not claim reward");
+    } finally {
+      setClaimingReward(false);
+    }
   }
 
   async function refreshOrders() {
@@ -905,6 +960,41 @@ function AcrossApp() {
           ); })}
         </ScrollView>
       </View>
+
+      {/* Delivery Confirm Modal */}
+      {deliveryConfirmOrder && (
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 200, padding: 24 }}>
+          <View style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 }}>
+            <View style={{ alignItems: "center", marginBottom: 16 }}>
+              <Ionicons name="checkmark-circle" size={48} color="#12805F" />
+            </View>
+            <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: "#191919" }}>Package Delivered?</Text>
+            <Text style={{ marginTop: 8, fontSize: 14, color: "#595959", textAlign: "center", lineHeight: 20 }}>
+              Did you receive your package? Confirming helps us improve and earns you ₦500 off your next order!
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
+              <Pressable
+                style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#F5F5F5", alignItems: "center" }}
+                onPress={() => {
+                  setDeliveryConfirmOrder(null);
+                  setSupportSubject("Delivery issue");
+                  setSupportMessage(`I did not receive my order ${deliveryConfirmOrder.id}. Please help.`);
+                  setActiveTab("support");
+                }}
+              >
+                <Text style={{ fontWeight: "800", color: "#595959" }}>Not received</Text>
+              </Pressable>
+              <Pressable
+                style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]}
+                onPress={() => confirmDelivery(deliveryConfirmOrder.id)}
+                disabled={busy}
+              >
+                <Text style={s.primaryButtonText}>{busy ? "..." : "Yes, received!"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
 
       {selectedProduct && <ProductDetailScreen product={selectedProduct} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={() => addToCart(selectedProduct)} onRemove={() => removeFromCart(selectedProduct)} />}
     </View>
