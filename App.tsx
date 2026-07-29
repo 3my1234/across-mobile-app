@@ -1,20 +1,18 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Alert, Animated, Dimensions, FlatList, Image,
+  Alert, Animated, Dimensions, Image,
   Platform, Pressable, RefreshControl, ScrollView,
-  StyleSheet, Text, TextInput, View
+  Text, TextInput, View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
-import { Component, ReactNode } from "react";
-
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
-import { API_URL, TOKEN_KEY, EXPIRY_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT, defaultCategories } from "./components/config";
+import { API_URL, TOKEN_KEY, EXPIRY_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
 import { money, fetchWithTimeout, sleep } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -82,8 +80,6 @@ function AcrossApp() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
-  const [claimingReward, setClaimingReward] = useState(false);
-  const [rewardClaimed, setRewardClaimed] = useState<Set<string>>(new Set());
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -502,41 +498,20 @@ function AcrossApp() {
     if (!token) return;
     setBusy(true);
     try {
-      // Call the auto-confirm endpoint for this specific order
-      const r = await fetch(`${API_URL}/api/v1/admin/batches/confirm-delivered`, {
+      const r = await fetch(`${API_URL}/api/v1/orders/${orderId}/confirm-receipt`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ order_ids: [orderId] })
+        headers: { Authorization: `Bearer ${token}` }
       });
-      if (!r.ok) throw new Error("Confirmation failed");
+      const data = await readResponseBody(r);
+      if (!r.ok) throw new Error(formatHttpError(r, data, "Confirmation failed"));
       setDeliveryConfirmOrder(null);
-      Alert.alert("Confirmed!", "Thank you! You've earned ₦500 off your next order. Leave a review to claim it.");
+      Alert.alert("Receipt confirmed", "Thank you. Your review reward is now available; leave a review to claim ₦500 off your next order.");
       await loadOrders(token);
       await loadNotifications(token);
     } catch (e) {
       Alert.alert("Failed", e instanceof Error ? e.message : "Could not confirm delivery");
     } finally {
       setBusy(false);
-    }
-  }
-
-  // ---- Review Reward Claim ----
-  async function claimReviewReward(orderId: string) {
-    if (!token || rewardClaimed.has(orderId)) return;
-    setClaimingReward(true);
-    try {
-      const r = await fetch(`${API_URL}/api/v1/orders/${orderId}/claim-review-reward`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (!r.ok) throw new Error("Reward claim failed");
-      setRewardClaimed(prev => new Set(prev).add(orderId));
-      Alert.alert("Reward Claimed!", "₦500 off your next order has been applied.");
-      await loadNotifications(token);
-    } catch (e) {
-      Alert.alert("Failed", e instanceof Error ? e.message : "Could not claim reward");
-    } finally {
-      setClaimingReward(false);
     }
   }
 
@@ -970,7 +945,7 @@ function AcrossApp() {
             </View>
             <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: "#191919" }}>Package Delivered?</Text>
             <Text style={{ marginTop: 8, fontSize: 14, color: "#595959", textAlign: "center", lineHeight: 20 }}>
-              Did you receive your package? Confirming helps us improve and earns you ₦500 off your next order!
+              Did you receive your package? Confirming unlocks your review reward. Leave a review to claim ₦500 off your next order.
             </Text>
             <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
               <Pressable

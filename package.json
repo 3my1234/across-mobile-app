@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "android:metro": "expo start --dev-client --lan --clear",
     "web": "expo start --web",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "ios": "expo run:ios"
   },
@@ -41,6 +41,8 @@
     "@babel/core": "^7.25.2",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.11",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   }
 }

@@ -8,10 +8,9 @@ import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Product, Review, ReviewSummary } from "./types";
+import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
-import { money, normalizeMediaUrl, normalizeMediaUrls, uploadReviewImage, mapProduct } from "./utils";
-import { AuthMode } from "./types";
+import { money, normalizeMediaUrl, uploadReviewImage, mapProduct } from "./utils";
 import { s } from "./Styles";
 
 // ---- Launch Screen ----
@@ -243,7 +242,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
           <View style={styles.detailActionColumn}>
             {cartQuantity === 0 && !outOfStock && (
               <Animated.View style={[styles.detailHintBubble, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }), transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.03] }) }] }]}>
-                <Ionicons name="sparkles-outline" size={16} color="#FF4747" /><Text style={styles.detailHintText}>👆 Tap "Add to cart"</Text>
+                <Ionicons name="sparkles-outline" size={16} color="#FF4747" /><Text style={styles.detailHintText}>👆 Tap Add to cart</Text>
               </Animated.View>
             )}
             {cartQuantity > 0 && <View style={styles.detailSuccessBubble}><Ionicons name="checkmark-circle" size={16} color="#12805F" /><Text style={styles.detailSuccessText}>✅ Added! Keep shopping or tap Cart to pay.</Text></View>}
