@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
-import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
+import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
 import { money, fetchWithTimeout, sleep } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -68,6 +68,7 @@ function AcrossApp() {
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
   const cartHydrated = useRef(false);
+  const restoredPendingPayment = useRef(false);
   const [cartStorageReady, setCartStorageReady] = useState(false);
   const persistedDetectedRegion = useRef(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -179,6 +180,17 @@ function AcrossApp() {
     void SecureStore.setItemAsync(CART_KEY, JSON.stringify(compactCart));
   }, [cart, cartStorageReady]);
 
+  useEffect(() => {
+    if (stage !== "app" || !token || !quote || !restoredPendingPayment.current) return;
+    restoredPendingPayment.current = false;
+    setPaymentState("waiting");
+    setPaymentMessage("Checking your previous payment...");
+    stopPaymentPolling();
+    void finishPaymentWhenSettled(quote, true);
+    // The ref makes this a one-shot recovery for a restored quote, not a general payment effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, token, quote]);
+
   async function restoreSession() {
     setStage("booting");
     try {
@@ -227,7 +239,12 @@ function AcrossApp() {
   }
 
   async function clearSession() {
-    await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(EXPIRY_KEY), SecureStore.deleteItemAsync(CART_KEY)]);
+    await Promise.all([
+      SecureStore.deleteItemAsync(TOKEN_KEY),
+      SecureStore.deleteItemAsync(EXPIRY_KEY),
+      SecureStore.deleteItemAsync(CART_KEY),
+      SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY)
+    ]);
     setToken(null);
     setProducts([]);
     setCart([]);
@@ -261,6 +278,7 @@ function AcrossApp() {
     setSearchQuery("");
     setSelectedCategory("All");
     cartHydrated.current = false;
+    restoredPendingPayment.current = false;
     setCartStorageReady(false);
     stopPaymentPolling();
   }
@@ -275,7 +293,10 @@ function AcrossApp() {
     if (cartHydrated.current) return;
     cartHydrated.current = true;
     try {
-      const stored = await SecureStore.getItemAsync(CART_KEY);
+      const [stored, pendingRaw] = await Promise.all([
+        SecureStore.getItemAsync(CART_KEY),
+        SecureStore.getItemAsync(PENDING_PAYMENT_KEY)
+      ]);
       const entries = stored ? JSON.parse(stored) : [];
       if (Array.isArray(entries)) {
         const restored = entries.flatMap((entry: any) => {
@@ -284,6 +305,15 @@ function AcrossApp() {
           return product && quantity > 0 ? [{ product, quantity }] : [];
         });
         setCart(restored);
+        if (pendingRaw) {
+          const pending = JSON.parse(pendingRaw);
+          if (pending?.quote?.order_id && pending?.cart_fingerprint === cartFingerprint(restored)) {
+            setQuote(pending.quote as Quote);
+            restoredPendingPayment.current = true;
+          } else {
+            await SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
+          }
+        }
       }
     } catch {
       await SecureStore.deleteItemAsync(CART_KEY).catch(() => {});
@@ -416,14 +446,22 @@ function AcrossApp() {
   }
 
   function getCartQuantity(sku: string) { return cart.find(i => i.product.sku === sku)?.quantity ?? 0; }
-  function addToCart(p: Product) {
+  function cartFingerprint(items: CartItem[]) {
+    return items.map(item => `${item.product.sku}:${item.quantity}`).sort().join("|");
+  }
+  function clearPendingPayment() {
     setQuote(null);
+    restoredPendingPayment.current = false;
+    void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
+  }
+  function addToCart(p: Product) {
+    clearPendingPayment();
     const q = getCartQuantity(p.sku);
     const capped = Math.min(q + 1, p.inventory_count);
     setCart(items => { const e = items.find(i => i.product.sku === p.sku); if (!e) return [...items, { product: p, quantity: capped }]; return items.map(i => i.product.sku === p.sku ? { ...i, quantity: capped } : i); });
   }
   function removeFromCart(p: Product) {
-    setQuote(null);
+    clearPendingPayment();
     const q = getCartQuantity(p.sku);
     if (q <= 1) { setCart(items => items.filter(i => i.product.sku !== p.sku)); return; }
     setCart(items => items.map(i => i.product.sku === p.sku ? { ...i, quantity: i.quantity - 1 } : i));
@@ -442,6 +480,7 @@ function AcrossApp() {
       if (!r.ok) { const errData = await r.json().catch(() => ({})); throw new Error(errData.message || "Checkout failed"); }
       const q = await r.json() as Quote;
       setQuote(q);
+      await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
       await payWithFlutterwave(q);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
@@ -521,6 +560,7 @@ function AcrossApp() {
     setPaymentMessage("Payment confirmed!");
     setCart([]);
     setQuote(null);
+    await SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
     if (token) await Promise.all([loadNotifications(token), loadXPBalance(token), loadOrders(token)]);
     Alert.alert("Payment Successful!", "Your order has been placed. Check Track tab for updates.");
     setActiveTab("track");
