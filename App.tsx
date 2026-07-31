@@ -470,12 +470,12 @@ function AcrossApp() {
       if (redirectStatus === "cancelled" || redirectStatus === "canceled" || redirectStatus === "failed") {
         setPaymentState("failed"); setPaymentMessage("Payment was not completed. Cart kept for retry.");
         stopPaymentPolling();
-        void finishPaymentWhenSettled(q, true);
+        void finishPaymentWhenSettled(q, true, result.type === "success" && "url" in result ? result.url : "");
         return;
       }
       setPaymentState("waiting"); setPaymentMessage("Verifying payment in the background. You can continue using the app.");
       stopPaymentPolling();
-      void finishPaymentWhenSettled(q, false);
+      void finishPaymentWhenSettled(q, false, result.type === "success" && "url" in result ? result.url : "");
     } catch (e) {
       setPaymentState("failed");
       setPaymentMessage(e instanceof Error ? e.message : "Payment failed");
@@ -483,11 +483,45 @@ function AcrossApp() {
     } finally { setBusy(false); }
   }
 
-  async function finishPaymentWhenSettled(q: Quote, silent: boolean) {
+  async function finishPaymentWhenSettled(q: Quote, silent: boolean, redirectURL = "") {
+    const verified = await verifyPaymentWithBackend(q.order_id, redirectURL);
+    if (verified) {
+      await completeSuccessfulPayment();
+      return;
+    }
     const success = await pollPaymentStatus(q.order_id, 0, silent, paymentPollGeneration.current);
     if (!success) return;
+    await completeSuccessfulPayment();
+  }
+
+  async function verifyPaymentWithBackend(orderId: string, redirectURL = ""): Promise<boolean> {
+    if (!token) return false;
+    try {
+      const parsed = redirectURL ? new URL(redirectURL) : null;
+      const transactionId = parsed?.searchParams.get("transaction_id") || "";
+      const txRef = parsed?.searchParams.get("tx_ref") || "";
+      const response = await fetch(`${API_URL}/api/v1/payments/flutterwave/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ order_id: orderId, transaction_id: transactionId, tx_ref: txRef })
+      });
+      const data = await readResponseBody(response);
+      if (response.status === 401) {
+        await logout();
+        return false;
+      }
+      return response.ok && data?.payment_state === "settled";
+    } catch {
+      return false;
+    }
+  }
+
+  async function completeSuccessfulPayment() {
+    setPaymentState("settled");
+    setPaymentMessage("Payment confirmed!");
     setCart([]);
     setQuote(null);
+    if (token) await Promise.all([loadNotifications(token), loadXPBalance(token), loadOrders(token)]);
     Alert.alert("Payment Successful!", "Your order has been placed. Check Track tab for updates.");
     setActiveTab("track");
   }
