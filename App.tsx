@@ -1,4 +1,4 @@
-import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
-import { API_URL, TOKEN_KEY, EXPIRY_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
+import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
 import { money, fetchWithTimeout, sleep } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -66,7 +66,9 @@ function AcrossApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const scrollY = useRef(new Animated.Value(0)).current;
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const paymentPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const paymentPollGeneration = useRef(0);
+  const cartHydrated = useRef(false);
+  const [cartStorageReady, setCartStorageReady] = useState(false);
   const persistedDetectedRegion = useRef(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [xpBalance, setXpBalance] = useState(0);
@@ -171,6 +173,12 @@ function AcrossApp() {
     return () => clearInterval(interval);
   }, [stage, token]);
 
+  useEffect(() => {
+    if (!cartStorageReady) return;
+    const compactCart = cart.map(item => ({ sku: item.product.sku, quantity: item.quantity }));
+    void SecureStore.setItemAsync(CART_KEY, JSON.stringify(compactCart));
+  }, [cart, cartStorageReady]);
+
   async function restoreSession() {
     setStage("booting");
     try {
@@ -219,7 +227,7 @@ function AcrossApp() {
   }
 
   async function clearSession() {
-    await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(EXPIRY_KEY)]);
+    await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(EXPIRY_KEY), SecureStore.deleteItemAsync(CART_KEY)]);
     setToken(null);
     setProducts([]);
     setCart([]);
@@ -252,6 +260,8 @@ function AcrossApp() {
     setSelectedProduct(null);
     setSearchQuery("");
     setSelectedCategory("All");
+    cartHydrated.current = false;
+    setCartStorageReady(false);
     stopPaymentPolling();
   }
 
@@ -261,15 +271,52 @@ function AcrossApp() {
     setAuthMode("welcome"); setStage("auth");
   }
 
-  async function loadProducts() {
-    try { const r = await fetch(`${API_URL}/api/v1/products`); if (r.ok) setProducts((await r.json()).products ?? []); } catch { try { const r = await fetch(`${API_URL}/api/v1/products`); if (r.ok) setProducts((await r.json()).products ?? []); } catch {} }
+  async function hydrateCart(catalog: Product[]) {
+    if (cartHydrated.current) return;
+    cartHydrated.current = true;
+    try {
+      const stored = await SecureStore.getItemAsync(CART_KEY);
+      const entries = stored ? JSON.parse(stored) : [];
+      if (Array.isArray(entries)) {
+        const restored = entries.flatMap((entry: any) => {
+          const product = catalog.find(item => item.sku === String(entry?.sku || ""));
+          const quantity = Math.min(Math.max(Number(entry?.quantity) || 0, 0), product?.inventory_count || 0);
+          return product && quantity > 0 ? [{ product, quantity }] : [];
+        });
+        setCart(restored);
+      }
+    } catch {
+      await SecureStore.deleteItemAsync(CART_KEY).catch(() => {});
+    } finally {
+      setCartStorageReady(true);
+    }
   }
 
-  const refreshHomeData = useCallback(async () => {
+  async function loadProducts() {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const r = await fetch(`${API_URL}/api/v1/products`);
+        if (r.ok) {
+          const catalog = (await r.json()).products ?? [];
+          setProducts(catalog);
+          await hydrateCart(catalog);
+          return;
+        }
+      } catch {}
+    }
+  }
+
+  async function refreshAppData(includeSupport = false) {
+    if (refreshing) return;
     setRefreshing(true);
-    try { const r = await fetch(`${API_URL}/api/v1/products`); if (r.ok) setProducts((await r.json()).products ?? []); } catch {}
+    try {
+      const tasks: Promise<unknown>[] = [loadProducts()];
+      if (token) tasks.push(loadOrders(token), loadNotifications(token), loadProfile(token), loadXPBalance(token));
+      if (includeSupport) tasks.push(loadSupportTickets());
+      await Promise.allSettled(tasks);
+    }
     finally { setRefreshing(false); }
-  }, []);
+  }
 
   async function authenticate(path: string, payload: Record<string, string>) {
     setBusy(true);
@@ -376,6 +423,7 @@ function AcrossApp() {
     setCart(items => { const e = items.find(i => i.product.sku === p.sku); if (!e) return [...items, { product: p, quantity: capped }]; return items.map(i => i.product.sku === p.sku ? { ...i, quantity: capped } : i); });
   }
   function removeFromCart(p: Product) {
+    setQuote(null);
     const q = getCartQuantity(p.sku);
     if (q <= 1) { setCart(items => items.filter(i => i.product.sku !== p.sku)); return; }
     setCart(items => items.map(i => i.product.sku === p.sku ? { ...i, quantity: i.quantity - 1 } : i));
@@ -383,6 +431,10 @@ function AcrossApp() {
 
   async function checkout() {
     if (!token || cart.length === 0) return;
+    if (quote) {
+      await payWithFlutterwave(quote);
+      return;
+    }
     setBusy(true); try {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
       const r = await fetch(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
@@ -406,19 +458,24 @@ function AcrossApp() {
       if (!checkoutLink) throw new Error("Payment link unavailable");
       setPaymentState("waiting"); setPaymentMessage("Opening Flutterwave checkout...");
       const result = await WebBrowser.openAuthSessionAsync(checkoutLink, redirectUrl);
+      const redirectStatus = result.type === "success" && "url" in result
+        ? String(new URL(result.url).searchParams.get("status") || "").toLowerCase()
+        : "";
       if (result.type === "cancel" || result.type === "dismiss") {
-        setPaymentState("failed"); setPaymentMessage("Payment cancelled. Cart kept for retry.");
+        setPaymentState("failed"); setPaymentMessage("Checkout closed. Cart kept for retry; payment confirmation will continue in the background.");
+        stopPaymentPolling();
+        void finishPaymentWhenSettled(q, true);
         return;
       }
-      setPaymentState("waiting"); setPaymentMessage("Checkout closed. Verifying payment...");
-      stopPaymentPolling();
-      const success = await pollPaymentStatus(q.order_id);
-      if (success) {
-        setCart([]); // Clear cart on success
-        setQuote(null);
-        Alert.alert("Payment Successful!", "Your order has been placed. Check Track tab for updates.");
-        setActiveTab("track");
+      if (redirectStatus === "cancelled" || redirectStatus === "canceled" || redirectStatus === "failed") {
+        setPaymentState("failed"); setPaymentMessage("Payment was not completed. Cart kept for retry.");
+        stopPaymentPolling();
+        void finishPaymentWhenSettled(q, true);
+        return;
       }
+      setPaymentState("waiting"); setPaymentMessage("Verifying payment in the background. You can continue using the app.");
+      stopPaymentPolling();
+      void finishPaymentWhenSettled(q, false);
     } catch (e) {
       setPaymentState("failed");
       setPaymentMessage(e instanceof Error ? e.message : "Payment failed");
@@ -426,10 +483,22 @@ function AcrossApp() {
     } finally { setBusy(false); }
   }
 
-  function stopPaymentPolling() { if (paymentPollTimer.current) { clearTimeout(paymentPollTimer.current); paymentPollTimer.current = null; } }
+  async function finishPaymentWhenSettled(q: Quote, silent: boolean) {
+    const success = await pollPaymentStatus(q.order_id, 0, silent, paymentPollGeneration.current);
+    if (!success) return;
+    setCart([]);
+    setQuote(null);
+    Alert.alert("Payment Successful!", "Your order has been placed. Check Track tab for updates.");
+    setActiveTab("track");
+  }
 
-  async function pollPaymentStatus(orderId: string, attempts = 0): Promise<boolean> {
+  function stopPaymentPolling() {
+    paymentPollGeneration.current += 1;
+  }
+
+  async function pollPaymentStatus(orderId: string, attempts = 0, silent = false, generation = paymentPollGeneration.current): Promise<boolean> {
     if (!token) return false;
+    if (generation !== paymentPollGeneration.current) return false;
     try {
       const r = await fetch(`${API_URL}/api/v1/orders/${orderId}/payment-status`, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) throw new Error("status unavailable");
@@ -440,16 +509,16 @@ function AcrossApp() {
         await Promise.all([loadNotifications(token), loadXPBalance(token), loadOrders(token)]);
         return true;
       }
-      setPaymentState("waiting"); setPaymentMessage("Waiting for Flutterwave to confirm.");
+      if (!silent) { setPaymentState("waiting"); setPaymentMessage("Waiting for Flutterwave to confirm."); }
       if (attempts < 30) {
-        await new Promise(resolve => { paymentPollTimer.current = setTimeout(resolve, 3000); });
-        return pollPaymentStatus(orderId, attempts + 1);
+        await sleep(3000);
+        return pollPaymentStatus(orderId, attempts + 1, silent, generation);
       } else {
-        setPaymentState("failed"); setPaymentMessage("Payment initiated, but confirmation is still pending.");
+        if (!silent) { setPaymentState("failed"); setPaymentMessage("Payment initiated, but confirmation is still pending."); }
         return false;
       }
     } catch {
-      setPaymentState("failed"); setPaymentMessage("Could not confirm payment yet.");
+      if (!silent) { setPaymentState("failed"); setPaymentMessage("Could not confirm payment yet."); }
       return false;
     }
   }
@@ -513,11 +582,6 @@ function AcrossApp() {
     } finally {
       setBusy(false);
     }
-  }
-
-  async function refreshOrders() {
-    setRefreshing(true);
-    try { await loadOrders(); } finally { setRefreshing(false); }
   }
 
   async function loadSupportTickets() {
@@ -764,7 +828,7 @@ function AcrossApp() {
           <Animated.FlatList data={visibleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshHomeData} tintColor="#FF4747" />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
             ListHeaderComponent={<><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: "#FFFFFF" }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>Trending now</Text>
@@ -775,7 +839,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "cart" && (
-          <ScrollView contentContainerStyle={[s.screenPad, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshHomeData} tintColor="#FF4747" />}>
+          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             {cart.length === 0 ? (
               <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
@@ -788,7 +852,7 @@ function AcrossApp() {
                 <Pressable style={[s.primaryButton, busy && s.disabled]} onPress={checkout} disabled={busy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
-                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : "Pay using Flutterwave"}</Text>
+                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : quote ? "Retry payment" : "Pay using Flutterwave"}</Text>
                   </View>
                 </Pressable>
                 {paymentMessage ? <Text style={{ marginTop: 10, color: paymentState === "failed" ? "#B42318" : "#30423D", fontWeight: "700" }}>{paymentMessage}</Text> : null}
@@ -798,7 +862,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "account" && (
-          <ScrollView contentContainerStyle={[s.screenPad, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshHomeData} tintColor="#FF4747" />}>
+          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
               <Pressable onPress={pickAvatar}>
                 {profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#F0F0F0" }} />
@@ -853,7 +917,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "track" && (
-          <ScrollView contentContainerStyle={[s.screenPad, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshOrders} tintColor="#FF4747" />}>
+          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.panel}><Text style={s.kicker}>Orders</Text><Text style={s.panelTitle}>Purchase history and tracking</Text></View>
             {orders.length === 0 ? (
               <View style={s.panel}><Text style={{ color: "#8C8C8C" }}>No orders found yet. Pull down to refresh after payment.</Text></View>
@@ -885,7 +949,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          <ScrollView contentContainerStyle={[s.screenPad, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadSupportTickets()} tintColor="#FF4747" />}>
+          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(true); }} tintColor="#FF4747" />}>
             {selectedTicket ? (
               <View style={s.panel}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
