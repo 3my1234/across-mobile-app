@@ -34,7 +34,12 @@
       ]
     },
     "plugins": [
-      "expo-web-browser",
+      [
+        "expo-web-browser",
+        {
+          "experimentalLauncherActivity": true
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       [

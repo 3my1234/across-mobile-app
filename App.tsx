@@ -5,7 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Alert, Animated, Dimensions, Image,
+  Alert, Animated, AppState, Dimensions, Image,
   Platform, Pressable, RefreshControl, ScrollView,
   Text, TextInput, View
 } from "react-native";
@@ -188,6 +188,19 @@ function AcrossApp() {
     stopPaymentPolling();
     void finishPaymentWhenSettled(quote, true);
     // The ref makes this a one-shot recovery for a restored quote, not a general payment effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, token, quote]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", nextState => {
+      if (nextState !== "active" || stage !== "app" || !token || !quote) return;
+      stopPaymentPolling();
+      setPaymentState("waiting");
+      setPaymentMessage("Checking whether Flutterwave has confirmed your payment…");
+      void finishPaymentWhenSettled(quote, false);
+    });
+    return () => subscription.remove();
+    // Payment verification must use the latest persisted order when the app resumes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, token, quote]);
 
@@ -469,6 +482,17 @@ function AcrossApp() {
 
   async function checkout() {
     if (!token || cart.length === 0) return;
+    const missingProfileFields = [
+      !String(profile?.full_name || "").trim() ? "full name" : "",
+      !String(profile?.email || "").trim() ? "email" : "",
+      !String(profile?.phone || "").trim() ? "phone number" : ""
+    ].filter(Boolean);
+    if (profile && missingProfileFields.length > 0) {
+      setActiveTab("account");
+      setEditingProfile(true);
+      Alert.alert("Complete your profile", `Add your ${missingProfileFields.join(", ")} before purchasing. Your phone is used for payment authentication and delivery contact.`);
+      return;
+    }
     if (quote) {
       await payWithFlutterwave(quote);
       return;
@@ -477,7 +501,14 @@ function AcrossApp() {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
       const r = await fetch(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
       if (r.status === 401) { await logout(); return; }
-      if (!r.ok) { const errData = await r.json().catch(() => ({})); throw new Error(errData.message || "Checkout failed"); }
+      if (!r.ok) {
+        const errData = await r.json().catch(() => ({}));
+        if (errData.code === "PROFILE_INCOMPLETE") {
+          setActiveTab("account");
+          setEditingProfile(true);
+        }
+        throw new Error(errData.message || "Checkout failed");
+      }
       const q = await r.json() as Quote;
       setQuote(q);
       await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
@@ -496,12 +527,25 @@ function AcrossApp() {
       const checkoutLink = d.checkout_link || d.response?.data?.link;
       if (!checkoutLink) throw new Error("Payment link unavailable");
       setPaymentState("waiting"); setPaymentMessage("Opening Flutterwave checkout...");
+      if (Platform.OS === "android") {
+        await WebBrowser.openBrowserAsync(checkoutLink, {
+          createTask: true,
+          showInRecents: true,
+          toolbarColor: "#101817",
+          controlsColor: "#FFFFFF",
+          showTitle: true
+        });
+        setPaymentMessage("Checkout is open in your recent apps. After card or bank-transfer payment, return here and confirmation will resume automatically.");
+        stopPaymentPolling();
+        void finishPaymentWhenSettled(q, true);
+        return;
+      }
       const result = await WebBrowser.openAuthSessionAsync(checkoutLink, redirectUrl);
       const redirectStatus = result.type === "success" && "url" in result
         ? String(new URL(result.url).searchParams.get("status") || "").toLowerCase()
         : "";
       if (result.type === "cancel" || result.type === "dismiss") {
-        setPaymentState("failed"); setPaymentMessage("Checkout closed. Cart kept for retry; payment confirmation will continue in the background.");
+        setPaymentState("failed"); setPaymentMessage("Checkout closed. Your cart and pending order are saved; tap Check payment status after completing a transfer.");
         stopPaymentPolling();
         void finishPaymentWhenSettled(q, true);
         return;
@@ -520,6 +564,25 @@ function AcrossApp() {
       setPaymentMessage(e instanceof Error ? e.message : "Payment failed");
       Alert.alert("Payment Failed", e instanceof Error ? e.message : "");
     } finally { setBusy(false); }
+  }
+
+  async function checkPendingPayment() {
+    if (!quote || !token || busy) return;
+    setBusy(true);
+    setPaymentState("waiting");
+    setPaymentMessage("Checking Flutterwave for confirmation…");
+    stopPaymentPolling();
+    try {
+      const settled = await verifyPaymentWithBackend(quote.order_id);
+      if (settled) {
+        await completeSuccessfulPayment();
+        return;
+      }
+      const confirmed = await pollPaymentStatus(quote.order_id, 0, false, paymentPollGeneration.current);
+      if (confirmed) await completeSuccessfulPayment();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function finishPaymentWhenSettled(q: Quote, silent: boolean, redirectURL = "") {
@@ -926,9 +989,14 @@ function AcrossApp() {
                 <Pressable style={[s.primaryButton, busy && s.disabled]} onPress={checkout} disabled={busy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
-                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : quote ? "Retry payment" : "Pay using Flutterwave"}</Text>
+                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : quote ? "Continue payment" : "Pay using Flutterwave"}</Text>
                   </View>
                 </Pressable>
+                {quote ? (
+                  <Pressable style={[s.secondaryButton, { marginTop: 10 }, busy && s.disabled]} onPress={checkPendingPayment} disabled={busy}>
+                    <Text style={s.secondaryButtonText}>Check payment status</Text>
+                  </Pressable>
+                ) : null}
                 {paymentMessage ? <Text style={{ marginTop: 10, color: paymentState === "failed" ? "#B42318" : "#30423D", fontWeight: "700" }}>{paymentMessage}</Text> : null}
               </View></>
             )}
