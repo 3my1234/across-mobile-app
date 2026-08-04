@@ -2,6 +2,7 @@ import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState 
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import * as ImagePicker from "expo-image-picker";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -409,6 +410,10 @@ function AcrossApp() {
 
   async function authenticateWithGoogle() {
     if (!PRIVY_APP_ID || PRIVY_APP_ID.startsWith("REPLACE_ME")) { Alert.alert("Privy not configured"); return; }
+    if (!privyReady) {
+      Alert.alert("Sign-in is still preparing", "Check your internet connection and try again in a moment.");
+      return;
+    }
     setOauthBusy(true); setBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
@@ -499,7 +504,7 @@ function AcrossApp() {
     }
     setBusy(true); try {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
-      const r = await fetch(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
       if (r.status === 401) { await logout(); return; }
       if (!r.ok) {
         const errData = await r.json().catch(() => ({}));
@@ -521,20 +526,28 @@ function AcrossApp() {
     if (!token || !q) return; setBusy(true);
     try {
       const redirectUrl = "across://payments/flutterwave";
-      const r = await fetch(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.message || "Payment setup failed");
       const checkoutLink = d.checkout_link || d.response?.data?.link;
       if (!checkoutLink) throw new Error("Payment link unavailable");
+      if (!/^https:\/\//i.test(checkoutLink)) throw new Error("Payment provider returned an invalid checkout link");
       setPaymentState("waiting"); setPaymentMessage("Opening Flutterwave checkout...");
       if (Platform.OS === "android") {
-        await WebBrowser.openBrowserAsync(checkoutLink, {
-          createTask: true,
-          showInRecents: true,
-          toolbarColor: "#101817",
-          controlsColor: "#FFFFFF",
-          showTitle: true
-        });
+        try {
+          const result = await WebBrowser.openBrowserAsync(checkoutLink, {
+            createTask: true,
+            showInRecents: true,
+            toolbarColor: "#101817",
+            controlsColor: "#FFFFFF",
+            showTitle: true
+          });
+          if (result.type !== "opened") throw new Error("checkout browser did not open");
+        } catch {
+          const canOpen = await Linking.canOpenURL(checkoutLink);
+          if (!canOpen) throw new Error("No browser is available to open Flutterwave checkout");
+          await Linking.openURL(checkoutLink);
+        }
         setPaymentMessage("Checkout is open in your recent apps. After card or bank-transfer payment, return here and confirmation will resume automatically.");
         stopPaymentPolling();
         void finishPaymentWhenSettled(q, true);
