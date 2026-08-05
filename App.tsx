@@ -4,6 +4,8 @@ import * as SecureStore from "expo-secure-store";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import * as ImagePicker from "expo-image-picker";
+import * as Notifications from "expo-notifications";
+import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Alert, Animated, AppState, Dimensions, Image,
@@ -22,6 +24,14 @@ import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, Prod
 import { s } from "./components/Styles";
 
 WebBrowser.maybeCompleteAuthSession();
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true
+  })
+});
 const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID ?? "";
 const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID ?? "";
 const SESSION_TIMEOUT = 8000;
@@ -66,10 +76,15 @@ function AcrossApp() {
   const [paymentMessage, setPaymentMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const scrollY = useRef(new Animated.Value(0)).current;
+  const trackScrollRef = useRef<ScrollView | null>(null);
+  const orderOffsetsRef = useRef<Record<string, number>>({});
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
   const cartHydrated = useRef(false);
   const restoredPendingPayment = useRef(false);
+  const activityTokenRef = useRef("");
+  const pushTokenRef = useRef("");
+  const lastNotificationResponseId = useRef("");
   const [cartStorageReady, setCartStorageReady] = useState(false);
   const persistedDetectedRegion = useRef(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -84,6 +99,7 @@ function AcrossApp() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
+  const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState("");
@@ -171,8 +187,27 @@ function AcrossApp() {
     void loadOrders(token);
     void loadNotifications(token);
     void loadProfile(token);
-    const interval = setInterval(() => { void loadNotifications(token); }, 10000);
-    return () => clearInterval(interval);
+    void registerPushNotifications(token);
+    void pollBuyerActivity(token, true);
+    const interval = setInterval(() => { void pollBuyerActivity(token); }, 12000);
+    const received = Notifications.addNotificationReceivedListener(() => {
+      void Promise.all([loadNotifications(token), loadOrders(token)]);
+    });
+    const responded = Notifications.addNotificationResponseReceivedListener(response => {
+      void openNotification(response.notification.request.content.data || {});
+    });
+    void Notifications.getLastNotificationResponseAsync().then(response => {
+      if (!response) return;
+      const responseId = response.notification.request.identifier;
+      if (responseId === lastNotificationResponseId.current) return;
+      lastNotificationResponseId.current = responseId;
+      void openNotification(response.notification.request.content.data || {});
+    }).catch(() => {});
+    return () => {
+      clearInterval(interval);
+      received.remove();
+      responded.remove();
+    };
   }, [stage, token]);
 
   useEffect(() => {
@@ -194,7 +229,9 @@ function AcrossApp() {
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", nextState => {
-      if (nextState !== "active" || stage !== "app" || !token || !quote) return;
+      if (nextState !== "active" || stage !== "app" || !token) return;
+      void pollBuyerActivity(token, true);
+      if (!quote) return;
       stopPaymentPolling();
       setPaymentState("waiting");
       setPaymentMessage("Checking whether Flutterwave has confirmed your payment…");
@@ -233,9 +270,73 @@ function AcrossApp() {
     } catch {}
   }
 
-  async function markNotificationRead(id: string) {
+  async function pollBuyerActivity(authToken: string, force = false) {
+    try {
+      const response = await fetch(`${API_URL}/api/v1/notifications/activity`, { headers: { Authorization: `Bearer ${authToken}` } });
+      if (!response.ok) return;
+      const data = await response.json();
+      const nextToken = String(data.change_token || "");
+      const changed = force || (activityTokenRef.current !== "" && nextToken !== activityTokenRef.current);
+      activityTokenRef.current = nextToken;
+      if (changed) await Promise.all([loadNotifications(authToken), loadOrders(authToken)]);
+    } catch {}
+  }
+
+  async function registerPushNotifications(authToken: string) {
+    if (Platform.OS !== "android" && Platform.OS !== "ios") return;
+    try {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("orders", {
+          name: "Order updates",
+          importance: Notifications.AndroidImportance.MAX,
+          sound: "default",
+          vibrationPattern: [0, 250, 180, 250]
+        });
+      }
+      const current = await Notifications.getPermissionsAsync();
+      const permission = current.status === "granted" ? current : await Notifications.requestPermissionsAsync();
+      if (permission.status !== "granted") return;
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+      if (!projectId) return;
+      const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      pushTokenRef.current = pushToken;
+      await fetch(`${API_URL}/api/v1/notifications/push-token`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ token: pushToken, platform: Platform.OS })
+      });
+    } catch {
+      // Registration retries on the next authenticated app session.
+    }
+  }
+
+  async function markNotificationRead(id: string, reload = true) {
     if (!token) return;
-    try { await fetch(`${API_URL}/api/v1/notifications/${id}/read`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } }); await loadNotifications(); } catch {}
+    try {
+      await fetch(`${API_URL}/api/v1/notifications/${id}/read`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
+      if (reload) await loadNotifications();
+    } catch {}
+  }
+
+  async function openNotification(notification: any) {
+    if (!token) return;
+    const notificationId = String(notification?.id || notification?.notification_id || "");
+    if (notificationId) await markNotificationRead(notificationId, false);
+    const orderId = String(notification?.order_id || notification?.data?.order_id || "");
+    setShowNotifications(false);
+    if (orderId) {
+      setFocusedOrderId(orderId);
+      setActiveTab("track");
+      const latestOrders = await loadOrders(token);
+      const target = latestOrders.find(order => order.id === orderId);
+      if (target?.current_tracking_stage === "Delivered" && target.order_status !== "Completed") {
+        setDeliveryConfirmOrder(target);
+      }
+      setTimeout(() => {
+        trackScrollRef.current?.scrollTo({ y: Math.max(0, (orderOffsetsRef.current[orderId] || 0) - 12), animated: true });
+      }, 250);
+    }
+    await loadNotifications(token);
   }
 
   async function markAllRead() {
@@ -298,6 +399,15 @@ function AcrossApp() {
   }
 
   async function logout() {
+    if (token && pushTokenRef.current) {
+      try {
+        await fetch(`${API_URL}/api/v1/notifications/push-token`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ token: pushTokenRef.current })
+        });
+      } catch {}
+    }
     await clearSession();
     try { await privyLogout(); await WebBrowser.dismissAuthSession(); } catch {}
     setAuthMode("welcome"); setStage("auth");
@@ -696,7 +806,7 @@ function AcrossApp() {
   }
 
   async function loadOrders(authToken: string | null = token) {
-    if (!authToken) return;
+    if (!authToken) return [] as OrderSummary[];
     try {
       const r = await fetch(`${API_URL}/api/v1/orders`, { headers: { Authorization: `Bearer ${authToken}` } });
       if (r.ok) {
@@ -708,8 +818,11 @@ function AcrossApp() {
           o.current_tracking_stage === "Delivered" && o.order_status !== "Completed"
         );
         if (deliveredOrder) setDeliveryConfirmOrder(deliveredOrder);
+        else setDeliveryConfirmOrder(null);
+        return ordersList as OrderSummary[];
       }
     } catch {}
+    return [] as OrderSummary[];
   }
 
   // ---- Delivery Confirm ----
@@ -920,7 +1033,7 @@ function AcrossApp() {
           <ScrollView style={{ maxHeight: 320 }}>
             {notifications.length === 0 ? <Text style={{ padding: 20, textAlign: "center", color: "#8C8C8C" }}>No notifications yet</Text>
             : notifications.slice(0, 30).map(n => (
-              <Pressable key={n.id} style={{ padding: 12, borderBottomWidth: 1, borderColor: "#F0F0F0", backgroundColor: n.is_read ? "#FFFFFF" : "#FFF5F5" }} onPress={() => markNotificationRead(n.id)}>
+              <Pressable key={n.id} style={{ padding: 12, borderBottomWidth: 1, borderColor: "#F0F0F0", backgroundColor: n.is_read ? "#FFFFFF" : "#FFF5F5" }} onPress={() => { void openNotification(n); }}>
                 <Text style={{ fontWeight: "800", fontSize: 13 }}>{n.title}</Text>
                 <Text style={{ marginTop: 2, fontSize: 12, color: "#595959" }}>{n.body}</Text>
                 <Text style={{ marginTop: 2, fontSize: 10, color: "#BFBFBF" }}>{new Date(n.created_at).toLocaleString()}</Text>
@@ -1072,14 +1185,14 @@ function AcrossApp() {
         )}
 
         {activeTab === "track" && (
-          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
+          <ScrollView ref={trackScrollRef} alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.panel}><Text style={s.kicker}>Orders</Text><Text style={s.panelTitle}>Purchase history and tracking</Text></View>
             {orders.length === 0 ? (
               <View style={s.panel}><Text style={{ color: "#8C8C8C" }}>No orders found yet. Pull down to refresh after payment.</Text></View>
             ) : orders.map(order => {
               const currentIndex = Math.max(0, (TRACKING_STAGES as readonly string[]).indexOf(order.current_tracking_stage));
               return (
-                <View key={order.id} style={s.panel}>
+                <View key={order.id} onLayout={event => { orderOffsetsRef.current[order.id] = event.nativeEvent.layout.y; }} style={[s.panel, focusedOrderId === order.id && { borderWidth: 2, borderColor: "#FF4747" }]}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={s.panelTitle}>{order.items_summary || `${order.item_count} item(s)`}</Text>
@@ -1097,6 +1210,24 @@ function AcrossApp() {
                       <View style={s.timelineText}><Text style={s.timelineTitle}>{stageName}</Text>{stageName === order.current_tracking_stage && <Text style={{ color: "#12805F", fontSize: 12, fontWeight: "800" }}>Current stage</Text>}</View>
                     </View>);
                   })}</View>
+                  {deliveryConfirmOrder?.id === order.id && (
+                    <View style={{ marginTop: 16, padding: 14, borderRadius: 12, backgroundColor: "#FFF5F5", borderWidth: 1, borderColor: "#FFD6D6" }}>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color: "#191919" }}>Did you receive this package?</Text>
+                      <Text style={{ marginTop: 6, color: "#595959", lineHeight: 19 }}>Confirm only after you have collected and checked this order. Confirmation completes its tracking record and unlocks your review reward.</Text>
+                      <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
+                        <Pressable style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: "#FFFFFF", alignItems: "center" }} onPress={() => {
+                          setSupportSubject("Delivery issue");
+                          setSupportMessage(`I did not receive my order ${order.id}. Please help.`);
+                          setActiveTab("support");
+                        }}>
+                          <Text style={{ fontWeight: "800", color: "#595959" }}>Not received</Text>
+                        </Pressable>
+                        <Pressable style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]} onPress={() => confirmDelivery(order.id)} disabled={busy}>
+                          <Text style={s.primaryButtonText}>{busy ? "Confirming…" : "Yes, received!"}</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
                 </View>
               );
             })}
@@ -1156,7 +1287,7 @@ function AcrossApp() {
       </View>
 
       {/* Delivery Confirm Modal */}
-      {deliveryConfirmOrder && (
+      {false && deliveryConfirmOrder && (
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 200, padding: 24 }}>
           <View style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 }}>
             <View style={{ alignItems: "center", marginBottom: 16 }}>
@@ -1172,7 +1303,7 @@ function AcrossApp() {
                 onPress={() => {
                   setDeliveryConfirmOrder(null);
                   setSupportSubject("Delivery issue");
-                  setSupportMessage(`I did not receive my order ${deliveryConfirmOrder.id}. Please help.`);
+                  setSupportMessage(`I did not receive my order ${deliveryConfirmOrder!.id}. Please help.`);
                   setActiveTab("support");
                 }}
               >
@@ -1180,7 +1311,7 @@ function AcrossApp() {
               </Pressable>
               <Pressable
                 style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]}
-                onPress={() => confirmDelivery(deliveryConfirmOrder.id)}
+                onPress={() => confirmDelivery(deliveryConfirmOrder!.id)}
                 disabled={busy}
               >
                 <Text style={s.primaryButtonText}>{busy ? "..." : "Yes, received!"}</Text>
