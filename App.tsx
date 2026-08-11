@@ -577,6 +577,29 @@ function AcrossApp() {
   function cartFingerprint(items: CartItem[]) {
     return items.map(item => `${item.product.sku}:${item.quantity}`).sort().join("|");
   }
+
+  async function requestPasswordReset(email: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      Alert.alert("Email required", "Enter your email address first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const r = await fetch(`${API_URL}/api/v1/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
+        body: JSON.stringify({ email: normalizedEmail })
+      });
+      const d = await readResponseBody(r);
+      if (!r.ok) throw new Error(formatHttpError(r, d, "Could not request password reset"));
+      Alert.alert("Check your email", d?.message || "If an account exists for that email, a password reset link has been sent.");
+    } catch (e) {
+      Alert.alert("Failed", e instanceof Error ? e.message : "Could not request password reset");
+    } finally {
+      setBusy(false);
+    }
+  }
   function clearPendingPayment() {
     setQuote(null);
     restoredPendingPayment.current = false;
@@ -998,7 +1021,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onGoogle={authenticateWithGoogle} />;
+  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
