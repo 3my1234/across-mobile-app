@@ -71,6 +71,7 @@ function AcrossApp() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [paymentState, setPaymentState] = useState<"idle" | "waiting" | "settled" | "failed">("idle");
   const [paymentMessage, setPaymentMessage] = useState("");
@@ -524,14 +525,15 @@ function AcrossApp() {
       Alert.alert("Sign-in is still preparing", "Check your internet connection and try again in a moment.");
       return;
     }
-    setOauthBusy(true); setBusy(true);
+    if (oauthBusy) return;
+    setOauthBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
       await loginWithOAuth({ provider: "google" });
     } catch (e: any) {
       const msg = e?.message || "";
       if (msg.toLowerCase().includes("already logged in") && privyUser) { await finishPrivyLogin(); return; }
-      setOauthBusy(false); setBusy(false); Alert.alert("Sign-in failed", msg || "Please try again");
+      setOauthBusy(false); Alert.alert("Sign-in failed", msg || "Please try again");
     }
   }
 
@@ -656,12 +658,28 @@ function AcrossApp() {
 
   async function payWithFlutterwave(quoteData?: Quote) {
     const q = quoteData || quote;
-    if (!token || !q) return; setBusy(true);
+    if (!token || !q || paymentBusy) return;
+    setPaymentBusy(true);
     try {
       const redirectUrl = "across://payments/flutterwave";
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
-      const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.message || "Payment setup failed");
+      setPaymentState("waiting");
+      setPaymentMessage("Preparing secure Flutterwave checkout...");
+      let r: Response | null = null;
+      let d: any = {};
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          r = await fetchWithTimeout(`${API_URL}/api/v1/payments/flutterwave/checkout`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ order_id: q.order_id, amount: String(q.grand_total), currency: q.currency, redirect_url: redirectUrl }) });
+          d = await r.json().catch(() => ({}));
+          if (r.ok || r.status < 500) break;
+        } catch (error) {
+          if (attempt === 1) throw error;
+        }
+        if (attempt === 0) {
+          setPaymentMessage("Secure checkout is taking longer than expected. Retrying...");
+          await sleep(500);
+        }
+      }
+      if (!r?.ok) throw new Error(d.message || "Flutterwave checkout is temporarily unavailable. Please try again.");
       const checkoutLink = d.checkout_link || d.response?.data?.link;
       if (!checkoutLink) throw new Error("Payment link unavailable");
       if (!/^https:\/\//i.test(checkoutLink)) throw new Error("Payment provider returned an invalid checkout link");
@@ -709,7 +727,7 @@ function AcrossApp() {
       setPaymentState("failed");
       setPaymentMessage(e instanceof Error ? e.message : "Payment failed");
       Alert.alert("Payment Failed", e instanceof Error ? e.message : "");
-    } finally { setBusy(false); }
+    } finally { setPaymentBusy(false); }
   }
 
   async function checkPendingPayment() {
@@ -1021,7 +1039,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} googleReady={privyReady} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -1135,14 +1153,14 @@ function AcrossApp() {
                 <View style={s.metric}><Text style={s.metricLabel}>Customs (20%)</Text><Text style={s.metricValue}>{money(totals.customs)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>VAT</Text><Text style={s.metricValue}>{money(totals.vat)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total) : money(totals.payablePreview)}</Text></View>
-                <Pressable style={[s.primaryButton, busy && s.disabled]} onPress={checkout} disabled={busy}>
+                <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
-                    <Text style={s.primaryButtonText}>{busy ? "Processing..." : quote ? "Continue payment" : "Pay using Flutterwave"}</Text>
+                    <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Pay using Flutterwave"}</Text>
                   </View>
                 </Pressable>
                 {quote ? (
-                  <Pressable style={[s.secondaryButton, { marginTop: 10 }, busy && s.disabled]} onPress={checkPendingPayment} disabled={busy}>
+                  <Pressable style={[s.secondaryButton, { marginTop: 10 }, (busy || paymentBusy) && s.disabled]} onPress={checkPendingPayment} disabled={busy || paymentBusy}>
                     <Text style={s.secondaryButtonText}>Check payment status</Text>
                   </Pressable>
                 ) : null}

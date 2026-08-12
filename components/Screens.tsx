@@ -50,6 +50,8 @@ export function StartupErrorScreen({ message }: { message: string }) {
 interface AuthProps {
   mode: AuthMode;
   busy: boolean;
+  googleReady: boolean;
+  googleBusy: boolean;
   noticeText?: string;
   onModeChange: (m: AuthMode) => void;
   onSubmit: (p: string, b: Record<string, string>) => Promise<void>;
@@ -58,7 +60,7 @@ interface AuthProps {
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -90,7 +92,7 @@ export function AuthScreen({ mode, busy, noticeText, onModeChange, onSubmit, onR
                   </View>
                 )}
                 <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
-                <Pressable style={s.gmailButton} onPress={onGoogle} disabled={busy}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{busy ? "Opening..." : "Sign in with Google"}</Text></Pressable>
+                <Pressable style={[s.gmailButton, (!googleReady || googleBusy) && s.disabled]} onPress={onGoogle} disabled={!googleReady || googleBusy} accessibilityState={{ disabled: !googleReady || googleBusy }}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{googleBusy ? "Opening Google..." : googleReady ? "Sign in with Google" : "Preparing Google sign-in..."}</Text></Pressable>
                 <Pressable style={s.textButton} onPress={() => onModeChange("signin")}><Text style={s.textButtonText}>I have an account</Text></Pressable>
               </View>
             ) : (
