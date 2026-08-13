@@ -78,8 +78,8 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
     <ImageBackground source={LOGO} resizeMode="contain" style={s.authBg} imageStyle={s.authBgImage}>
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.authKeyboard}>
-          <ScrollView contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled">
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
+          <ScrollView contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}>
             <Image source={LOGO} style={s.authLogo} resizeMode="contain" />
             {isWelcome ? (
               <View style={s.authPanel}>
@@ -92,7 +92,7 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
                   </View>
                 )}
                 <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
-                <Pressable style={[s.gmailButton, (!googleReady || googleBusy) && s.disabled]} onPress={onGoogle} disabled={!googleReady || googleBusy} accessibilityState={{ disabled: !googleReady || googleBusy }}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{googleBusy ? "Opening Google..." : googleReady ? "Sign in with Google" : "Preparing Google sign-in..."}</Text></Pressable>
+                {googleReady && <Pressable style={[s.gmailButton, googleBusy && s.disabled]} onPress={onGoogle} disabled={googleBusy} accessibilityState={{ disabled: googleBusy }}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{googleBusy ? "Opening Google..." : "Sign in with Google"}</Text></Pressable>}
                 <Pressable style={s.textButton} onPress={() => onModeChange("signin")}><Text style={s.textButtonText}>I have an account</Text></Pressable>
               </View>
             ) : (

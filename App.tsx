@@ -71,6 +71,7 @@ function AcrossApp() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState(false);
+	const [googleSessionClearing, setGoogleSessionClearing] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [paymentState, setPaymentState] = useState<"idle" | "waiting" | "settled" | "failed">("idle");
@@ -85,6 +86,7 @@ function AcrossApp() {
   const restoredPendingPayment = useRef(false);
   const activityTokenRef = useRef("");
   const pushTokenRef = useRef("");
+  const logoutInProgress = useRef(false);
   const lastNotificationResponseId = useRef("");
   const [cartStorageReady, setCartStorageReady] = useState(false);
   const persistedDetectedRegion = useRef(false);
@@ -117,6 +119,13 @@ function AcrossApp() {
   const [detectedRegionName, setDetectedRegionName] = useState("");
   const [detectedCityName, setDetectedCityName] = useState("");
   const [detectedPostalCode, setDetectedPostalCode] = useState("");
+	const [showFlashSale, setShowFlashSale] = useState(false);
+	const [flashSaleProducts, setFlashSaleProducts] = useState<Product[]>([]);
+	const [flashSaleCursor, setFlashSaleCursor] = useState("");
+	const [flashSaleHasMore, setFlashSaleHasMore] = useState(false);
+	const [flashSaleLoading, setFlashSaleLoading] = useState(false);
+	const [flashSaleSearch, setFlashSaleSearch] = useState("");
+	const flashSaleRequest = useRef(0);
 
   const categories = useMemo(() => {
     const names = new Set<string>();
@@ -125,7 +134,6 @@ function AcrossApp() {
     return Array.from(names);
   }, [products]);
 
-  const flashSales = useMemo(() => products.filter(p => p.is_flash_sale), [products]);
   const visibleProducts = useMemo(() => {
     let filtered = products;
     if (selectedCategory !== "All") {
@@ -170,8 +178,15 @@ function AcrossApp() {
   }, []);
 
   useEffect(() => {
-    if (privyReady && privyUser && oauthBusy && stage === "auth") finishPrivyLogin();
-  }, [privyReady, privyUser, oauthBusy]);
+	if (privyReady && privyUser && oauthBusy && stage === "auth" && !googleSessionClearing) finishPrivyLogin();
+	if (privyReady && !privyUser && googleSessionClearing) setGoogleSessionClearing(false);
+	}, [privyReady, privyUser, oauthBusy, googleSessionClearing, stage]);
+
+	useEffect(() => {
+		if (!showFlashSale) return;
+		const timer = setTimeout(() => { void loadFlashSales(true, flashSaleSearch); }, 300);
+		return () => clearTimeout(timer);
+	}, [showFlashSale, flashSaleSearch]);
 
   useEffect(() => {
     if (!oauthState) return;
@@ -400,18 +415,33 @@ function AcrossApp() {
   }
 
   async function logout() {
-    if (token && pushTokenRef.current) {
-      try {
-        await fetch(`${API_URL}/api/v1/notifications/push-token`, {
-          method: "DELETE",
-          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ token: pushTokenRef.current })
-        });
-      } catch {}
+    if (logoutInProgress.current) return;
+    logoutInProgress.current = true;
+    const previousToken = token;
+    const previousPushToken = pushTokenRef.current;
+    setAuthMode("welcome");
+	setOauthBusy(false);
+	setGoogleSessionClearing(true);
+    setBusy(false);
+    setStage("auth");
+    try {
+      await clearSession();
+    } finally {
+      logoutInProgress.current = false;
     }
-    await clearSession();
-    try { await privyLogout(); await WebBrowser.dismissAuthSession(); } catch {}
-    setAuthMode("welcome"); setStage("auth");
+    void (async () => {
+      if (previousToken && previousPushToken) {
+        try {
+          await fetch(`${API_URL}/api/v1/notifications/push-token`, {
+          method: "DELETE",
+            headers: { Authorization: `Bearer ${previousToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ token: previousPushToken })
+          });
+        } catch {}
+      }
+      try { await privyLogout(); } catch {}
+      try { await WebBrowser.dismissAuthSession(); } catch {}
+    })();
   }
 
   async function hydrateCart(catalog: Product[]) {
@@ -455,11 +485,42 @@ function AcrossApp() {
           const catalog = (await r.json()).products ?? [];
           setProducts(catalog);
           await hydrateCart(catalog);
+		  void loadFlashSales(true, "");
           return;
         }
       } catch {}
     }
   }
+
+	async function loadFlashSales(reset = false, query = flashSaleSearch) {
+		if (flashSaleLoading && !reset) return;
+		const requestID = ++flashSaleRequest.current;
+		setFlashSaleLoading(true);
+		try {
+			const cursor = reset ? "" : flashSaleCursor;
+			const params = new URLSearchParams({ limit: "24" });
+			if (query.trim()) params.set("search", query.trim());
+			if (cursor) params.set("cursor", cursor);
+			const response = await fetch(`${API_URL}/api/v1/products/flash-sale?${params.toString()}`);
+			if (!response.ok) throw new Error("Flash sales are temporarily unavailable");
+			const data = await response.json();
+			if (requestID !== flashSaleRequest.current) return;
+			const page = data.page ?? {};
+			setFlashSaleProducts(current => reset ? (data.products ?? []) : [...current, ...(data.products ?? [])]);
+			setFlashSaleCursor(page.next_cursor ?? "");
+			setFlashSaleHasMore(Boolean(page.has_more));
+		} catch (error: any) {
+			if (requestID === flashSaleRequest.current && showFlashSale) Alert.alert("Flash Sale", error?.message || "Please try again");
+		} finally {
+			if (requestID === flashSaleRequest.current) setFlashSaleLoading(false);
+		}
+	}
+
+	async function openFlashSale() {
+		setShowFlashSale(true);
+		setFlashSaleSearch("");
+		await loadFlashSales(true, "");
+	}
 
   async function refreshAppData(includeSupport = false) {
     if (refreshing) return;
@@ -1039,7 +1100,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-  if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} googleReady={privyReady} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} googleReady={privyReady && !googleSessionClearing} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -1120,7 +1181,12 @@ function AcrossApp() {
         </View>
       )}
 
-      {activeTab !== "home" && (
+	  {showFlashSale ? (
+		<View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderColor: "#EDEDED", flexDirection: "row", alignItems: "center", gap: 10 }}>
+		  <Pressable onPress={() => setShowFlashSale(false)} accessibilityLabel="Back to shop"><Ionicons name="arrow-back" size={24} color="#191919" /></Pressable>
+		  <View><Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>Flash Sale</Text><Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>Limited-time verified deals</Text></View>
+		</View>
+	  ) : activeTab !== "home" && (
         <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
           <Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>{NAV_ITEMS.find(i => i.key === activeTab)?.label ?? "Atlantic Express"}</Text>
           <Text style={{ marginTop: 2, color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>{activeTab === "cart" ? `${totals.items} items` : "Atlantic Express"}</Text>
@@ -1128,7 +1194,17 @@ function AcrossApp() {
       )}
 
       <View style={s.content}>
-        {activeTab === "home" && (
+		{showFlashSale ? (
+		  <View style={{ flex: 1 }}>
+			<View style={{ margin: 12, backgroundColor: "#F5F5F5", borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center" }}><Ionicons name="search" size={18} color="#8C8C8C" /><TextInput value={flashSaleSearch} onChangeText={setFlashSaleSearch} placeholder="Search flash-sale products" style={s.searchInput} /></View>
+			<Animated.FlatList data={flashSaleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
+			  contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
+			  renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />}
+			  onEndReached={() => { if (flashSaleHasMore && !flashSaleLoading) void loadFlashSales(false); }} onEndReachedThreshold={0.4}
+			  refreshControl={<RefreshControl refreshing={flashSaleLoading && flashSaleProducts.length > 0} onRefresh={() => { void loadFlashSales(true); }} tintColor="#FF4747" />}
+			  ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="flash-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{flashSaleLoading ? "Loading deals..." : "No flash-sale products right now"}</Text></View>} />
+		  </View>
+		) : activeTab === "home" && (
           <Animated.FlatList data={visibleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
@@ -1138,7 +1214,7 @@ function AcrossApp() {
                 <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>Trending now</Text>
                 <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{visibleProducts.length} items</Text>
               </View>
-            </View><FlashSaleBanner flashSales={flashSales} onSelectProduct={setSelectedProduct} /></>}
+			</View><FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={setSelectedProduct} onViewAll={() => { void openFlashSale(); }} /></>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
         )}
 
@@ -1319,7 +1395,7 @@ function AcrossApp() {
       <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
-            <Pressable key={item.key} style={s.bottomNavItem} onPress={() => setActiveTab(item.key)}>
+			<Pressable key={item.key} style={s.bottomNavItem} onPress={() => { setShowFlashSale(false); setActiveTab(item.key); }}>
               <View style={s.bottomNavIconWrap}>{item.key === "account" && profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 24, height: 24, borderRadius: 12, borderWidth: active ? 2 : 0, borderColor: "#FF4747", backgroundColor: "#F0F0F0" }} /> : <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={active ? "#FF4747" : "#8C8C8C"} />}{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
               <Text style={[s.bottomNavLabel, active && s.bottomNavLabelActive]}>{item.label}</Text>
             </Pressable>
