@@ -9,7 +9,7 @@ import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Alert, Animated, AppState, Dimensions, Image,
-  Platform, Pressable, RefreshControl, ScrollView,
+  KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView,
   Text, TextInput, View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -955,10 +955,18 @@ function AcrossApp() {
   }
 
   async function createSupportTicket() {
-    if (!token || !supportSubject.trim() || !supportMessage.trim()) return; setBusy(true);
+    if (!token) return;
+    if (!supportSubject.trim() || !supportMessage.trim()) {
+      Alert.alert("Missing information", "Enter a subject and describe how we can help.");
+      return;
+    }
+    setBusy(true);
     try {
       const r = await fetch(`${API_URL}/api/v1/support/tickets`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ subject: supportSubject.trim(), message: supportMessage.trim() }) });
-      if (!r.ok) throw new Error("Failed to create ticket");
+      if (!r.ok) {
+        const payload = await r.json().catch(() => ({}));
+        throw new Error(payload?.error || "Failed to create ticket");
+      }
       setSupportSubject(""); setSupportMessage(""); Alert.alert("Ticket Created", "We'll get back to you soon."); await loadSupportTickets();
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
@@ -1352,7 +1360,15 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(true); }} tintColor="#FF4747" />}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <ScrollView
+            alwaysBounceVertical
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+            contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(true); }} tintColor="#FF4747" />}
+          >
             {selectedTicket ? (
               <View style={s.panel}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -1373,8 +1389,19 @@ function AcrossApp() {
                 <View style={s.panel}>
                   <Text style={s.kicker}>Support</Text><Text style={s.panelTitle}>Create a Ticket</Text>
                   <TextInput style={s.input} value={supportSubject} onChangeText={setSupportSubject} placeholder="Subject" />
-                  <TextInput style={[s.input, { minHeight: 80 }]} value={supportMessage} onChangeText={setSupportMessage} placeholder="Describe your issue..." multiline />
-                  <Pressable style={[s.primaryButton, busy && s.disabled]} onPress={createSupportTicket} disabled={busy}><Text style={s.primaryButtonText}>{busy ? "..." : "Submit Ticket"}</Text></Pressable>
+                  <TextInput
+                    style={s.supportMessageInput}
+                    value={supportMessage}
+                    onChangeText={setSupportMessage}
+                    placeholder="Describe your issue..."
+                    multiline
+                    textAlignVertical="top"
+                    scrollEnabled
+                    returnKeyType="default"
+                  />
+                  <Pressable style={[s.supportSubmitButton, busy && s.disabled]} onPress={createSupportTicket} disabled={busy}>
+                    <Text style={s.supportSubmitButtonText}>{busy ? "Submitting ticket..." : "Submit support ticket"}</Text>
+                  </Pressable>
                 </View>
                 <View style={s.panel}>
                   <Text style={s.panelTitle}>Your Tickets</Text>
@@ -1389,6 +1416,7 @@ function AcrossApp() {
               </View>
             )}
           </ScrollView>
+          </KeyboardAvoidingView>
         )}
       </View>
 
