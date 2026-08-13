@@ -522,6 +522,15 @@ function AcrossApp() {
 		await loadFlashSales(true, "");
 	}
 
+	function openFlashSaleProduct(product: Product) {
+		// Keep the dedicated Flash Sale catalogue as the navigation context. The
+		// detail sheet opens on top, so closing it returns the buyer to the rest of
+		// the verified deals instead of dropping them back on the general home feed.
+		setShowFlashSale(true);
+		setFlashSaleSearch("");
+		setSelectedProduct(product);
+	}
+
   async function refreshAppData(includeSupport = false) {
     if (refreshing) return;
     setRefreshing(true);
@@ -1222,7 +1231,7 @@ function AcrossApp() {
                 <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>Trending now</Text>
                 <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{visibleProducts.length} items</Text>
               </View>
-			</View><FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={setSelectedProduct} onViewAll={() => { void openFlashSale(); }} /></>}
+			</View><FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} /></>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
         )}
 
