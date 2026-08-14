@@ -9,7 +9,7 @@ import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Alert, Animated, AppState, Dimensions, Image,
-  KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView,
+  Keyboard, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView,
   Text, TextInput, View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -80,6 +80,8 @@ function AcrossApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const scrollY = useRef(new Animated.Value(0)).current;
   const trackScrollRef = useRef<ScrollView | null>(null);
+  const accountScrollRef = useRef<ScrollView | null>(null);
+  const supportScrollRef = useRef<ScrollView | null>(null);
   const orderOffsetsRef = useRef<Record<string, number>>({});
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
@@ -125,8 +127,9 @@ function AcrossApp() {
 	const [flashSaleCursor, setFlashSaleCursor] = useState("");
 	const [flashSaleHasMore, setFlashSaleHasMore] = useState(false);
 	const [flashSaleLoading, setFlashSaleLoading] = useState(false);
-	const [flashSaleSearch, setFlashSaleSearch] = useState("");
-	const flashSaleRequest = useRef(0);
+  const [flashSaleSearch, setFlashSaleSearch] = useState("");
+  const flashSaleRequest = useRef(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const categories = useMemo(() => {
     const names = new Set<string>();
@@ -134,6 +137,10 @@ function AcrossApp() {
     products.forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
     return Array.from(names);
   }, [products]);
+
+  function revealFormEnd(scrollRef: { current: ScrollView | null }) {
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), Platform.OS === "android" ? 320 : 180);
+  }
 
   const visibleProducts = useMemo(() => {
     // Deals belong to the dedicated Flash Sale experience, not the ordinary feed.
@@ -160,6 +167,12 @@ function AcrossApp() {
     restoreSession();
     bootTimer.current = setTimeout(() => setStage(prev => prev === "booting" ? "auth" : prev), SESSION_TIMEOUT);
     return () => { if (bootTimer.current) clearTimeout(bootTimer.current); };
+  }, []);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
   }, []);
 
   useEffect(() => {
@@ -1277,7 +1290,8 @@ function AcrossApp() {
         )}
 
         {activeTab === "account" && (
-          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
+          <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <ScrollView ref={accountScrollRef} alwaysBounceVertical keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
               <Pressable onPress={pickAvatar}>
                 {profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#F0F0F0" }} />
@@ -1296,14 +1310,14 @@ function AcrossApp() {
                   <Ionicons name="camera-outline" size={24} color="#FF4747" />
                   <Text style={{ color: "#FF4747", fontWeight: "700" }}>Change profile picture</Text>
                 </Pressable>
-                <TextInput style={s.input} value={profileName} onChangeText={setProfileName} placeholder="Full name" />
-                <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} placeholder="Phone number" keyboardType="phone-pad" />
-                <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} placeholder="Region" />
-                <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} placeholder="Street address" />
-                <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} placeholder="City" />
-                <TextInput style={s.input} value={profileState} onChangeText={setProfileState} placeholder="State" />
-                <TextInput style={s.input} value={profilePostalCode} onChangeText={setProfilePostalCode} placeholder="Postal code" />
-                <TextInput style={s.input} value={profileDob} onChangeText={setProfileDob} placeholder="Date of birth (YYYY-MM-DD)" />
+                <TextInput style={s.input} value={profileName} onChangeText={setProfileName} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Full name" />
+                <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Phone number" keyboardType="phone-pad" />
+                <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Region" />
+                <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Street address" />
+                <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="City" />
+                <TextInput style={s.input} value={profileState} onChangeText={setProfileState} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="State" />
+                <TextInput style={s.input} value={profilePostalCode} onChangeText={setProfilePostalCode} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Postal code" />
+                <TextInput style={s.input} value={profileDob} onChangeText={setProfileDob} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Date of birth (YYYY-MM-DD)" />
                 <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
                   <Pressable style={[s.secondaryButton, { flex: 1 }]} onPress={() => setEditingProfile(false)}><Text style={s.secondaryButtonText}>Cancel</Text></Pressable>
                   <Pressable style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]} onPress={saveProfile} disabled={busy}><Text style={s.primaryButtonText}>{busy ? "..." : "Save"}</Text></Pressable>
@@ -1329,6 +1343,7 @@ function AcrossApp() {
             </View>
             <Pressable style={s.logoutButton} onPress={logout}><Ionicons name="log-out-outline" size={18} color="#FF4747" /><Text style={s.logoutButtonText}>Sign out</Text></Pressable>
           </ScrollView>
+          </KeyboardAvoidingView>
         )}
 
         {activeTab === "track" && (
@@ -1382,13 +1397,14 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
           <ScrollView
+            ref={supportScrollRef}
             alwaysBounceVertical
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-            automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
-            contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]}
+            automaticallyAdjustKeyboardInsets
+            contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(true); }} tintColor="#FF4747" />}
           >
             {selectedTicket ? (
@@ -1410,11 +1426,12 @@ function AcrossApp() {
               <View>
                 <View style={s.panel}>
                   <Text style={s.kicker}>Support</Text><Text style={s.panelTitle}>Create a Ticket</Text>
-                  <TextInput style={s.input} value={supportSubject} onChangeText={setSupportSubject} placeholder="Subject" />
+                  <TextInput style={s.input} value={supportSubject} onChangeText={setSupportSubject} onFocus={() => revealFormEnd(supportScrollRef)} placeholder="Subject" />
                   <TextInput
                     style={s.supportMessageInput}
                     value={supportMessage}
                     onChangeText={setSupportMessage}
+                    onFocus={() => revealFormEnd(supportScrollRef)}
                     placeholder="Describe your issue..."
                     multiline
                     textAlignVertical="top"
@@ -1442,7 +1459,7 @@ function AcrossApp() {
         )}
       </View>
 
-      <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
+      {!keyboardVisible && <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
 			<Pressable key={item.key} style={s.bottomNavItem} onPress={() => { setShowFlashSale(false); setActiveTab(item.key); }}>
@@ -1451,7 +1468,7 @@ function AcrossApp() {
             </Pressable>
           ); })}
         </ScrollView>
-      </View>
+      </View>}
 
       {/* Delivery Confirm Modal */}
       {false && deliveryConfirmOrder && (

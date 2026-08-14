@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator, Alert, Animated, Dimensions, Image, ImageBackground,
-  KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView,
+  Keyboard, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView,
   StyleSheet, Text, TextInput, View
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
@@ -67,6 +67,7 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const authScrollRef = useRef<ScrollView | null>(null);
   const isWelcome = mode === "welcome";
   const title = mode === "signin" ? "Welcome back" : "Create your Atlantic Express account";
 
@@ -75,12 +76,16 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
     else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password });
   }
 
+  function revealAuthForm() {
+    setTimeout(() => authScrollRef.current?.scrollToEnd({ animated: true }), Platform.OS === "android" ? 320 : 180);
+  }
+
   return (
     <ImageBackground source={LOGO} resizeMode="contain" style={s.authBg} imageStyle={s.authBgImage}>
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
-          <ScrollView contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}>
+        <KeyboardAvoidingView behavior="padding" style={s.authKeyboard}>
+          <ScrollView ref={authScrollRef} contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
             <Image source={LOGO} style={s.authLogo} resizeMode="contain" />
             {isWelcome ? (
               <View style={s.authPanel}>
@@ -99,10 +104,10 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
             ) : (
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
-                {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} placeholder="Full name" autoCapitalize="words" style={s.input} />}
-                <TextInput value={email} onChangeText={setEmail} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
-                {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>
+                {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={revealAuthForm} placeholder="Full name" autoCapitalize="words" style={s.input} />}
+                <TextInput value={email} onChangeText={setEmail} onFocus={revealAuthForm} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
+                {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={revealAuthForm} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
+                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={revealAuthForm} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
@@ -143,11 +148,18 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const [reviewBusy, setReviewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionBarHeight, setActionBarHeight] = useState(120);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const detailScrollRef = useRef<ScrollView | null>(null);
   const pulse = useRef(new Animated.Value(0)).current;
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
 
   useEffect(() => { loadDetail(); }, [initialProduct.id, token]);
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
+    return () => { show.remove(); hide.remove(); };
+  }, []);
   useEffect(() => {
     if (cartQuantity > 0 || outOfStock) { pulse.stopAnimation(); pulse.setValue(0); return; }
     const anim = Animated.loop(Animated.sequence([
@@ -228,15 +240,21 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
 
   const images = product.image_urls?.length ? product.image_urls : [FALLBACK_IMAGES[0]];
 
+  function revealReviewEditor() {
+    setTimeout(() => {
+      detailScrollRef.current?.scrollToEnd({ animated: true });
+    }, Platform.OS === "android" ? 320 : 180);
+  }
+
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
-      <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardAvoidingView style={styles.detailSafe} behavior="padding">
         <View style={styles.detailHeader}>
           <Pressable style={styles.detailBackButton} onPress={onClose}><Ionicons name="arrow-back" size={22} color="#101817" /></Pressable>
           <Text style={styles.detailHeaderTitle}>Product details</Text>
           <View style={styles.detailHeaderSpacer} />
         </View>
-        <ScrollView contentContainerStyle={[styles.detailScroll, { paddingBottom: actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}>
+        <ScrollView ref={detailScrollRef} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.detailGallery}>
             {images.map(uri => <ResilientImage key={uri} uri={uri} style={[styles.detailImage, { width: windowWidth }]} resizeMode="cover" />)}
           </ScrollView>
@@ -269,13 +287,13 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
                 <Text style={styles.detailSectionTitle}>Your review</Text>
                 <Text style={styles.muted}>Earn ₦500 off next order! Leave a review after delivery.</Text>
                 <View style={styles.starRow}>{[1, 2, 3, 4, 5].map(s => <Pressable key={s} onPress={() => setReviewRating(s)}><Text style={styles.starButton}>{s <= reviewRating ? "★" : "☆"}</Text></Pressable>)}</View>
-                <TextInput style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} placeholder="Share your experience" multiline />
+                <TextInput style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : "Save"}</Text></Pressable></View>
               </View>
             )}
           </View>
         </ScrollView>
-        <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
+        {!keyboardVisible && <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
           <View style={styles.quantityRow}>
             <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={onRemove} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color="#101817" /></Pressable>
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
@@ -294,7 +312,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
               </Animated.View>
             </Pressable>
           </View>
-        </View>
+        </View>}
       </KeyboardAvoidingView>
     </View>
   );
@@ -327,13 +345,13 @@ const styles = StyleSheet.create({
   reviewCard: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#EDEDED" },
   reviewCardHead: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   reviewAuthor: { color: "#191919", fontSize: 14, fontWeight: "900" },
-  reviewStars: { color: "#FF4747", fontSize: 14, fontWeight: "900" },
+  reviewStars: { color: "#F5A623", fontSize: 14, fontWeight: "900" },
   reviewText: { marginTop: 8, color: "#595959", fontSize: 13, lineHeight: 20 },
   reviewMediaRow: { gap: 8, paddingTop: 10, paddingRight: 4 },
   reviewMedia: { width: 88, height: 88, borderRadius: 8, backgroundColor: "#F0F0F0" },
   reviewForm: { marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDEDED" },
   starRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  starButton: { color: "#FF4747", fontSize: 28, fontWeight: "900" },
+  starButton: { color: "#F5A623", fontSize: 28, fontWeight: "900" },
   reviewInput: { minHeight: 96, marginTop: 12, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 10, padding: 12, backgroundColor: "#FFFFFF", color: "#191919", textAlignVertical: "top" },
   reviewActionRow: { marginTop: 12, flexDirection: "row", gap: 10 },
   reviewSecondaryButton: { minHeight: 46, minWidth: 110, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1", paddingHorizontal: 14 },

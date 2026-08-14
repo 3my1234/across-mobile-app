@@ -10,17 +10,25 @@ export function normalizeMediaUrl(rawUrl: string): string {
   const raw = String(rawUrl || "").trim();
   if (!raw) return "";
   if (raw.startsWith("user-uploads/")) {
-    return `${API_URL}/api/v1/public/images/view/${encodeS3Key(raw)}`;
+    return withPortableImageFormat(`${API_URL}/api/v1/public/images/view/${encodeS3Key(raw)}`);
   }
   const m = "/api/v1/public/images/view/";
   const i = raw.indexOf(m);
-  if (i >= 0) return `${API_URL}${raw.slice(i)}`;
+  if (i >= 0) return withPortableImageFormat(`${API_URL}${raw.slice(i)}`);
   if (/^https:\/\/[^/]+\.s3[.-][^/]*amazonaws\.com\//i.test(raw)) {
     try {
-      return `${API_URL}/api/v1/public/images/view/${encodeS3Key(decodeURIComponent(new URL(raw).pathname.replace(/^\/+/, "")))}`;
+      return withPortableImageFormat(`${API_URL}/api/v1/public/images/view/${encodeS3Key(decodeURIComponent(new URL(raw).pathname.replace(/^\/+/, "")))}`);
     } catch { return raw; }
   }
   return raw;
+}
+
+function withPortableImageFormat(url: string) {
+  // Older catalogue objects may be AVIF. The public media endpoint converts
+  // them to Android/iOS-safe JPEG; this versioned query also avoids a stale
+  // Cloudflare entry that may still contain the original AVIF bytes.
+  if (!/\.avif(?:$|\?)/i.test(url)) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}format=portable-v1`;
 }
 
 export function normalizeMediaUrls(urls: string[]) {
