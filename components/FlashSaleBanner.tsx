@@ -1,8 +1,9 @@
 import React from "react";
-import { View, Text, ScrollView, Image, Pressable, StyleSheet } from "react-native";
+import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Product } from "./types";
 import { money } from "./utils";
+import { ResilientImage } from "./ResilientImage";
 
 interface Props {
   flashSales: Product[];
@@ -27,9 +28,10 @@ export function FlashSaleBanner({ flashSales, onSelectProduct, onViewAll }: Prop
             style={styles.card}
 			onPress={() => onSelectProduct(p)}
           >
-            <Image
-			  source={{ uri: p.image_urls?.[0] }}
+            <ResilientImage
+			  uris={p.image_urls}
               style={styles.image}
+              resizeMode="cover"
             />
 			<Text numberOfLines={1} style={styles.productTitle}>{p.title}</Text>
 			<Text style={styles.price}>{money(p.price)}</Text>
@@ -48,9 +50,9 @@ const styles = StyleSheet.create({
   subtitle: { color: "rgba(255,255,255,0.8)", fontSize: 12, fontWeight: "700", marginLeft: "auto" },
 	viewAll: { marginLeft: "auto", marginRight: 12, flexDirection: "row", alignItems: "center" },
   scroll: { gap: 10, paddingRight: 14 },
-  card: { width: 110, backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 10, padding: 6, overflow: "hidden" },
-  image: { width: 98, height: 98, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.2)" },
-	productTitle: { color: "#FFFFFF", fontSize: 12, fontWeight: "700", marginTop: 5 },
-  price: { color: "#FFFFFF", fontSize: 14, fontWeight: "900", marginTop: 4 },
-  old: { color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: "700", textDecorationLine: "line-through" },
+  card: { width: 110, backgroundColor: "#FFFFFF", borderRadius: 10, padding: 6, overflow: "hidden" },
+  image: { width: 98, height: 98, borderRadius: 6, backgroundColor: "#F3F3F3" },
+	productTitle: { color: "#191919", fontSize: 12, fontWeight: "700", marginTop: 5 },
+  price: { color: "#FF4747", fontSize: 14, fontWeight: "900", marginTop: 4 },
+  old: { color: "#C62828", fontSize: 11, fontWeight: "800", textDecorationLine: "line-through" },
 });

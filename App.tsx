@@ -16,9 +16,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
 import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
-import { money, fetchWithTimeout, sleep } from "./components/utils";
+import { money, fetchWithTimeout, sleep, mapProduct } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
+import { ResilientImage } from "./components/ResilientImage";
 import { NAV_ITEMS } from "./components/NavItems";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
 import { s } from "./components/Styles";
@@ -130,12 +131,13 @@ function AcrossApp() {
   const categories = useMemo(() => {
     const names = new Set<string>();
     names.add("All");
-    products.forEach(p => { if (p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
+    products.forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
     return Array.from(names);
   }, [products]);
 
   const visibleProducts = useMemo(() => {
-    let filtered = products;
+    // Deals belong to the dedicated Flash Sale experience, not the ordinary feed.
+    let filtered = products.filter(product => !product.is_flash_sale);
     if (selectedCategory !== "All") {
       filtered = filtered.filter(p => p.category_path?.some(c => c.toLowerCase() === selectedCategory.toLowerCase()));
     }
@@ -187,6 +189,15 @@ function AcrossApp() {
 		const timer = setTimeout(() => { void loadFlashSales(true, flashSaleSearch); }, 300);
 		return () => clearTimeout(timer);
 	}, [showFlashSale, flashSaleSearch]);
+
+  useEffect(() => {
+    if (stage !== "app" || activeTab !== "home" || showFlashSale) return;
+    void loadFlashSales(true, "");
+    const interval = setInterval(() => { void loadFlashSales(true, ""); }, 15000);
+    return () => clearInterval(interval);
+    // Request ordering is guarded by flashSaleRequest inside the loader.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, activeTab, showFlashSale]);
 
   useEffect(() => {
     if (!oauthState) return;
@@ -247,6 +258,7 @@ function AcrossApp() {
     const subscription = AppState.addEventListener("change", nextState => {
       if (nextState !== "active" || stage !== "app" || !token) return;
       void pollBuyerActivity(token, true);
+      void loadProducts();
       if (!quote) return;
       stopPaymentPolling();
       setPaymentState("waiting");
@@ -482,7 +494,7 @@ function AcrossApp() {
       try {
         const r = await fetch(`${API_URL}/api/v1/products`);
         if (r.ok) {
-          const catalog = (await r.json()).products ?? [];
+          const catalog = ((await r.json()).products ?? []).map(mapProduct);
           setProducts(catalog);
           await hydrateCart(catalog);
 		  void loadFlashSales(true, "");
@@ -506,7 +518,8 @@ function AcrossApp() {
 			const data = await response.json();
 			if (requestID !== flashSaleRequest.current) return;
 			const page = data.page ?? {};
-			setFlashSaleProducts(current => reset ? (data.products ?? []) : [...current, ...(data.products ?? [])]);
+			const incoming = (data.products ?? []).map(mapProduct);
+			setFlashSaleProducts(current => reset ? incoming : [...current, ...incoming]);
 			setFlashSaleCursor(page.next_cursor ?? "");
 			setFlashSaleHasMore(Boolean(page.has_more));
 		} catch (error: any) {
@@ -1240,7 +1253,7 @@ function AcrossApp() {
             {cart.length === 0 ? (
               <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
-              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><Image source={{ uri: item.product.image_urls[0] || FALLBACK_IMAGES[0] }} style={s.cartItemImage} /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
+              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
               <View style={s.panel}>
                 <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(totals.amount)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Customs (20%)</Text><Text style={s.metricValue}>{money(totals.customs)}</Text></View>

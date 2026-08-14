@@ -10,8 +10,9 @@ import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
-import { money, normalizeMediaUrl, uploadReviewImage, mapProduct } from "./utils";
+import { money, uploadReviewImage, mapProduct } from "./utils";
 import { s } from "./Styles";
+import { ResilientImage } from "./ResilientImage";
 
 // ---- Launch Screen ----
 export function LaunchScreen({ label }: { label?: string }) {
@@ -131,6 +132,9 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const windowWidth = Dimensions.get("window").width;
   const [product, setProduct] = useState(initialProduct);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewCursor, setReviewCursor] = useState("");
+  const [reviewHasMore, setReviewHasMore] = useState(false);
+  const [reviewLoadingMore, setReviewLoadingMore] = useState(false);
   const [summary, setSummary] = useState<ReviewSummary>({ count: 0, average_rating: 0 });
   const [canReview, setCanReview] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
@@ -138,6 +142,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const [reviewImages, setReviewImages] = useState<string[]>([]);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [actionBarHeight, setActionBarHeight] = useState(120);
   const pulse = useRef(new Animated.Value(0)).current;
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
@@ -157,15 +162,43 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     try {
       const [pr, rr] = await Promise.all([
         fetch(`${API_URL}/api/v1/products/${initialProduct.id}`),
-        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
       ]);
       if (pr.ok) { const d = await pr.json(); if (d.product) setProduct(mapProduct(d.product)); }
-      if (rr.ok) { const d = await rr.json(); setReviews(d.reviews ?? []); setSummary(d.summary ?? { count: 0, average_rating: 0 }); }
+      if (rr.ok) {
+        const d = await rr.json();
+        setReviews(d.reviews ?? []);
+        setSummary(d.summary ?? { count: 0, average_rating: 0 });
+        setReviewCursor(d.page?.next_cursor ?? "");
+        setReviewHasMore(Boolean(d.page?.has_more));
+      }
       if (token) {
         const mr = await fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine`, { headers: { Authorization: `Bearer ${token}` } });
         if (mr.ok) { const d = await mr.json(); setCanReview(Boolean(d.can_review)); if (d.review) { setReviewRating(d.review.rating); setReviewText(d.review.review_text ?? ""); setReviewImages(d.review.media_urls ?? []); } }
       }
     } finally { setLoading(false); }
+  }
+
+  async function loadMoreReviews() {
+    if (!reviewHasMore || !reviewCursor || reviewLoadingMore) return;
+    setReviewLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ limit: "25", cursor: reviewCursor });
+      const response = await fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?${params.toString()}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+      if (!response.ok) throw new Error("Could not load more reviews");
+      const data = await response.json();
+      const incoming: Review[] = data.reviews ?? [];
+      setReviews(current => {
+        const known = new Set(current.map(review => review.id));
+        return [...current, ...incoming.filter(review => !known.has(review.id))];
+      });
+      setReviewCursor(data.page?.next_cursor ?? "");
+      setReviewHasMore(Boolean(data.page?.has_more));
+    } catch (error) {
+      Alert.alert("Reviews", error instanceof Error ? error.message : "Please try again");
+    } finally {
+      setReviewLoadingMore(false);
+    }
   }
 
   async function pickReviewImage() {
@@ -197,15 +230,15 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
 
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
-      <View style={styles.detailSafe}>
+      <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.detailHeader}>
           <Pressable style={styles.detailBackButton} onPress={onClose}><Ionicons name="arrow-back" size={22} color="#101817" /></Pressable>
           <Text style={styles.detailHeaderTitle}>Product details</Text>
           <View style={styles.detailHeaderSpacer} />
         </View>
-        <ScrollView contentContainerStyle={[styles.detailScroll, { paddingBottom: bottomInset + 96 }]}>
+        <ScrollView contentContainerStyle={[styles.detailScroll, { paddingBottom: actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.detailGallery}>
-            {images.map(uri => <Image key={uri} source={{ uri: normalizeMediaUrl(uri) }} style={[styles.detailImage, { width: windowWidth }]} />)}
+            {images.map(uri => <ResilientImage key={uri} uri={uri} style={[styles.detailImage, { width: windowWidth }]} resizeMode="cover" />)}
           </ScrollView>
           <View style={styles.detailBody}>
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
@@ -214,7 +247,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             <Text style={styles.detailSku}>SKU {product.sku}</Text>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price)}</Text>
-              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price)}</Text>}
+              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={[styles.detailComparePrice, product.is_flash_sale && styles.detailFlashComparePrice]}>{money(product.compare_at_price)}</Text>}
             </View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Origin</Text><Text style={styles.detailMetaValue}>{product.origin_hub.name || product.origin_hub.city || "China"}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
@@ -223,8 +256,13 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
               <Text style={styles.detailSectionTitle}>Reviews</Text>
               <Text style={styles.reviewSummaryText}>{summary.count > 0 ? `${summary.average_rating.toFixed(1)} avg · ${summary.count} reviews` : "No reviews yet"}</Text>
               {loading ? <ActivityIndicator color="#FF4747" style={{ marginTop: 12 }} /> : reviews.map(r => (
-                <View key={r.id} style={styles.reviewCard}><View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><Text style={styles.reviewStars}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</Text></View>{!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}</View>
+                <View key={r.id} style={styles.reviewCard}>
+                  <View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><Text style={styles.reviewStars}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</Text></View>
+                  {!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}
+                  {!!r.media_urls?.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>{r.media_urls.map((uri, index) => <ResilientImage key={`${r.id}-${index}`} uri={uri} style={styles.reviewMedia} resizeMode="cover" />)}</ScrollView>}
+                </View>
               ))}
+              {reviewHasMore && <Pressable style={[styles.reviewMoreButton, reviewLoadingMore && styles.disabled]} disabled={reviewLoadingMore} onPress={loadMoreReviews}><Text style={styles.secondaryButtonText}>{reviewLoadingMore ? "Loading..." : "Load more reviews"}</Text></Pressable>}
             </View>
             {canReview && (
               <View style={styles.reviewForm}>
@@ -237,7 +275,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             )}
           </View>
         </ScrollView>
-        <View style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
+        <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
           <View style={styles.quantityRow}>
             <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={onRemove} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color="#101817" /></Pressable>
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
@@ -257,7 +295,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             </Pressable>
           </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -278,6 +316,7 @@ const styles = StyleSheet.create({
   detailPriceRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   detailPrice: { color: "#101817", fontSize: 24, fontWeight: "900" },
   detailComparePrice: { color: "#8A9692", fontSize: 16, fontWeight: "800", textDecorationLine: "line-through" },
+  detailFlashComparePrice: { color: "#C62828", fontWeight: "900" },
   detailMetaRow: { marginTop: 12, flexDirection: "row", justifyContent: "space-between", gap: 12 },
   detailMetaLabel: { color: "#66736F", fontWeight: "700" },
   detailMetaValue: { flexShrink: 1, textAlign: "right", color: "#101817", fontWeight: "900" },
@@ -290,12 +329,15 @@ const styles = StyleSheet.create({
   reviewAuthor: { color: "#191919", fontSize: 14, fontWeight: "900" },
   reviewStars: { color: "#FF4747", fontSize: 14, fontWeight: "900" },
   reviewText: { marginTop: 8, color: "#595959", fontSize: 13, lineHeight: 20 },
+  reviewMediaRow: { gap: 8, paddingTop: 10, paddingRight: 4 },
+  reviewMedia: { width: 88, height: 88, borderRadius: 8, backgroundColor: "#F0F0F0" },
   reviewForm: { marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDEDED" },
   starRow: { flexDirection: "row", gap: 8, marginTop: 12 },
   starButton: { color: "#FF4747", fontSize: 28, fontWeight: "900" },
   reviewInput: { minHeight: 96, marginTop: 12, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 10, padding: 12, backgroundColor: "#FFFFFF", color: "#191919", textAlignVertical: "top" },
   reviewActionRow: { marginTop: 12, flexDirection: "row", gap: 10 },
   reviewSecondaryButton: { minHeight: 46, minWidth: 110, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1", paddingHorizontal: 14 },
+  reviewMoreButton: { alignSelf: "center", minHeight: 44, marginTop: 12, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1", paddingHorizontal: 18 },
   detailActions: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 18, borderTopWidth: 1, borderColor: "#D9E0DD", backgroundColor: "#F8FBFA", flexDirection: "row", alignItems: "center", gap: 12 },
   detailActionColumn: { flex: 1, gap: 10 },
   detailHintBubble: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: "#FFF1F1", borderWidth: 1, borderColor: "#FFD0D0" },

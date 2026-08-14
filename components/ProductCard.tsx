@@ -1,8 +1,8 @@
 import React from "react";
-import { View, Text, Image, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Product } from "./types";
-import { FALLBACK_IMAGES } from "./config";
 import { money } from "./utils";
+import { ResilientImage } from "./ResilientImage";
 
 interface Props {
   product: Product;
@@ -13,9 +13,10 @@ interface Props {
 export function ProductCard({ product, cartQuantity, onPress }: Props) {
   return (
     <Pressable style={styles.card} onPress={onPress}>
-      <Image
-        source={{ uri: product.image_urls[0] || FALLBACK_IMAGES[0] }}
+      <ResilientImage
+        uris={product.image_urls}
         style={styles.image}
+        resizeMode="cover"
       />
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>{product.title}</Text>
@@ -23,7 +24,7 @@ export function ProductCard({ product, cartQuantity, onPress }: Props) {
           <View>
             <Text style={styles.price}>{money(product.price)}</Text>
             {!!product.compare_at_price && product.compare_at_price > product.price && (
-              <Text style={styles.compare}>{money(product.compare_at_price)}</Text>
+              <Text style={[styles.compare, product.is_flash_sale && styles.flashCompare]}>{money(product.compare_at_price)}</Text>
             )}
           </View>
         </View>
@@ -45,6 +46,7 @@ const styles = StyleSheet.create({
   footer: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   price: { color: "#FF4747", fontSize: 15, fontWeight: "900" },
   compare: { marginTop: 2, color: "#BFBFBF", fontSize: 11, fontWeight: "700", textDecorationLine: "line-through" },
+  flashCompare: { color: "#C62828", fontWeight: "900" },
   badge: { marginTop: 6, color: "#FF4747", fontSize: 11, fontWeight: "900" },
   metaRow: { marginTop: 8, flexDirection: "row", justifyContent: "space-between", gap: 10 },
   metaText: { color: "#8C8C8C", fontSize: 11, fontWeight: "700" },
