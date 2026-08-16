@@ -5,7 +5,7 @@ import { normalizeMediaUrl } from "./utils";
 
 type Props = Omit<ImageProps, "source"> & {
   uri?: string | null;
-  uris?: Array<string | null | undefined>;
+  uris?: (string | null | undefined)[];
   fallbackUri?: string;
 };
 

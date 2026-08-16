@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator, Alert, Animated, Dimensions, Image, ImageBackground,
-  Keyboard, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView,
-  StyleSheet, Text, TextInput, View
+  findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
+  SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -13,6 +13,7 @@ import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
 import { money, uploadReviewImage, mapProduct } from "./utils";
 import { s } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
+import { COLORS } from "./theme";
 
 // ---- Launch Screen ----
 export function LaunchScreen({ label }: { label?: string }) {
@@ -76,15 +77,15 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
     else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password });
   }
 
-  function revealAuthForm() {
-    setTimeout(() => authScrollRef.current?.scrollToEnd({ animated: true }), Platform.OS === "android" ? 320 : 180);
+  function revealAuthForm(target: number) {
+    setTimeout(() => authScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(target, 96, true), Platform.OS === "android" ? 320 : 180);
   }
 
   return (
     <ImageBackground source={LOGO} resizeMode="contain" style={s.authBg} imageStyle={s.authBgImage}>
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
-        <KeyboardAvoidingView behavior="padding" style={s.authKeyboard}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.authKeyboard}>
           <ScrollView ref={authScrollRef} contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
             <Image source={LOGO} style={s.authLogo} resizeMode="contain" />
             {isWelcome ? (
@@ -98,16 +99,25 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
                   </View>
                 )}
                 <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
-                {googleReady && <Pressable style={[s.gmailButton, googleBusy && s.disabled]} onPress={onGoogle} disabled={googleBusy} accessibilityState={{ disabled: googleBusy }}><Ionicons name="logo-google" size={18} color="#101817" /><Text style={s.gmailButtonText}>{googleBusy ? "Opening Google..." : "Sign in with Google"}</Text></Pressable>}
+                <Pressable
+                  style={[s.gmailButton, (!googleReady || googleBusy) && s.disabled]}
+                  onPress={onGoogle}
+                  disabled={!googleReady || googleBusy}
+                  accessibilityLabel={googleReady ? "Sign in with Google" : "Google sign-in is loading"}
+                  accessibilityState={{ disabled: !googleReady || googleBusy, busy: !googleReady || googleBusy }}
+                >
+                  {!googleReady || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="logo-google" size={18} color="#101817" />}
+                  <Text style={s.gmailButtonText}>{!googleReady ? "Loading secure Google sign-in…" : googleBusy ? "Opening Google…" : "Sign in with Google"}</Text>
+                </Pressable>
                 <Pressable style={s.textButton} onPress={() => onModeChange("signin")}><Text style={s.textButtonText}>I have an account</Text></Pressable>
               </View>
             ) : (
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
-                {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={revealAuthForm} placeholder="Full name" autoCapitalize="words" style={s.input} />}
-                <TextInput value={email} onChangeText={setEmail} onFocus={revealAuthForm} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
-                {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={revealAuthForm} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={revealAuthForm} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>
+                {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
+                <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
+                {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
+                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
@@ -129,12 +139,14 @@ interface DetailProps {
   onClose: () => void;
   onAdd: () => void;
   onRemove: () => void;
+  onSelectProduct: (product: Product) => void;
 }
 
-export function ProductDetailScreen({ product: initialProduct, token, cartQuantity, onClose, onAdd, onRemove }: DetailProps) {
+export function ProductDetailScreen({ product: initialProduct, token, cartQuantity, onClose, onAdd, onRemove, onSelectProduct }: DetailProps) {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
   const windowWidth = Dimensions.get("window").width;
+  const windowHeight = Dimensions.get("window").height;
   const [product, setProduct] = useState(initialProduct);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewCursor, setReviewCursor] = useState("");
@@ -147,14 +159,26 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const [reviewImages, setReviewImages] = useState<string[]>([]);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [recommendations, setRecommendations] = useState<Product[]>([]);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
   const [actionBarHeight, setActionBarHeight] = useState(120);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const detailScrollRef = useRef<ScrollView | null>(null);
+  const reviewInputRef = useRef<TextInput | null>(null);
+  const sectionOffsets = useRef({ overview: 0, reviews: 0, recommended: 0 });
   const pulse = useRef(new Animated.Value(0)).current;
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
 
-  useEffect(() => { loadDetail(); }, [initialProduct.id, token]);
+  useEffect(() => {
+    setProduct(initialProduct);
+    setGalleryIndex(0);
+    setGalleryOpen(false);
+    loadDetail();
+    // The product id and session token are the intentional request keys.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialProduct.id, token]);
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
@@ -172,9 +196,10 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   async function loadDetail() {
     setLoading(true);
     try {
-      const [pr, rr] = await Promise.all([
+      const [pr, rr, rec] = await Promise.all([
         fetch(`${API_URL}/api/v1/products/${initialProduct.id}`),
-        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined })
+        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined }),
+        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?limit=10`)
       ]);
       if (pr.ok) { const d = await pr.json(); if (d.product) setProduct(mapProduct(d.product)); }
       if (rr.ok) {
@@ -183,6 +208,12 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
         setSummary(d.summary ?? { count: 0, average_rating: 0 });
         setReviewCursor(d.page?.next_cursor ?? "");
         setReviewHasMore(Boolean(d.page?.has_more));
+      }
+      if (rec.ok) {
+        const d = await rec.json();
+        setRecommendations((d.products ?? []).map(mapProduct));
+      } else {
+        setRecommendations([]);
       }
       if (token) {
         const mr = await fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine`, { headers: { Authorization: `Bearer ${token}` } });
@@ -242,23 +273,44 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
 
   function revealReviewEditor() {
     setTimeout(() => {
-      detailScrollRef.current?.scrollToEnd({ animated: true });
+      const node = findNodeHandle(reviewInputRef.current);
+      if (node) detailScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(node, 120, true);
     }, Platform.OS === "android" ? 320 : 180);
+  }
+
+  function scrollToSection(section: keyof typeof sectionOffsets.current) {
+    detailScrollRef.current?.scrollTo({ y: Math.max(0, sectionOffsets.current[section] - 54), animated: true });
   }
 
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
-      <KeyboardAvoidingView style={styles.detailSafe} behavior="padding">
+      <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.detailHeader}>
           <Pressable style={styles.detailBackButton} onPress={onClose}><Ionicons name="arrow-back" size={22} color="#101817" /></Pressable>
           <Text style={styles.detailHeaderTitle}>Product details</Text>
           <View style={styles.detailHeaderSpacer} />
         </View>
+        <View style={styles.sectionTabs}>
+          <Pressable style={styles.sectionTab} onPress={() => scrollToSection("overview")}><Text style={styles.sectionTabText}>Overview</Text></Pressable>
+          <Pressable style={styles.sectionTab} onPress={() => scrollToSection("reviews")}><Text style={styles.sectionTabText}>Reviews</Text></Pressable>
+          <Pressable style={styles.sectionTab} onPress={() => scrollToSection("recommended")}><Text style={styles.sectionTabText}>Recommended</Text></Pressable>
+        </View>
         <ScrollView ref={detailScrollRef} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} style={styles.detailGallery}>
-            {images.map(uri => <ResilientImage key={uri} uri={uri} style={[styles.detailImage, { width: windowWidth }]} resizeMode="cover" />)}
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.detailGallery}
+            onMomentumScrollEnd={event => setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
+          >
+            {images.map((uri, index) => (
+              <Pressable key={`${uri}-${index}`} onPress={() => { setGalleryIndex(index); setGalleryOpen(true); }} accessibilityLabel={`Open product image ${index + 1} of ${images.length}`}>
+                <ResilientImage uri={uri} style={[styles.detailImage, { width: windowWidth }]} resizeMode="cover" />
+              </Pressable>
+            ))}
           </ScrollView>
-          <View style={styles.detailBody}>
+          <View style={styles.galleryCount}><Text style={styles.galleryCountText}>{galleryIndex + 1}/{images.length}</Text></View>
+          <View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
             <Text style={styles.productHub}>{product.category_path?.[0] || product.origin_hub.city || "China"} hub</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
@@ -269,13 +321,19 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             </View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Origin</Text><Text style={styles.detailMetaValue}>{product.origin_hub.name || product.origin_hub.city || "China"}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
-            {!!product.description && (<View style={styles.detailDescriptionBlock}><Text style={styles.detailSectionTitle}>Description</Text><Text style={styles.detailDescription}>{product.description}</Text></View>)}
-            <View style={styles.detailDescriptionBlock}>
+            <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
-              <Text style={styles.reviewSummaryText}>{summary.count > 0 ? `${summary.average_rating.toFixed(1)} avg · ${summary.count} reviews` : "No reviews yet"}</Text>
+              <View style={styles.reviewSummaryRow}>
+                <Text style={styles.reviewSummaryScore}>{summary.count > 0 ? summary.average_rating.toFixed(1) : "—"}</Text>
+                <View style={styles.reviewSummaryCopy}>
+                  {summary.count > 0 && <RatingStars rating={Math.round(summary.average_rating)} size={18} />}
+                  <Text style={styles.reviewSummaryText}>{summary.count > 0 ? `${summary.count} verified review${summary.count === 1 ? "" : "s"}` : "No reviews yet"}</Text>
+                </View>
+              </View>
               {loading ? <ActivityIndicator color="#FF4747" style={{ marginTop: 12 }} /> : reviews.map(r => (
                 <View key={r.id} style={styles.reviewCard}>
-                  <View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><Text style={styles.reviewStars}>{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</Text></View>
+                  <View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><RatingStars rating={r.rating} size={15} /></View>
+                  <View style={styles.verifiedRow}><Ionicons name="shield-checkmark" size={14} color="#12805F" /><Text style={styles.verifiedText}>Verified purchase</Text></View>
                   {!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}
                   {!!r.media_urls?.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>{r.media_urls.map((uri, index) => <ResilientImage key={`${r.id}-${index}`} uri={uri} style={styles.reviewMedia} resizeMode="cover" />)}</ScrollView>}
                 </View>
@@ -286,11 +344,32 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
               <View style={styles.reviewForm}>
                 <Text style={styles.detailSectionTitle}>Your review</Text>
                 <Text style={styles.muted}>Earn ₦500 off next order! Leave a review after delivery.</Text>
-                <View style={styles.starRow}>{[1, 2, 3, 4, 5].map(s => <Pressable key={s} onPress={() => setReviewRating(s)}><Text style={styles.starButton}>{s <= reviewRating ? "★" : "☆"}</Text></Pressable>)}</View>
-                <TextInput style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
+                <View style={styles.starRow}>{[1, 2, 3, 4, 5].map(star => <Pressable key={star} style={styles.starPressable} onPress={() => setReviewRating(star)} accessibilityRole="button" accessibilityLabel={`${star} star rating`}><Ionicons name={star <= reviewRating ? "star" : "star-outline"} size={32} color={COLORS.star} /></Pressable>)}</View>
+                <TextInput ref={reviewInputRef} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : "Save"}</Text></Pressable></View>
               </View>
             )}
+            {!!product.description && (
+              <View style={styles.productDetailsSection}>
+                <Text style={styles.detailSectionTitle}>Product details</Text>
+                <Text style={styles.detailDescription}>{product.description}</Text>
+              </View>
+            )}
+            <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
+              <Text style={styles.detailSectionTitle}>Recommended for you</Text>
+              <Text style={styles.recommendationHint}>Related products selected from the live catalogue.</Text>
+              {recommendations.length === 0 ? <Text style={styles.recommendationEmpty}>No related products available yet.</Text> : (
+                <View style={styles.recommendationGrid}>
+                  {recommendations.map(item => (
+                    <Pressable key={item.id} style={styles.recommendationCard} onPress={() => onSelectProduct(item)}>
+                      <ResilientImage uris={item.image_urls} style={styles.recommendationImage} resizeMode="cover" />
+                      <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
+                      <Text style={styles.recommendationPrice}>{money(item.flash_sale_price || item.price)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
         </ScrollView>
         {!keyboardVisible && <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
@@ -314,6 +393,35 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
           </View>
         </View>}
       </KeyboardAvoidingView>
+      <Modal visible={galleryOpen} animationType="fade" transparent={false} statusBarTranslucent onRequestClose={() => setGalleryOpen(false)}>
+        <View style={[styles.galleryModal, { paddingTop: insets.top, paddingBottom: bottomInset }]}>
+          <View style={styles.galleryModalHeader}>
+            <Pressable style={styles.galleryClose} onPress={() => setGalleryOpen(false)} accessibilityLabel="Close image gallery"><Ionicons name="close" size={26} color="#FFFFFF" /></Pressable>
+            <Text style={styles.galleryModalCount}>{galleryIndex + 1}/{images.length}</Text>
+            <View style={styles.galleryHeaderSpacer} />
+          </View>
+          <ScrollView
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            contentOffset={{ x: galleryIndex * windowWidth, y: 0 }}
+            onMomentumScrollEnd={event => setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
+          >
+            {images.map((uri, index) => <ResilientImage key={`full-${uri}-${index}`} uri={uri} style={{ width: windowWidth, height: Math.max(320, windowHeight - insets.top - bottomInset - 132) }} resizeMode="contain" />)}
+          </ScrollView>
+          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if (cartQuantity === 0 && !outOfStock) onAdd(); }} disabled={outOfStock}>
+            <Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
+          </Pressable>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function RatingStars({ rating, size }: { rating: number; size: number }) {
+  return (
+    <View style={styles.ratingStars} accessibilityLabel={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? "star" : "star-outline"} size={size} color={COLORS.star} />)}
     </View>
   );
 }
@@ -325,9 +433,14 @@ const styles = StyleSheet.create({
   detailBackButton: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D9E0DD" },
   detailHeaderTitle: { color: "#101817", fontSize: 16, fontWeight: "900" },
   detailHeaderSpacer: { width: 42 },
+  sectionTabs: { height: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-around", backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderColor: "#EDEDED" },
+  sectionTab: { flex: 1, height: 44, alignItems: "center", justifyContent: "center" },
+  sectionTabText: { color: "#30423D", fontSize: 13, fontWeight: "900" },
   detailScroll: { paddingBottom: 140 },
   detailGallery: { height: 320, backgroundColor: "#E8EFEC" },
   detailImage: { width: 360, height: 320, backgroundColor: "#E8EFEC" },
+  galleryCount: { position: "absolute", top: 280, right: 14, minWidth: 48, height: 28, paddingHorizontal: 10, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)" },
+  galleryCountText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
   detailBody: { padding: 18 },
   detailTitle: { marginTop: 6, color: "#101817", fontSize: 24, fontWeight: "900", lineHeight: 30 },
   detailSku: { marginTop: 6, color: "#66736F", fontSize: 12, fontWeight: "800" },
@@ -339,19 +452,25 @@ const styles = StyleSheet.create({
   detailMetaLabel: { color: "#66736F", fontWeight: "700" },
   detailMetaValue: { flexShrink: 1, textAlign: "right", color: "#101817", fontWeight: "900" },
   detailDescriptionBlock: { marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDF1EF" },
+  productDetailsSection: { marginTop: 24, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDF1EF" },
   detailSectionTitle: { color: "#101817", fontSize: 16, fontWeight: "900" },
   detailDescription: { marginTop: 8, color: "#30423D", fontSize: 14, lineHeight: 22 },
-  reviewSummaryText: { marginTop: 6, color: "#8C8C8C", fontSize: 13, fontWeight: "700" },
+  reviewSummaryRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 12 },
+  reviewSummaryScore: { color: "#191919", fontSize: 30, fontWeight: "900" },
+  reviewSummaryCopy: { flex: 1, gap: 3 },
+  reviewSummaryText: { color: "#8C8C8C", fontSize: 13, fontWeight: "700" },
   reviewCard: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#EDEDED" },
   reviewCardHead: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   reviewAuthor: { color: "#191919", fontSize: 14, fontWeight: "900" },
-  reviewStars: { color: "#F5A623", fontSize: 14, fontWeight: "900" },
+  ratingStars: { flexDirection: "row", alignItems: "center", gap: 2 },
+  verifiedRow: { marginTop: 5, flexDirection: "row", alignItems: "center", gap: 4 },
+  verifiedText: { color: "#12805F", fontSize: 11, fontWeight: "800" },
   reviewText: { marginTop: 8, color: "#595959", fontSize: 13, lineHeight: 20 },
   reviewMediaRow: { gap: 8, paddingTop: 10, paddingRight: 4 },
   reviewMedia: { width: 88, height: 88, borderRadius: 8, backgroundColor: "#F0F0F0" },
   reviewForm: { marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDEDED" },
   starRow: { flexDirection: "row", gap: 8, marginTop: 12 },
-  starButton: { color: "#F5A623", fontSize: 28, fontWeight: "900" },
+  starPressable: { minWidth: 40, minHeight: 44, alignItems: "center", justifyContent: "center" },
   reviewInput: { minHeight: 96, marginTop: 12, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 10, padding: 12, backgroundColor: "#FFFFFF", color: "#191919", textAlignVertical: "top" },
   reviewActionRow: { marginTop: 12, flexDirection: "row", gap: 10 },
   reviewSecondaryButton: { minHeight: 46, minWidth: 110, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1", paddingHorizontal: 14 },
@@ -373,4 +492,18 @@ const styles = StyleSheet.create({
   quantityButton: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D9E0DD" },
   quantityValue: { minWidth: 28, textAlign: "center", color: "#101817", fontSize: 18, fontWeight: "900" },
   detailCartButton: { flex: 1, height: 48, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FF4747" },
+  recommendationSection: { marginTop: 24, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDEDED" },
+  recommendationHint: { marginTop: 5, color: "#8C8C8C", fontSize: 12, lineHeight: 18 },
+  recommendationEmpty: { marginTop: 14, color: "#8C8C8C", fontSize: 13 },
+  recommendationGrid: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  recommendationCard: { width: "48%", overflow: "hidden", borderRadius: 10, paddingBottom: 10, backgroundColor: "#FFFFFF" },
+  recommendationImage: { width: "100%", aspectRatio: 1, backgroundColor: "#F0F0F0" },
+  recommendationTitle: { minHeight: 38, marginTop: 8, paddingHorizontal: 9, color: "#191919", fontSize: 12, fontWeight: "800", lineHeight: 17 },
+  recommendationPrice: { marginTop: 5, paddingHorizontal: 9, color: "#FF4747", fontSize: 14, fontWeight: "900" },
+  galleryModal: { flex: 1, backgroundColor: "#000000" },
+  galleryModalHeader: { height: 56, paddingHorizontal: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  galleryClose: { width: 44, height: 44, borderRadius: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.14)" },
+  galleryModalCount: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+  galleryHeaderSpacer: { width: 44 },
+  galleryAddButton: { height: 54, marginHorizontal: 18, marginTop: 12, borderRadius: 27, alignItems: "center", justifyContent: "center", backgroundColor: "#FF4747" },
 });

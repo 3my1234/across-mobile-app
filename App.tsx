@@ -9,13 +9,13 @@ import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   Alert, Animated, AppState, Dimensions, Image,
-  Keyboard, KeyboardAvoidingView, Platform, Pressable, RefreshControl, ScrollView,
+  findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
   Text, TextInput, View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
-import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, FALLBACK_IMAGES, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
+import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
 import { money, fetchWithTimeout, sleep, mapProduct } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -82,6 +82,8 @@ function AcrossApp() {
   const trackScrollRef = useRef<ScrollView | null>(null);
   const accountScrollRef = useRef<ScrollView | null>(null);
   const supportScrollRef = useRef<ScrollView | null>(null);
+  const supportSubjectRef = useRef<TextInput | null>(null);
+  const supportMessageRef = useRef<TextInput | null>(null);
   const orderOffsetsRef = useRef<Record<string, number>>({});
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
@@ -130,6 +132,8 @@ function AcrossApp() {
   const [flashSaleSearch, setFlashSaleSearch] = useState("");
   const flashSaleRequest = useRef(0);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [showDiscountOffer, setShowDiscountOffer] = useState(false);
+  const discountPromptSeen = useRef(false);
 
   const categories = useMemo(() => {
     const names = new Set<string>();
@@ -138,8 +142,15 @@ function AcrossApp() {
     return Array.from(names);
   }, [products]);
 
-  function revealFormEnd(scrollRef: { current: ScrollView | null }) {
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), Platform.OS === "android" ? 320 : 180);
+  function revealInput(scrollRef: { current: ScrollView | null }, inputRef: { current: TextInput | null }, extraOffset = 96) {
+    setTimeout(() => {
+      const node = findNodeHandle(inputRef.current);
+      if (node) scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(node, extraOffset, true);
+    }, Platform.OS === "android" ? 320 : 180);
+  }
+
+  function revealFocusedInput(scrollRef: { current: ScrollView | null }, target: number, extraOffset = 96) {
+    setTimeout(() => scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(target, extraOffset, true), Platform.OS === "android" ? 320 : 180);
   }
 
   const visibleProducts = useMemo(() => {
@@ -162,6 +173,13 @@ function AcrossApp() {
     const vat = items > 0 ? 100 : 0;
     return { items, amount, customs, vat, payablePreview: amount + customs + vat };
   }, [cart]);
+
+  const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
+    const current = product.flash_sale_price || product.price;
+    const compare = product.compare_at_price || 0;
+    if (compare <= current || compare <= 0) return best;
+    return Math.max(best, Math.round(((compare - current) / compare) * 100));
+  }, 0), [flashSaleProducts]);
 
   useEffect(() => {
     restoreSession();
@@ -211,6 +229,15 @@ function AcrossApp() {
     // Request ordering is guarded by flashSaleRequest inside the loader.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, activeTab, showFlashSale]);
+
+  useEffect(() => {
+    if (stage !== "app" || activeTab !== "home" || showFlashSale || selectedProduct || discountPromptSeen.current || flashSaleProducts.length === 0) return;
+    const hasRealDiscount = flashSaleProducts.some(product => (product.compare_at_price ?? 0) > (product.flash_sale_price || product.price));
+    if (!hasRealDiscount) return;
+    discountPromptSeen.current = true;
+    const timer = setTimeout(() => setShowDiscountOffer(true), 700);
+    return () => clearTimeout(timer);
+  }, [stage, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
 
   useEffect(() => {
     if (!oauthState) return;
@@ -1290,7 +1317,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "account" && (
-          <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
           <ScrollView ref={accountScrollRef} alwaysBounceVertical keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
               <Pressable onPress={pickAvatar}>
@@ -1310,14 +1337,14 @@ function AcrossApp() {
                   <Ionicons name="camera-outline" size={24} color="#FF4747" />
                   <Text style={{ color: "#FF4747", fontWeight: "700" }}>Change profile picture</Text>
                 </Pressable>
-                <TextInput style={s.input} value={profileName} onChangeText={setProfileName} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Full name" />
-                <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Phone number" keyboardType="phone-pad" />
-                <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Region" />
-                <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Street address" />
-                <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="City" />
-                <TextInput style={s.input} value={profileState} onChangeText={setProfileState} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="State" />
-                <TextInput style={s.input} value={profilePostalCode} onChangeText={setProfilePostalCode} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Postal code" />
-                <TextInput style={s.input} value={profileDob} onChangeText={setProfileDob} onFocus={() => revealFormEnd(accountScrollRef)} placeholder="Date of birth (YYYY-MM-DD)" />
+                <TextInput style={s.input} value={profileName} onChangeText={setProfileName} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Full name" />
+                <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Phone number" keyboardType="phone-pad" />
+                <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Region" />
+                <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Street address" />
+                <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="City" />
+                <TextInput style={s.input} value={profileState} onChangeText={setProfileState} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="State" />
+                <TextInput style={s.input} value={profilePostalCode} onChangeText={setProfilePostalCode} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Postal code" />
+                <TextInput style={s.input} value={profileDob} onChangeText={setProfileDob} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Date of birth (YYYY-MM-DD)" />
                 <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
                   <Pressable style={[s.secondaryButton, { flex: 1 }]} onPress={() => setEditingProfile(false)}><Text style={s.secondaryButtonText}>Cancel</Text></Pressable>
                   <Pressable style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]} onPress={saveProfile} disabled={busy}><Text style={s.primaryButtonText}>{busy ? "..." : "Save"}</Text></Pressable>
@@ -1397,7 +1424,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
           <ScrollView
             ref={supportScrollRef}
             alwaysBounceVertical
@@ -1426,12 +1453,13 @@ function AcrossApp() {
               <View>
                 <View style={s.panel}>
                   <Text style={s.kicker}>Support</Text><Text style={s.panelTitle}>Create a Ticket</Text>
-                  <TextInput style={s.input} value={supportSubject} onChangeText={setSupportSubject} onFocus={() => revealFormEnd(supportScrollRef)} placeholder="Subject" />
+                  <TextInput ref={supportSubjectRef} style={s.input} value={supportSubject} onChangeText={setSupportSubject} onFocus={() => revealInput(supportScrollRef, supportSubjectRef, 88)} placeholder="Subject" />
                   <TextInput
+                    ref={supportMessageRef}
                     style={s.supportMessageInput}
                     value={supportMessage}
                     onChangeText={setSupportMessage}
-                    onFocus={() => revealFormEnd(supportScrollRef)}
+                    onFocus={() => revealInput(supportScrollRef, supportMessageRef, 112)}
                     placeholder="Describe your issue..."
                     multiline
                     textAlignVertical="top"
@@ -1505,7 +1533,19 @@ function AcrossApp() {
         </View>
       )}
 
-      {selectedProduct && <ProductDetailScreen product={selectedProduct} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={() => addToCart(selectedProduct)} onRemove={() => removeFromCart(selectedProduct)} />}
+      <Modal visible={showDiscountOffer} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
+        <View style={{ flex: 1, padding: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.58)" }}>
+          <View style={{ width: "100%", maxWidth: 360, borderRadius: 22, padding: 24, backgroundColor: "#FFFFFF" }}>
+            <Pressable style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", zIndex: 2 }} onPress={() => setShowDiscountOffer(false)} accessibilityLabel="Close discount offer"><Ionicons name="close" size={24} color="#595959" /></Pressable>
+            <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1" }}><Ionicons name="flash" size={28} color="#FF4747" /></View>
+            <Text style={{ marginTop: 18, color: "#191919", fontSize: 26, lineHeight: 32, fontWeight: "900" }}>Today’s super discount</Text>
+            <Text style={{ marginTop: 10, color: "#595959", fontSize: 15, lineHeight: 22 }}>Save up to {bestFlashDiscount}% on live Flash Sale products while stock lasts.</Text>
+            <Pressable style={[s.primaryButton, { marginTop: 22 }]} onPress={() => { setShowDiscountOffer(false); void openFlashSale(); }}><Text style={s.primaryButtonText}>Shop verified deals</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {selectedProduct && <ProductDetailScreen product={selectedProduct} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={() => addToCart(selectedProduct)} onRemove={() => removeFromCart(selectedProduct)} onSelectProduct={setSelectedProduct} />}
     </View>
   );
 }

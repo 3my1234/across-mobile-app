@@ -30,7 +30,6 @@ export function ProductCard({ product, cartQuantity, onPress }: Props) {
         </View>
         <View style={styles.metaRow}>
           <Text style={styles.metaText}>{product.inventory_count > 0 ? "New" : "Limited"}</Text>
-          <Text style={styles.metaText}>★ 4.5</Text>
         </View>
         {cartQuantity > 0 && <Text style={styles.badge}>{cartQuantity} in cart</Text>}
       </View>
