@@ -10,10 +10,11 @@ import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
-import { money, uploadReviewImage, mapProduct } from "./utils";
+import { money, uploadReviewImage, mapProduct, fetchWithTimeout } from "./utils";
 import { s } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
 import { COLORS } from "./theme";
+import { ReviewStars } from "./ReviewStars";
 
 // ---- Launch Screen ----
 export function LaunchScreen({ label }: { label?: string }) {
@@ -159,6 +160,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const [reviewImages, setReviewImages] = useState<string[]>([]);
   const [reviewBusy, setReviewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reviewError, setReviewError] = useState("");
   const [recommendations, setRecommendations] = useState<Product[]>([]);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -195,13 +197,16 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
 
   async function loadDetail() {
     setLoading(true);
-    try {
-      const [pr, rr, rec] = await Promise.all([
-        fetch(`${API_URL}/api/v1/products/${initialProduct.id}`),
-        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined }),
-        fetch(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?limit=10`)
-      ]);
+    setReviewError("");
+    const productTask = (async () => {
+      const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}`);
       if (pr.ok) { const d = await pr.json(); if (d.product) setProduct(mapProduct(d.product)); }
+    })();
+    const reviewTask = (async () => {
+      const rr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25&fresh=${Date.now()}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Cache-Control": "no-cache" }
+      });
+      if (!rr.ok) throw new Error("Reviews are temporarily unavailable");
       if (rr.ok) {
         const d = await rr.json();
         setReviews(d.reviews ?? []);
@@ -209,17 +214,25 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
         setReviewCursor(d.page?.next_cursor ?? "");
         setReviewHasMore(Boolean(d.page?.has_more));
       }
+    })().catch(error => {
+      setReviewError(error instanceof Error ? error.message : "Reviews are temporarily unavailable");
+    }).finally(() => setLoading(false));
+    const recommendationTask = (async () => {
+      const rec = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?limit=10`);
       if (rec.ok) {
         const d = await rec.json();
         setRecommendations((d.products ?? []).map(mapProduct));
       } else {
         setRecommendations([]);
       }
+    })();
+    const myReviewTask = (async () => {
       if (token) {
-        const mr = await fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine`, { headers: { Authorization: `Bearer ${token}` } });
+        const mr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine?fresh=${Date.now()}`, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } });
         if (mr.ok) { const d = await mr.json(); setCanReview(Boolean(d.can_review)); if (d.review) { setReviewRating(d.review.rating); setReviewText(d.review.review_text ?? ""); setReviewImages(d.review.media_urls ?? []); } }
       }
-    } finally { setLoading(false); }
+    })();
+    await Promise.allSettled([productTask, reviewTask, recommendationTask, myReviewTask]);
   }
 
   async function loadMoreReviews() {
@@ -227,7 +240,8 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     setReviewLoadingMore(true);
     try {
       const params = new URLSearchParams({ limit: "25", cursor: reviewCursor });
-      const response = await fetch(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?${params.toString()}`, { headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+      params.set("fresh", String(Date.now()));
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?${params.toString()}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Cache-Control": "no-cache" } });
       if (!response.ok) throw new Error("Could not load more reviews");
       const data = await response.json();
       const incoming: Review[] = data.reviews ?? [];
@@ -262,10 +276,19 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     if (!token) return;
     setReviewBusy(true);
     try {
-      const r = await fetch(`${API_URL}/api/v1/products/${product.id}/reviews`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ rating: reviewRating, review_text: reviewText, media_urls: reviewImages }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/products/${product.id}/reviews`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ rating: reviewRating, review_text: reviewText, media_urls: reviewImages }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.message || "Could not save");
-      await loadDetail(); Alert.alert("Review saved", "Thanks! You earned ₦500 off your next order!");
+      if (d.review) {
+        setReviews(current => [d.review, ...current.filter(item => item.id !== d.review.id)]);
+      }
+      if (d.summary) {
+        setSummary(d.summary);
+        setProduct(current => ({ ...current, review_count: Number(d.summary.count || 0), average_rating: Number(d.summary.average_rating || 0) }));
+      }
+      setReviewError("");
+      setCanReview(true);
+      Alert.alert("Review saved", d.review_reward_claimed ? "Thanks! You earned ₦500 off your next order!" : "Your verified review is now live.");
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setReviewBusy(false); }
   }
 
@@ -326,25 +349,26 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
               <View style={styles.reviewSummaryRow}>
                 <Text style={styles.reviewSummaryScore}>{summary.count > 0 ? summary.average_rating.toFixed(1) : "—"}</Text>
                 <View style={styles.reviewSummaryCopy}>
-                  {summary.count > 0 && <RatingStars rating={Math.round(summary.average_rating)} size={18} />}
+                  {summary.count > 0 && <ReviewStars rating={summary.average_rating} size={18} />}
                   <Text style={styles.reviewSummaryText}>{summary.count > 0 ? `${summary.count} verified review${summary.count === 1 ? "" : "s"}` : "No reviews yet"}</Text>
                 </View>
               </View>
               {loading ? <ActivityIndicator color="#FF4747" style={{ marginTop: 12 }} /> : reviews.map(r => (
                 <View key={r.id} style={styles.reviewCard}>
-                  <View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><RatingStars rating={r.rating} size={15} /></View>
+                  <View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><ReviewStars rating={r.rating} size={15} /></View>
                   <View style={styles.verifiedRow}><Ionicons name="shield-checkmark" size={14} color="#12805F" /><Text style={styles.verifiedText}>Verified purchase</Text></View>
                   {!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}
                   {!!r.media_urls?.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>{r.media_urls.map((uri, index) => <ResilientImage key={`${r.id}-${index}`} uri={uri} style={styles.reviewMedia} resizeMode="cover" />)}</ScrollView>}
                 </View>
               ))}
+              {!loading && !!reviewError && <Text style={styles.reviewError}>{reviewError}</Text>}
               {reviewHasMore && <Pressable style={[styles.reviewMoreButton, reviewLoadingMore && styles.disabled]} disabled={reviewLoadingMore} onPress={loadMoreReviews}><Text style={styles.secondaryButtonText}>{reviewLoadingMore ? "Loading..." : "Load more reviews"}</Text></Pressable>}
             </View>
             {canReview && (
               <View style={styles.reviewForm}>
                 <Text style={styles.detailSectionTitle}>Your review</Text>
                 <Text style={styles.muted}>Earn ₦500 off next order! Leave a review after delivery.</Text>
-                <View style={styles.starRow}>{[1, 2, 3, 4, 5].map(star => <Pressable key={star} style={styles.starPressable} onPress={() => setReviewRating(star)} accessibilityRole="button" accessibilityLabel={`${star} star rating`}><Ionicons name={star <= reviewRating ? "star" : "star-outline"} size={32} color={COLORS.star} /></Pressable>)}</View>
+                <View style={styles.starRow}><ReviewStars rating={reviewRating} size={32} onChange={setReviewRating} /></View>
                 <TextInput ref={reviewInputRef} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : "Save"}</Text></Pressable></View>
               </View>
@@ -418,14 +442,6 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   );
 }
 
-function RatingStars({ rating, size }: { rating: number; size: number }) {
-  return (
-    <View style={styles.ratingStars} accessibilityLabel={`${rating} out of 5 stars`}>
-      {[1, 2, 3, 4, 5].map(star => <Ionicons key={star} name={star <= rating ? "star" : "star-outline"} size={size} color={COLORS.star} />)}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   detailOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "#F5F5F5", zIndex: 20 },
   detailSafe: { flex: 1 },
@@ -459,6 +475,7 @@ const styles = StyleSheet.create({
   reviewSummaryScore: { color: "#191919", fontSize: 30, fontWeight: "900" },
   reviewSummaryCopy: { flex: 1, gap: 3 },
   reviewSummaryText: { color: "#8C8C8C", fontSize: 13, fontWeight: "700" },
+  reviewError: { marginTop: 12, color: "#B42318", fontSize: 13, fontWeight: "700" },
   reviewCard: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#EDEDED" },
   reviewCardHead: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
   reviewAuthor: { color: "#191919", fontSize: 14, fontWeight: "900" },

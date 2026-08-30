@@ -21,6 +21,7 @@ import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
 import { ResilientImage } from "./components/ResilientImage";
 import { NAV_ITEMS } from "./components/NavItems";
+import { MarketplaceScreen } from "./components/MarketplaceScreen";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
 import { s } from "./components/Styles";
 
@@ -1287,6 +1288,8 @@ function AcrossApp() {
 			</View><FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} /></>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
         )}
+
+        {activeTab === "services" && <MarketplaceScreen token={token} bottomInset={bottomInset} />}
 
         {activeTab === "cart" && (
           <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>

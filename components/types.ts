@@ -12,6 +12,8 @@ export type Product = {
   origin_hub: { id: string; name: string; city: string };
   is_flash_sale?: boolean;
   flash_sale_price?: number;
+  review_count: number;
+  average_rating: number;
 };
 
 export type CartItem = { product: Product; quantity: number };
@@ -54,7 +56,7 @@ export type Review = {
 
 export type ReviewSummary = { count: number; average_rating: number };
 
-export type Tab = "home" | "cart" | "account" | "track" | "support";
+export type Tab = "home" | "services" | "cart" | "account" | "track" | "support";
 export type AuthMode = "welcome" | "signin" | "signup";
 export type AppStage = "booting" | "auth" | "app";
 
