@@ -37,6 +37,8 @@ Notifications.setNotificationHandler({
 const PRIVY_APP_ID = process.env.EXPO_PUBLIC_PRIVY_APP_ID ?? "";
 const PRIVY_CLIENT_ID = process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID ?? "";
 const SESSION_TIMEOUT = 8000;
+const GOOGLE_INIT_TIMEOUT = 8000;
+const PRODUCT_REQUEST_TIMEOUT = 9000;
 
 export default function App() {
   if (!PRIVY_APP_ID || !PRIVY_CLIENT_ID) return <SafeAreaProvider><MissingConfigScreen /></SafeAreaProvider>;
@@ -74,6 +76,7 @@ function AcrossApp() {
   const [busy, setBusy] = useState(false);
   const [oauthBusy, setOauthBusy] = useState(false);
 	const [googleSessionClearing, setGoogleSessionClearing] = useState(false);
+  const [googleInitTimedOut, setGoogleInitTimedOut] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [paymentState, setPaymentState] = useState<"idle" | "waiting" | "settled" | "failed">("idle");
@@ -132,6 +135,7 @@ function AcrossApp() {
 	const [flashSaleLoading, setFlashSaleLoading] = useState(false);
   const [flashSaleSearch, setFlashSaleSearch] = useState("");
   const flashSaleRequest = useRef(0);
+  const productLoadInFlight = useRef<Promise<void> | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showDiscountOffer, setShowDiscountOffer] = useState(false);
   const discountPromptSeen = useRef(false);
@@ -183,10 +187,26 @@ function AcrossApp() {
   }, 0), [flashSaleProducts]);
 
   useEffect(() => {
+    // Start public catalogue and browser preparation at process launch rather
+    // than waiting for authentication to finish.
+    void loadProducts();
+    if (Platform.OS === "android") void WebBrowser.warmUpAsync().catch(() => {});
     restoreSession();
     bootTimer.current = setTimeout(() => setStage(prev => prev === "booting" ? "auth" : prev), SESSION_TIMEOUT);
-    return () => { if (bootTimer.current) clearTimeout(bootTimer.current); };
+    return () => {
+      if (bootTimer.current) clearTimeout(bootTimer.current);
+      if (Platform.OS === "android") void WebBrowser.coolDownAsync().catch(() => {});
+    };
   }, []);
+
+  useEffect(() => {
+    if (stage !== "auth" || (privyReady && !googleSessionClearing)) {
+      setGoogleInitTimedOut(false);
+      return;
+    }
+    const timer = setTimeout(() => setGoogleInitTimedOut(true), GOOGLE_INIT_TIMEOUT);
+    return () => clearTimeout(timer);
+  }, [stage, privyReady, googleSessionClearing]);
 
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -321,9 +341,9 @@ function AcrossApp() {
       const r = await fetch(`${API_URL}/api/v1/auth/session`, { headers: { Authorization: `Bearer ${storedToken}` }, signal: controller.signal });
       if (!r.ok) { await clearSession(); setStage("auth"); return; }
       setToken(storedToken);
-      await loadProducts();
-      loadProfile(storedToken).catch(() => {});
       setStage("app");
+      void loadProducts();
+      loadProfile(storedToken).catch(() => {});
     } catch { await clearSession(); setStage("auth"); }
   }
 
@@ -417,9 +437,9 @@ function AcrossApp() {
     await SecureStore.setItemAsync(TOKEN_KEY, s.access_token);
     await SecureStore.setItemAsync(EXPIRY_KEY, String(s.expires_at));
     setToken(s.access_token);
-    await loadProducts();
-    loadProfile(s.access_token).catch(() => {});
     setStage("app");
+    void loadProducts();
+    loadProfile(s.access_token).catch(() => {});
   }
 
   async function clearSession() {
@@ -531,17 +551,35 @@ function AcrossApp() {
   }
 
   async function loadProducts() {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const r = await fetch(`${API_URL}/api/v1/products`);
-        if (r.ok) {
-          const catalog = ((await r.json()).products ?? []).map(mapProduct);
+    if (productLoadInFlight.current) return productLoadInFlight.current;
+    const task = (async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
+        try {
+          const r = await fetch(`${API_URL}/api/v1/products`, { signal: controller.signal });
+          if (!r.ok) throw new Error(`catalog request failed: ${r.status}`);
+          const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
           setProducts(catalog);
           await hydrateCart(catalog);
+          catalog.slice(0, 12).forEach(product => {
+            const uri = product.image_urls?.[0];
+            if (uri) void Image.prefetch(uri).catch(() => false);
+          });
 		  void loadFlashSales(true, "");
           return;
+        } catch {
+          if (attempt < 2) await sleep(350 * (attempt + 1));
+        } finally {
+          clearTimeout(timeout);
         }
-      } catch {}
+      }
+    })();
+    productLoadInFlight.current = task;
+    try {
+      await task;
+    } finally {
+      if (productLoadInFlight.current === task) productLoadInFlight.current = null;
     }
   }
 
@@ -645,7 +683,7 @@ function AcrossApp() {
 
   async function authenticateWithGoogle() {
     if (!PRIVY_APP_ID || PRIVY_APP_ID.startsWith("REPLACE_ME")) { Alert.alert("Privy not configured"); return; }
-    if (!privyReady) {
+    if (!privyReady || googleSessionClearing) {
       Alert.alert("Sign-in is still preparing", "Check your internet connection and try again in a moment.");
       return;
     }
@@ -1171,7 +1209,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-	if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} googleReady={privyReady && !googleSessionClearing} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });

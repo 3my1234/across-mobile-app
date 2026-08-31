@@ -1,8 +1,7 @@
 import React from "react";
-import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
-const ACTIVE_STAR = "#FFC107";
+const ACTIVE_STAR = "#FFB400";
 const INACTIVE_STAR = "#D7D7D7";
 
 type Props = {
@@ -17,12 +16,15 @@ export function ReviewStars({ rating, size = 16, onChange }: Props) {
     <View style={styles.row} accessibilityLabel={`${rating} out of 5 stars`}>
       {[1, 2, 3, 4, 5].map(star => {
         const selected = star <= rounded;
+        // Text glyphs avoid an Android release-build icon-font fallback that
+        // rendered stars with the font's default black fill.
         const glyph = (
-          <Ionicons
-            name={selected ? "star" : "star-outline"}
-            color={selected ? ACTIVE_STAR : INACTIVE_STAR}
-            size={size}
-          />
+          <Text
+            allowFontScaling={false}
+            style={[styles.star, { color: selected ? ACTIVE_STAR : INACTIVE_STAR, fontSize: size, lineHeight: size + 3 }]}
+          >
+            {selected ? "★" : "☆"}
+          </Text>
         );
         return onChange ? (
           <Pressable
@@ -44,5 +46,6 @@ export function ReviewStars({ rating, size = 16, onChange }: Props) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 2 },
-  pressable: { alignItems: "center", justifyContent: "center" },
+  star: { fontFamily: "sans-serif", fontWeight: "400", includeFontPadding: false, textAlign: "center" },
+  pressable: { minWidth: 30, minHeight: 30, alignItems: "center", justifyContent: "center" },
 });

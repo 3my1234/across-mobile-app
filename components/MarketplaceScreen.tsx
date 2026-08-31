@@ -311,7 +311,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             <Ionicons name="search" size={20} color="#777" />
             <TextInput value={search} onChangeText={setSearch} placeholder="Hotels, cars, property, services" style={styles.grow} returnKeyType="search" />
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
@@ -379,10 +379,11 @@ const styles = StyleSheet.create({
   modeText: { color: "#777", fontWeight: "800" },
   modeTextActive: { color: "#191919" },
   search: { minHeight: 48, margin: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#E8E8E8" },
-  chips: { paddingHorizontal: 12, gap: 8, paddingBottom: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5" },
+  chipScroller: { height: 46, maxHeight: 46, flexGrow: 0 },
+  chips: { height: 46, paddingHorizontal: 12, gap: 8, paddingBottom: 8, alignItems: "center" },
+  chip: { height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: "#FF4747", borderColor: "#FF4747" },
-  chipText: { fontWeight: "700", color: "#555" },
+  chipText: { fontWeight: "700", color: "#555", lineHeight: 18 },
   chipTextActive: { color: "#FFF" },
   listHeading: { paddingHorizontal: 14, paddingVertical: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },

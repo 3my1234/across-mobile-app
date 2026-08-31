@@ -54,6 +54,7 @@ interface AuthProps {
   mode: AuthMode;
   busy: boolean;
   googleReady: boolean;
+  googleTimedOut: boolean;
   googleBusy: boolean;
   noticeText?: string;
   onModeChange: (m: AuthMode) => void;
@@ -63,7 +64,7 @@ interface AuthProps {
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -101,15 +102,16 @@ export function AuthScreen({ mode, busy, googleReady, googleBusy, noticeText, on
                 )}
                 <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
                 <Pressable
-                  style={[s.gmailButton, (!googleReady || googleBusy) && s.disabled]}
+                  style={[s.gmailButton, googleBusy && s.disabled]}
                   onPress={onGoogle}
-                  disabled={!googleReady || googleBusy}
-                  accessibilityLabel={googleReady ? "Sign in with Google" : "Google sign-in is loading"}
-                  accessibilityState={{ disabled: !googleReady || googleBusy, busy: !googleReady || googleBusy }}
+                  disabled={googleBusy}
+                  accessibilityLabel={googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Google sign-in is loading"}
+                  accessibilityState={{ disabled: googleBusy, busy: (!googleReady && !googleTimedOut) || googleBusy }}
                 >
-                  {!googleReady || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name="logo-google" size={18} color="#101817" />}
-                  <Text style={s.gmailButtonText}>{!googleReady ? "Loading secure Google sign-in…" : googleBusy ? "Opening Google…" : "Sign in with Google"}</Text>
+                  {(!googleReady && !googleTimedOut) || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name={googleReady ? "logo-google" : "refresh"} size={18} color="#101817" />}
+                  <Text style={s.gmailButtonText}>{googleBusy ? "Opening Google…" : googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Connecting Google sign-in…"}</Text>
                 </Pressable>
+                {!googleReady && googleTimedOut && <Text style={s.authCopy}>Google took longer than expected. Check your connection, retry, or use email sign-in.</Text>}
                 <Pressable style={s.textButton} onPress={() => onModeChange("signin")}><Text style={s.textButtonText}>I have an account</Text></Pressable>
               </View>
             ) : (
