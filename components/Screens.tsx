@@ -157,6 +157,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const [reviewLoadingMore, setReviewLoadingMore] = useState(false);
   const [summary, setSummary] = useState<ReviewSummary>({ count: 0, average_rating: 0 });
   const [canReview, setCanReview] = useState(false);
+  const [hasExistingReview, setHasExistingReview] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState("");
   const [reviewImages, setReviewImages] = useState<string[]>([]);
@@ -200,6 +201,11 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   async function loadDetail() {
     setLoading(true);
     setReviewError("");
+    setCanReview(false);
+    setHasExistingReview(false);
+    setReviewRating(5);
+    setReviewText("");
+    setReviewImages([]);
     const productTask = (async () => {
       const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}`);
       if (pr.ok) { const d = await pr.json(); if (d.product) setProduct(mapProduct(d.product)); }
@@ -231,7 +237,16 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     const myReviewTask = (async () => {
       if (token) {
         const mr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine?fresh=${Date.now()}`, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } });
-        if (mr.ok) { const d = await mr.json(); setCanReview(Boolean(d.can_review)); if (d.review) { setReviewRating(d.review.rating); setReviewText(d.review.review_text ?? ""); setReviewImages(d.review.media_urls ?? []); } }
+        if (mr.ok) {
+          const d = await mr.json();
+          setCanReview(Boolean(d.can_review));
+          setHasExistingReview(Boolean(d.review));
+          if (d.review) {
+            setReviewRating(d.review.rating);
+            setReviewText(d.review.review_text ?? "");
+            setReviewImages(d.review.media_urls ?? []);
+          }
+        }
       }
     })();
     await Promise.allSettled([productTask, reviewTask, recommendationTask, myReviewTask]);
@@ -276,6 +291,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
 
   async function saveReview() {
     if (!token) return;
+    const wasUpdating = hasExistingReview;
     setReviewBusy(true);
     try {
       const r = await fetchWithTimeout(`${API_URL}/api/v1/products/${product.id}/reviews`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ rating: reviewRating, review_text: reviewText, media_urls: reviewImages }) });
@@ -290,7 +306,11 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
       }
       setReviewError("");
       setCanReview(true);
-      Alert.alert("Review saved", d.review_reward_claimed ? "Thanks! You earned ₦500 off your next order!" : "Your verified review is now live.");
+      setHasExistingReview(true);
+      Alert.alert(
+        wasUpdating ? "Review updated" : "Review published",
+        d.review_reward_claimed ? "Thanks! You earned ₦500 off your next order!" : wasUpdating ? "Your changes are now live." : "Your verified review is now live."
+      );
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setReviewBusy(false); }
   }
 
@@ -368,11 +388,11 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             </View>
             {canReview && (
               <View style={styles.reviewForm}>
-                <Text style={styles.detailSectionTitle}>Your review</Text>
-                <Text style={styles.muted}>Earn ₦500 off next order! Leave a review after delivery.</Text>
+                <Text style={styles.detailSectionTitle}>{hasExistingReview ? "Update your review" : "Your review"}</Text>
+                <Text style={styles.muted}>{hasExistingReview ? "Revise your rating, comment, or photos whenever your experience changes." : "Earn ₦500 off next order! Leave a review after delivery."}</Text>
                 <View style={styles.starRow}><ReviewStars rating={reviewRating} size={32} onChange={setReviewRating} /></View>
                 <TextInput ref={reviewInputRef} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
-                <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : "Save"}</Text></Pressable></View>
+                <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : hasExistingReview ? "Update review" : "Post review"}</Text></Pressable></View>
               </View>
             )}
             {!!product.description && (
