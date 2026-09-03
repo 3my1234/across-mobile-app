@@ -48,6 +48,12 @@
         {
           "photosPermission": "Allow Atlantic Express to access your photos for product reviews."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Atlantic Express to use your location only while you search for nearby verified services."
+        }
       ]
     ],
     "extra": {

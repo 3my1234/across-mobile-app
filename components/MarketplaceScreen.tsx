@@ -16,6 +16,7 @@ import {
   View
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
 import { ResilientImage } from "./ResilientImage";
 import { fetchWithTimeout } from "./utils";
@@ -36,6 +37,9 @@ type Listing = {
   media_urls: string[];
   direct_booking: boolean;
   safety_warning?: string;
+  distance_km?: number;
+  is_available_now?: boolean;
+  is_mobile_service?: boolean;
 };
 
 type Slot = { id: string; starts_at: string; ends_at: string; remaining: number };
@@ -90,18 +94,21 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
   const [slotId, setSlotId] = useState("");
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const [contact, setContact] = useState<{ email?: string; phone?: string } | null>(null);
+  const [nearby, setNearby] = useState<{ latitude: number; longitude: number } | null>(null);
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
   const loadListings = useCallback(async (refresh = false, cursor = "") => {
-    refresh ? setRefreshing(true) : cursor ? setLoadingMore(true) : setLoading(true);
+    if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
       const query = new URLSearchParams({ limit: "24" });
       if (type) query.set("type", type);
       if (search.trim()) query.set("search", search.trim());
-      if (cursor) query.set("cursor", cursor);
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings?${query.toString()}`);
+      if (cursor && !nearby) query.set("cursor", cursor);
+      if (nearby) { query.set("latitude", String(nearby.latitude)); query.set("longitude", String(nearby.longitude)); query.set("radius_km", "50"); }
+      const endpoint = nearby ? "nearby" : "listings";
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/${endpoint}?${query.toString()}`);
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiMessage(body, "Services are temporarily unavailable"));
       const incoming: Listing[] = Array.isArray(body.items) ? body.items : [];
@@ -114,10 +121,24 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       setLoadingMore(false);
       setRefreshing(false);
     }
-  }, [search, type]);
+  }, [nearby, search, type]);
+
+  async function toggleNearby() {
+    if (nearby) { setNearby(null); return; }
+    setLoading(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) throw new Error("Allow location while using the app to find nearby providers.");
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setNearby({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+    } catch (locationError) {
+      Alert.alert("Nearby services", locationError instanceof Error ? locationError.message : "Your location could not be read.");
+      setLoading(false);
+    }
+  }
 
   const loadRequests = useCallback(async (refresh = false, cursor = "") => {
-    refresh ? setRefreshing(true) : cursor ? setLoadingMore(true) : setLoading(true);
+    if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
       const query = new URLSearchParams({ limit: "24" });
@@ -311,6 +332,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             <Ionicons name="search" size={20} color="#777" />
             <TextInput value={search} onChangeText={setSearch} placeholder="Hotels, cars, property, services" style={styles.grow} returnKeyType="search" />
           </View>
+          <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void toggleNearby()}><Ionicons name={nearby ? "location" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Showing providers within 50 km" : "Find services near me"}</Text></Pressable>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
@@ -332,6 +354,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
                     <Text numberOfLines={2} style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
+                    {typeof item.distance_km === "number" && <Text style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
                   </View>
                 </Pressable>
               )}
@@ -379,6 +402,11 @@ const styles = StyleSheet.create({
   modeText: { color: "#777", fontWeight: "800" },
   modeTextActive: { color: "#191919" },
   search: { minHeight: 48, margin: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#E8E8E8" },
+  nearbyButton: { marginHorizontal: 12, marginBottom: 8, minHeight: 42, borderRadius: 10, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF" },
+  nearbyButtonActive: { backgroundColor: "#FF4747" },
+  nearbyText: { color: "#FF4747", fontWeight: "900" },
+  nearbyTextActive: { color: "#FFF" },
+  distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
   chipScroller: { height: 46, maxHeight: 46, flexGrow: 0 },
   chips: { height: 46, paddingHorizontal: 12, gap: 8, paddingBottom: 8, alignItems: "center" },
   chip: { height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },

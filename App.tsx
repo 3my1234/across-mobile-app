@@ -550,14 +550,15 @@ function AcrossApp() {
     }
   }
 
-  async function loadProducts() {
+  async function loadProducts(force = false) {
     if (productLoadInFlight.current) return productLoadInFlight.current;
     const task = (async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
         try {
-          const r = await fetch(`${API_URL}/api/v1/products`, { signal: controller.signal });
+          const fresh = force ? `?fresh=${Date.now()}` : "";
+          const r = await fetch(`${API_URL}/api/v1/products${fresh}`, { signal: controller.signal, headers: force ? { "Cache-Control": "no-cache" } : undefined });
           if (!r.ok) throw new Error(`catalog request failed: ${r.status}`);
           const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
           setProducts(catalog);
@@ -627,7 +628,7 @@ function AcrossApp() {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      const tasks: Promise<unknown>[] = [loadProducts()];
+      const tasks: Promise<unknown>[] = [loadProducts(true)];
       if (token) tasks.push(loadOrders(token), loadNotifications(token), loadProfile(token), loadXPBalance(token));
       if (includeSupport) tasks.push(loadSupportTickets());
       await Promise.allSettled(tasks);
@@ -771,6 +772,12 @@ function AcrossApp() {
   }
   function addToCart(p: Product) {
     clearPendingPayment();
+    const source = `${p.fulfillment_mode || "atlantic_import"}:${p.provider_id || "atlantic"}`;
+    const existingSource = cart[0] ? `${cart[0].product.fulfillment_mode || "atlantic_import"}:${cart[0].product.provider_id || "atlantic"}` : source;
+    if (cart.length && source !== existingSource) {
+      Alert.alert("Separate checkout required", "Products from different sellers or fulfilment routes must be checked out separately. Complete or clear the current cart first.");
+      return;
+    }
     const q = getCartQuantity(p.sku);
     const capped = Math.min(q + 1, p.inventory_count);
     setCart(items => { const e = items.find(i => i.product.sku === p.sku); if (!e) return [...items, { product: p, quantity: capped }]; return items.map(i => i.product.sku === p.sku ? { ...i, quantity: capped } : i); });
@@ -890,6 +897,12 @@ function AcrossApp() {
       setPaymentMessage(e instanceof Error ? e.message : "Payment failed");
       Alert.alert("Payment Failed", e instanceof Error ? e.message : "");
     } finally { setPaymentBusy(false); }
+  }
+  function updateProductSnapshot(updated: Product) {
+    setSelectedProduct(updated);
+    setProducts(items => items.map(item => item.id === updated.id ? updated : item));
+    setFlashSaleProducts(items => items.map(item => item.id === updated.id ? updated : item));
+    setCart(items => items.map(item => item.product.id === updated.id ? { ...item, product: updated, quantity: Math.min(item.quantity, updated.inventory_count) } : item).filter(item => item.quantity > 0));
   }
 
   async function checkPendingPayment() {
@@ -1586,7 +1599,7 @@ function AcrossApp() {
         </View>
       </Modal>
 
-      {selectedProduct && <ProductDetailScreen product={selectedProduct} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={() => addToCart(selectedProduct)} onRemove={() => removeFromCart(selectedProduct)} onSelectProduct={setSelectedProduct} />}
+      {selectedProduct && <ProductDetailScreen product={selectedProduct} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
     </View>
   );
 }

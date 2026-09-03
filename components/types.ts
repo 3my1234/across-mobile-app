@@ -14,6 +14,8 @@ export type Product = {
   flash_sale_price?: number;
   review_count: number;
   average_rating: number;
+  provider_id?: string;
+  fulfillment_mode?: "atlantic_import" | "merchant_local";
 };
 
 export type CartItem = { product: Product; quantity: number };

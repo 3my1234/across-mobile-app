@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator, Alert, Animated, Dimensions, Image, ImageBackground,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
-  SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View
+  RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -140,12 +140,13 @@ interface DetailProps {
   token: string | null;
   cartQuantity: number;
   onClose: () => void;
-  onAdd: () => void;
-  onRemove: () => void;
+  onAdd: (product: Product) => void;
+  onRemove: (product: Product) => void;
+  onProductChange: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
 }
 
-export function ProductDetailScreen({ product: initialProduct, token, cartQuantity, onClose, onAdd, onRemove, onSelectProduct }: DetailProps) {
+export function ProductDetailScreen({ product: initialProduct, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct }: DetailProps) {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
   const windowWidth = Dimensions.get("window").width;
@@ -198,7 +199,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     anim.start(); return () => anim.stop();
   }, [outOfStock, pulse, cartQuantity]);
 
-  async function loadDetail() {
+  async function loadDetail(force = false) {
     setLoading(true);
     setReviewError("");
     setCanReview(false);
@@ -207,8 +208,9 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     setReviewText("");
     setReviewImages([]);
     const productTask = (async () => {
-      const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}`);
-      if (pr.ok) { const d = await pr.json(); if (d.product) setProduct(mapProduct(d.product)); }
+      const fresh = force ? `?fresh=${Date.now()}` : "";
+      const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}${fresh}`, { headers: force ? { "Cache-Control": "no-cache" } : undefined });
+      if (pr.ok) { const d = await pr.json(); if (d.product) { const mapped = mapProduct(d.product); setProduct(mapped); onProductChange(mapped); } }
     })();
     const reviewTask = (async () => {
       const rr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25&fresh=${Date.now()}`, {
@@ -340,7 +342,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
           <Pressable style={styles.sectionTab} onPress={() => scrollToSection("reviews")}><Text style={styles.sectionTabText}>Reviews</Text></Pressable>
           <Pressable style={styles.sectionTab} onPress={() => scrollToSection("recommended")}><Text style={styles.sectionTabText}>Recommended</Text></Pressable>
         </View>
-        <ScrollView ref={detailScrollRef} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
+        <ScrollView ref={detailScrollRef} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
           <ScrollView
             horizontal
             pagingEnabled
@@ -420,9 +422,9 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
         </ScrollView>
         {!keyboardVisible && <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
           <View style={styles.quantityRow}>
-            <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={onRemove} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color="#101817" /></Pressable>
+            <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={() => onRemove(product)} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color="#101817" /></Pressable>
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
-            <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={onAdd} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color="#101817" /></Pressable>
+            <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color="#101817" /></Pressable>
           </View>
           <View style={styles.detailActionColumn}>
             {cartQuantity === 0 && !outOfStock && (
@@ -431,7 +433,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
               </Animated.View>
             )}
             {cartQuantity > 0 && <View style={styles.detailSuccessBubble}><Ionicons name="checkmark-circle" size={16} color="#12805F" /><Text style={styles.detailSuccessText}>✅ Added! Keep shopping or tap Cart to pay.</Text></View>}
-            <Pressable style={[styles.detailCartButton, outOfStock && styles.disabled]} onPress={() => { if (outOfStock) return; if (cartQuantity === 0) onAdd(); else onClose(); }} disabled={outOfStock}>
+            <Pressable style={[styles.detailCartButton, outOfStock && styles.disabled]} onPress={() => { if (outOfStock) return; if (cartQuantity === 0) onAdd(product); else onClose(); }} disabled={outOfStock}>
               <Animated.View style={{ transform: [{ scale: cartQuantity === 0 && !outOfStock ? pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) : 1 }] }}>
                 <Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity > 0 ? "Continue" : "Add to cart"}</Text>
               </Animated.View>
@@ -455,7 +457,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
           >
             {images.map((uri, index) => <ResilientImage key={`full-${uri}-${index}`} uri={uri} style={{ width: windowWidth, height: Math.max(320, windowHeight - insets.top - bottomInset - 132) }} resizeMode="contain" />)}
           </ScrollView>
-          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if (cartQuantity === 0 && !outOfStock) onAdd(); }} disabled={outOfStock}>
+          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if (cartQuantity === 0 && !outOfStock) onAdd(product); }} disabled={outOfStock}>
             <Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
           </Pressable>
         </View>
