@@ -15,7 +15,16 @@ export type Product = {
   review_count: number;
   average_rating: number;
   provider_id?: string;
-  fulfillment_mode?: "atlantic_import" | "merchant_local";
+  fulfillment_mode?: "atlantic_import" | "merchant_local" | "merchant_cross_border";
+  inventory_country_code?: string;
+  inventory_city?: string;
+  inventory_location?: string;
+  stock_state?: "locally_available" | "foreign_stock" | "import_on_demand";
+  handling_time_hours?: number;
+  delivery_min_days?: number;
+  delivery_max_days?: number;
+  delivery_methods?: string[];
+  atlantic_last_mile?: boolean;
 };
 
 export type CartItem = { product: Product; quantity: number };
@@ -44,6 +53,17 @@ export type OrderSummary = {
   created_at: string;
   item_count: number;
   items_summary: string;
+  fulfillment?: {
+    route: "atlantic_import" | "merchant_local" | "merchant_cross_border";
+    owner: "atlantic" | "merchant" | "atlantic_last_mile";
+    status: string;
+    carrier: string;
+    tracking_number: string;
+    tracking_url: string;
+    current_location: string;
+    estimated_delivery_at?: string | null;
+    version: number;
+  };
 };
 
 export type Review = {

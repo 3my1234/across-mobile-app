@@ -72,6 +72,15 @@ export function mapProduct(raw: any): import("./types").Product {
     origin_hub: raw.origin_hub ?? { id: "", name: "", city: "" },
     is_flash_sale: raw.is_flash_sale, flash_sale_price: raw.flash_sale_price,
     review_count: Number(raw.review_count || 0), average_rating: Number(raw.average_rating || 0),
-    provider_id: raw.provider_id || "", fulfillment_mode: raw.fulfillment_mode || "atlantic_import"
+    provider_id: raw.provider_id || "", fulfillment_mode: raw.fulfillment_mode || "atlantic_import",
+    inventory_country_code: raw.inventory_country_code || raw.factory_details?.inventory_country_code || "",
+    inventory_city: raw.inventory_city || raw.factory_details?.inventory_city || "",
+    inventory_location: raw.inventory_location || raw.factory_details?.inventory_location || "",
+    stock_state: raw.stock_state || raw.factory_details?.stock_state,
+    handling_time_hours: Number(raw.handling_time_hours ?? raw.factory_details?.handling_time_hours ?? 0),
+    delivery_min_days: Number(raw.delivery_min_days ?? raw.factory_details?.delivery_min_days ?? 0),
+    delivery_max_days: Number(raw.delivery_max_days ?? raw.factory_details?.delivery_max_days ?? 0),
+    delivery_methods: raw.delivery_methods ?? raw.factory_details?.delivery_methods ?? [],
+    atlantic_last_mile: Boolean(raw.atlantic_last_mile ?? raw.factory_details?.atlantic_last_mile)
   };
 }

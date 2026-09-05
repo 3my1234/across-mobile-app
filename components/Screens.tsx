@@ -368,6 +368,16 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             </View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Origin</Text><Text style={styles.detailMetaValue}>{product.origin_hub.name || product.origin_hub.city || "China"}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
+            <View style={styles.detailMetaRow}>
+              <Text style={styles.detailMetaLabel}>Fulfilment</Text>
+              <Text style={styles.detailMetaValue}>{product.fulfillment_mode === "merchant_local" ? "Local merchant delivery" : product.fulfillment_mode === "merchant_cross_border" ? "International merchant delivery" : "Atlantic Express import"}</Text>
+            </View>
+            {!!(product.inventory_location || product.inventory_city || product.inventory_country_code) && (
+              <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{[product.inventory_location, product.inventory_city, product.inventory_country_code].filter(Boolean).join(", ")}</Text></View>
+            )}
+            {!!product.delivery_max_days && (
+              <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivery estimate</Text><Text style={styles.detailMetaValue}>{product.delivery_min_days || 0}-{product.delivery_max_days} days after processing</Text></View>
+            )}
             <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
               <View style={styles.reviewSummaryRow}>

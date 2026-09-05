@@ -40,6 +40,16 @@ const SESSION_TIMEOUT = 8000;
 const GOOGLE_INIT_TIMEOUT = 8000;
 const PRODUCT_REQUEST_TIMEOUT = 9000;
 
+function readableFulfillmentStatus(value: string) {
+  return String(value || "Pending").replace(/_/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+}
+
+function fulfillmentRouteLabel(route?: string) {
+  if (route === "merchant_local") return "Local merchant delivery";
+  if (route === "merchant_cross_border") return "International merchant delivery";
+  return "Atlantic Express import";
+}
+
 export default function App() {
   if (!PRIVY_APP_ID || !PRIVY_CLIENT_ID) return <SafeAreaProvider><MissingConfigScreen /></SafeAreaProvider>;
   return (
@@ -1445,6 +1455,15 @@ function AcrossApp() {
                   </View>
                   <Text style={{ marginTop: 10, color: "#191919", fontWeight: "900" }}>{money(order.total_amount)}</Text>
                   {!!order.package_label && <Text style={{ marginTop: 4, color: "#66736F", fontSize: 12 }}>Package: {order.package_label}</Text>}
+                  {!!order.fulfillment && order.fulfillment.route !== "atlantic_import" && (
+                    <View style={{ marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: "#F3F8F6", borderWidth: 1, borderColor: "#D9E9E2" }}>
+                      <Text style={{ color: "#66736F", fontSize: 12, fontWeight: "800" }}>{fulfillmentRouteLabel(order.fulfillment.route)}</Text>
+                      <Text style={{ marginTop: 4, color: "#101817", fontSize: 16, fontWeight: "900" }}>{readableFulfillmentStatus(order.fulfillment.status)}</Text>
+                      {!!order.fulfillment.current_location && <Text style={{ marginTop: 4, color: "#4E625C" }}>Current location: {order.fulfillment.current_location}</Text>}
+                      {!!order.fulfillment.carrier && <Text style={{ marginTop: 3, color: "#4E625C" }}>Carrier: {order.fulfillment.carrier}{order.fulfillment.tracking_number ? ` · ${order.fulfillment.tracking_number}` : ""}</Text>}
+                      {!!order.fulfillment.estimated_delivery_at && <Text style={{ marginTop: 3, color: "#4E625C" }}>Estimated delivery: {new Date(order.fulfillment.estimated_delivery_at).toLocaleDateString()}</Text>}
+                    </View>
+                  )}
                   <View style={[s.timeline, { marginTop: 16 }]}>{TRACKING_STAGES.map((stageName, index) => {
                     const done = index <= currentIndex;
                     return (<View key={stageName} style={s.timelineItem}>
