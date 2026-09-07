@@ -364,10 +364,11 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             <Text style={styles.detailSku}>SKU {product.sku}</Text>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price)}</Text>
-              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={[styles.detailComparePrice, product.is_flash_sale && styles.detailFlashComparePrice]}>{money(product.compare_at_price)}</Text>}
+              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price)}</Text>}
             </View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Origin</Text><Text style={styles.detailMetaValue}>{product.origin_hub.name || product.origin_hub.city || "China"}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
+            <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Purchased</Text><Text style={styles.detailMetaValue}>{Number(product.sold_count || 0).toLocaleString()} sold</Text></View>
             <View style={styles.detailMetaRow}>
               <Text style={styles.detailMetaLabel}>Fulfilment</Text>
               <Text style={styles.detailMetaValue}>{product.fulfillment_mode === "merchant_local" ? "Local merchant delivery" : product.fulfillment_mode === "merchant_cross_border" ? "International merchant delivery" : "Atlantic Express import"}</Text>
@@ -496,8 +497,7 @@ const styles = StyleSheet.create({
   detailSku: { marginTop: 6, color: "#66736F", fontSize: 12, fontWeight: "800" },
   detailPriceRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10 },
   detailPrice: { color: "#101817", fontSize: 24, fontWeight: "900" },
-  detailComparePrice: { color: "#8A9692", fontSize: 16, fontWeight: "800", textDecorationLine: "line-through" },
-  detailFlashComparePrice: { color: "#C62828", fontWeight: "900" },
+  detailComparePrice: { color: "#C62828", fontSize: 16, fontWeight: "900", textDecorationLine: "line-through", textDecorationColor: "#C62828" },
   detailMetaRow: { marginTop: 12, flexDirection: "row", justifyContent: "space-between", gap: 12 },
   detailMetaLabel: { color: "#66736F", fontWeight: "700" },
   detailMetaValue: { flexShrink: 1, textAlign: "right", color: "#101817", fontWeight: "900" },

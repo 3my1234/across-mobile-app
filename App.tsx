@@ -986,6 +986,12 @@ function AcrossApp() {
     if (!token) return false;
     if (generation !== paymentPollGeneration.current) return false;
     try {
+      // Webhooks remain authoritative, but periodically re-run the idempotent
+      // provider verification so a delayed/missed webhook does not strand checkout.
+      if (attempts > 0 && attempts % 3 === 0) {
+        const verified = await verifyPaymentWithBackend(orderId);
+        if (verified) return true;
+      }
       const r = await fetch(`${API_URL}/api/v1/orders/${orderId}/payment-status`, { headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) throw new Error("status unavailable");
       const d = await r.json();
@@ -996,15 +1002,19 @@ function AcrossApp() {
         return true;
       }
       if (!silent) { setPaymentState("waiting"); setPaymentMessage("Waiting for Flutterwave to confirm."); }
-      if (attempts < 30) {
-        await sleep(3000);
+      if (attempts < 12) {
+        await sleep(2500);
         return pollPaymentStatus(orderId, attempts + 1, silent, generation);
       } else {
-        if (!silent) { setPaymentState("failed"); setPaymentMessage("Payment initiated, but confirmation is still pending."); }
+        if (!silent) { setPaymentState("waiting"); setPaymentMessage("Payment is still being confirmed in the background. You can safely leave this page."); }
         return false;
       }
     } catch {
-      if (!silent) { setPaymentState("failed"); setPaymentMessage("Could not confirm payment yet."); }
+      if (attempts < 12 && generation === paymentPollGeneration.current) {
+        await sleep(2500);
+        return pollPaymentStatus(orderId, attempts + 1, silent, generation);
+      }
+      if (!silent) { setPaymentState("waiting"); setPaymentMessage("Payment is still being confirmed in the background. You can safely leave this page."); }
       return false;
     }
   }

@@ -13,6 +13,7 @@ export type Product = {
   is_flash_sale?: boolean;
   flash_sale_price?: number;
   review_count: number;
+  sold_count: number;
   average_rating: number;
   provider_id?: string;
   fulfillment_mode?: "atlantic_import" | "merchant_local" | "merchant_cross_border";
