@@ -61,6 +61,12 @@ const LISTING_TYPES = [
   { key: "short_let", label: "Short lets" },
   { key: "car_rental", label: "Car rentals" },
   { key: "car_wash", label: "Car wash" },
+  { key: "mechanic", label: "Mechanics" },
+  { key: "plumber", label: "Plumbers" },
+  { key: "carpenter", label: "Carpenters" },
+  { key: "fuel_station", label: "Fuel stations" },
+  { key: "food_vendor", label: "Food vendors" },
+  { key: "artisan", label: "Other artisans" },
   { key: "shop_rental", label: "Shops" },
   { key: "property", label: "Property" },
   { key: "land", label: "Land" }
@@ -95,6 +101,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const [contact, setContact] = useState<{ email?: string; phone?: string } | null>(null);
   const [nearby, setNearby] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [locationRequested, setLocationRequested] = useState(false);
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
@@ -136,6 +143,21 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (locationRequested) return;
+    setLocationRequested(true);
+    void (async () => {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (!permission.granted) return;
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setNearby({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      } catch {
+        // Keep the full verified marketplace usable if location is temporarily unavailable.
+      }
+    })();
+  }, [locationRequested]);
 
   const loadRequests = useCallback(async (refresh = false, cursor = "") => {
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
