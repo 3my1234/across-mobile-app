@@ -5,6 +5,7 @@ import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
+import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -107,6 +108,7 @@ function AcrossApp() {
   const pushTokenRef = useRef("");
   const logoutInProgress = useRef(false);
   const lastNotificationResponseId = useRef("");
+  const locationBootstrapTokenRef = useRef("");
   const [cartStorageReady, setCartStorageReady] = useState(false);
   const persistedDetectedRegion = useRef(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -277,6 +279,33 @@ function AcrossApp() {
       Alert.alert("Sign-in failed", (oauthState as any)?.error?.message || (oauthState as any)?.error || "Google sign-in failed");
     }
   }, [oauthState]);
+
+  useEffect(() => {
+    if (stage !== "app" || !token || locationBootstrapTokenRef.current === token) return;
+    locationBootstrapTokenRef.current = token;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        let permission = await Location.getForegroundPermissionsAsync();
+        if (cancelled) return;
+        if (permission.status === "undetermined" && permission.canAskAgain) {
+          permission = await Location.requestForegroundPermissionsAsync();
+        }
+        if (cancelled || !permission.granted) return;
+
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!cancelled && !servicesEnabled && Platform.OS === "android") {
+          await Location.enableNetworkProviderAsync();
+        }
+      } catch {
+        // Services provides a visible retry/settings path if permission or the
+        // Android location-services prompt is dismissed during app startup.
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [stage, token]);
 
   useEffect(() => {
     if (stage !== "app" || !token) return;

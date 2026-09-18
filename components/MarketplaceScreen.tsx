@@ -105,6 +105,46 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
 
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
+  const readNearbyPosition = useCallback(async () => {
+    let permission = await Location.getForegroundPermissionsAsync();
+    if (permission.status === "undetermined" && permission.canAskAgain) {
+      permission = await Location.requestForegroundPermissionsAsync();
+    }
+    if (!permission.granted) {
+      const permanentlyDenied = !permission.canAskAgain;
+      Alert.alert(
+        "Location permission required",
+        permanentlyDenied
+          ? "Enable location permission in your phone settings to find verified services near you."
+          : "Allow location while using Atlantic Express to find verified services near you.",
+        permanentlyDenied
+          ? [{ text: "Not now", style: "cancel" }, { text: "Open settings", onPress: () => void Linking.openSettings() }]
+          : [{ text: "OK" }]
+      );
+      return null;
+    }
+
+    const servicesEnabled = await Location.hasServicesEnabledAsync();
+    if (!servicesEnabled && Platform.OS === "android") {
+      try {
+        await Location.enableNetworkProviderAsync();
+      } catch {
+        Alert.alert(
+          "Turn on phone location",
+          "Location services are off. Turn them on, then select Find services near me again.",
+          [{ text: "OK" }]
+        );
+        return null;
+      }
+    } else if (!servicesEnabled) {
+      Alert.alert("Turn on phone location", "Location services are off. Turn them on, then try again.");
+      return null;
+    }
+
+    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+  }, []);
+
   const loadListings = useCallback(async (refresh = false, cursor = "") => {
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
@@ -134,12 +174,11 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
     if (nearby) { setNearby(null); return; }
     setLoading(true);
     try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) throw new Error("Allow location while using the app to find nearby providers.");
-      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setNearby({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      const position = await readNearbyPosition();
+      if (position) setNearby(position);
     } catch (locationError) {
       Alert.alert("Nearby services", locationError instanceof Error ? locationError.message : "Your location could not be read.");
+    } finally {
       setLoading(false);
     }
   }
@@ -149,15 +188,13 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
     setLocationRequested(true);
     void (async () => {
       try {
-        const permission = await Location.requestForegroundPermissionsAsync();
-        if (!permission.granted) return;
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        setNearby({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        const position = await readNearbyPosition();
+        if (position) setNearby(position);
       } catch {
         // Keep the full verified marketplace usable if location is temporarily unavailable.
       }
     })();
-  }, [locationRequested]);
+  }, [locationRequested, readNearbyPosition]);
 
   const loadRequests = useCallback(async (refresh = false, cursor = "") => {
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
