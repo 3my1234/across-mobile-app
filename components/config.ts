@@ -1,4 +1,4 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:8080";
+export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://api.atlxpres.com";
 export const TOKEN_KEY = "across.accessToken";
 export const EXPIRY_KEY = "across.accessTokenExpiresAt";
 export const CART_KEY = "across.cart.v1";

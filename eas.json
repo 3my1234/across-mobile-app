@@ -12,12 +12,18 @@
       }
     },
     "preview": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com"
+      },
       "distribution": "internal",
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com"
+      },
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
