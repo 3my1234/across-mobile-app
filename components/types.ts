@@ -23,6 +23,7 @@ export type Product = {
   stock_state?: "locally_available" | "foreign_stock" | "import_on_demand";
   handling_time_hours?: number;
   delivery_min_days?: number;
+  distance_km?: number;
   delivery_max_days?: number;
   delivery_methods?: string[];
   atlantic_last_mile?: boolean;

@@ -20,6 +20,7 @@ import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
 import { ResilientImage } from "./ResilientImage";
 import { fetchWithTimeout } from "./utils";
+import { filterNearbySnapshot, readCachedContact, readNearbySnapshot, writeCachedContact, writeNearbySnapshot } from "./nearbyCache";
 
 type Listing = {
   id: string;
@@ -40,16 +41,20 @@ type Listing = {
   distance_km?: number;
   is_available_now?: boolean;
   is_mobile_service?: boolean;
+  review_count?: number;
+  average_rating?: number;
 };
 
 type Slot = { id: string; starts_at: string; ends_at: string; remaining: number };
 type BuyerRequest = {
   id: string;
   request_type: string;
+  listing_id: string;
   status: string;
   starts_at?: string | null;
   listing_title: string;
   listing_type: string;
+  review_rating?: number | null;
   provider_name: string;
   message?: string;
   created_at: string;
@@ -103,6 +108,8 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
   const [nearby, setNearby] = useState<{ latitude: number; longitude: number } | null>(null);
   const [locationRequested, setLocationRequested] = useState(false);
 
+  const [cacheNotice, setCacheNotice] = useState("");
+  const [reviewedRequests, setReviewedRequests] = useState<Record<string, number>>({});
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
   const readNearbyPosition = useCallback(async () => {
@@ -149,11 +156,11 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
-      const query = new URLSearchParams({ limit: "24" });
+      const query = new URLSearchParams({ limit: nearby && !type && !search.trim() ? "100" : "24" });
       if (type) query.set("type", type);
       if (search.trim()) query.set("search", search.trim());
       if (cursor && !nearby) query.set("cursor", cursor);
-      if (nearby) { query.set("latitude", String(nearby.latitude)); query.set("longitude", String(nearby.longitude)); query.set("radius_km", "50"); }
+      if (nearby) { query.set("latitude", String(nearby.latitude)); query.set("longitude", String(nearby.longitude)); query.set("radius_km", "100"); }
       const endpoint = nearby ? "nearby" : "listings";
       const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/${endpoint}?${query.toString()}`);
       const body = await response.json().catch(() => ({}));
@@ -161,8 +168,22 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       const incoming: Listing[] = Array.isArray(body.items) ? body.items : [];
       setItems(current => cursor ? [...current, ...incoming.filter(item => !current.some(existing => existing.id === item.id))] : incoming);
       setListingCursor(String(body.next_cursor || ""));
+      if (nearby && !type && !search.trim()) {
+        const snapshot = await writeNearbySnapshot(nearby, incoming);
+        setCacheNotice(`Saved ${snapshot.items.length} nearby services for offline use`);
+      } else {
+        setCacheNotice("");
+      }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Services are temporarily unavailable");
+      const snapshot = await readNearbySnapshot<Listing>();
+      if (snapshot) {
+        setNearby(snapshot.coordinates);
+        setItems(filterNearbySnapshot(snapshot.items, type, search));
+        setCacheNotice(`Offline results saved ${new Date(snapshot.fetchedAt).toLocaleString()}`);
+        setError("");
+      } else {
+        setError(loadError instanceof Error ? loadError.message : "Services are temporarily unavailable");
+      }
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -196,6 +217,18 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
     })();
   }, [locationRequested, readNearbyPosition]);
 
+  useEffect(() => {
+    let active = true;
+    void readNearbySnapshot<Listing>().then(snapshot => {
+      if (!active || !snapshot) return;
+      setNearby(snapshot.coordinates);
+      setItems(snapshot.items);
+      setCacheNotice(`Saved results from ${new Date(snapshot.fetchedAt).toLocaleString()}`);
+    });
+    return () => { active = false; };
+    // Initial hydration only; later filtering happens in loadListings.
+  }, []);
+
   const loadRequests = useCallback(async (refresh = false, cursor = "") => {
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
@@ -227,7 +260,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
 
   async function openListing(item: Listing) {
     setSelected(item);
-    setContact(null);
+    setContact(await readCachedContact(item.id));
     setSafetyAcknowledged(false);
     setSlotId("");
     setSlots([]);
@@ -258,6 +291,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiMessage(body, "Contact unavailable"));
       setContact(body);
+      await writeCachedContact(selected.id, body);
     } catch (contactError) {
       Alert.alert("Contact unavailable", contactError instanceof Error ? contactError.message : "Please try again.");
     }
@@ -296,6 +330,25 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       Alert.alert("Unable to send", requestError instanceof Error ? requestError.message : "Please try again.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function submitReview(request: BuyerRequest, rating: number) {
+    try {
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${request.listing_id}/review`, {
+        method: "PUT",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: request.id, rating, review_text: "" })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiMessage(body, "Review could not be saved"));
+      setReviewedRequests(current => ({ ...current, [request.id]: rating }));
+      Alert.alert(
+        "Thank you",
+        body.xp_awarded ? `Your review helps other customers. You earned ${body.xp_awarded} XP.` : "Your updated review has been saved."
+      );
+    } catch (reviewError) {
+      Alert.alert("Review unavailable", reviewError instanceof Error ? reviewError.message : "Please try again.");
     }
   }
 
@@ -391,7 +444,8 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             <Ionicons name="search" size={20} color="#777" />
             <TextInput value={search} onChangeText={setSearch} placeholder="Hotels, cars, property, services" style={styles.grow} returnKeyType="search" />
           </View>
-          <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void toggleNearby()}><Ionicons name={nearby ? "location" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Showing providers within 50 km" : "Find services near me"}</Text></Pressable>
+          <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void toggleNearby()}><Ionicons name={nearby ? "location" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Showing nearest providers within 100 km" : "Find services near me"}</Text></Pressable>
+          {!!cacheNotice && <Text style={styles.cacheNotice}>{cacheNotice}</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
@@ -414,6 +468,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
                     <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
                     {typeof item.distance_km === "number" && <Text style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
+                    {!!item.review_count && <Text style={styles.rating}>Rating {item.average_rating?.toFixed(1)} ({item.review_count})</Text>}
                   </View>
                 </Pressable>
               )}
@@ -436,6 +491,18 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
               <Text style={styles.meta}>{item.provider_name} · {item.request_type.replaceAll("_", " ")}</Text>
               {!!item.starts_at && <Text style={styles.requestDate}>{new Date(item.starts_at).toLocaleString()}</Text>}
               {!!item.message && <Text style={styles.body}>{item.message}</Text>}
+              {item.status === "completed" && (
+                <View style={styles.reviewRow}>
+                  <Text style={styles.reviewLabel}>{(reviewedRequests[item.id] || item.review_rating) ? "Your rating" : "Rate this provider - earn 50 XP"}</Text>
+                  <View style={styles.stars}>
+                    {[1, 2, 3, 4, 5].map(rating => (
+                      <Pressable key={rating} onPress={() => void submitReview(item, rating)} accessibilityLabel={`Rate ${rating} stars`}>
+                        <Ionicons name={rating <= (reviewedRequests[item.id] || item.review_rating || 0) ? "star" : "star-outline"} size={25} color="#E8A100" />
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
           )}
           ListEmptyComponent={<EmptyState icon="calendar-outline" title="No requests yet" message={error || "Bookings and enquiries you send will appear here."} />}
@@ -461,6 +528,11 @@ const styles = StyleSheet.create({
   modeText: { color: "#777", fontWeight: "800" },
   modeTextActive: { color: "#191919" },
   search: { minHeight: 48, margin: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#E8E8E8" },
+  reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
+  reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
+  stars: { flexDirection: "row", gap: 8 },
+  cacheNotice: { marginHorizontal: 14, marginBottom: 7, color: "#496B60", fontSize: 11, fontWeight: "700" },
+  rating: { marginTop: 3, color: "#A66A00", fontSize: 11, fontWeight: "900" },
   nearbyButton: { marginHorizontal: 12, marginBottom: 8, minHeight: 42, borderRadius: 10, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF" },
   nearbyButtonActive: { backgroundColor: "#FF4747" },
   nearbyText: { color: "#FF4747", fontWeight: "900" },

@@ -33,6 +33,7 @@ export function ProductCard({ product, cartQuantity, onPress }: Props) {
             {product.review_count > 0 ? `${product.average_rating.toFixed(1)} (${product.review_count})` : "New"}
           </Text>
         </View>
+        {typeof product.distance_km === "number" && <Text style={styles.nearby}>{product.distance_km.toFixed(1)} km away</Text>}
         <View style={styles.footer}>
           <View>
             <Text style={styles.price}>{money(currentPrice)}</Text>
@@ -61,6 +62,7 @@ const styles = StyleSheet.create({
   title: { minHeight: 36, color: "#191919", fontSize: 13, fontWeight: "700", lineHeight: 18 },
   ratingRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 5 },
   ratingText: { color: "#6F6F6F", fontSize: 11, fontWeight: "700" },
+  nearby: { marginTop: 5, color: "#12805F", fontSize: 11, fontWeight: "900" },
   footer: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   price: { color: "#FF4747", fontSize: 15, fontWeight: "900" },
   discountRow: { marginTop: 3, flexDirection: "row", alignItems: "center", gap: 6 },

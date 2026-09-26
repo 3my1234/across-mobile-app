@@ -24,12 +24,15 @@ import { ResilientImage } from "./components/ResilientImage";
 import { NAV_ITEMS } from "./components/NavItems";
 import { MarketplaceScreen } from "./components/MarketplaceScreen";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
+import { readNotificationSoundEnabled, writeNearbySnapshot, writeNotificationSoundEnabled } from "./components/nearbyCache";
+
 import { s } from "./components/Styles";
 
 WebBrowser.maybeCompleteAuthSession();
+let notificationSoundEnabled = true;
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldPlaySound: true,
+    shouldPlaySound: notificationSoundEnabled,
     shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true
@@ -107,6 +110,7 @@ function AcrossApp() {
   const activityTokenRef = useRef("");
   const pushTokenRef = useRef("");
   const logoutInProgress = useRef(false);
+  const buyerCoordinatesRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const lastNotificationResponseId = useRef("");
   const locationBootstrapTokenRef = useRef("");
   const [cartStorageReady, setCartStorageReady] = useState(false);
@@ -122,6 +126,7 @@ function AcrossApp() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
@@ -298,6 +303,17 @@ function AcrossApp() {
         if (!cancelled && !servicesEnabled && Platform.OS === "android") {
           await Location.enableNetworkProviderAsync();
         }
+        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        if (cancelled) return;
+        const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        buyerCoordinatesRef.current = coordinates;
+        const query = new URLSearchParams({ latitude: String(coordinates.latitude), longitude: String(coordinates.longitude), radius_km: "100", limit: "100" });
+        const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/nearby?${query.toString()}`);
+        if (response.ok) {
+          const body = await response.json();
+          if (!cancelled && Array.isArray(body.items)) await writeNearbySnapshot(coordinates, body.items);
+        }
+        if (!cancelled) void loadProducts(true);
       } catch {
         // Services provides a visible retry/settings path if permission or the
         // Android location-services prompt is dismissed during app startup.
@@ -305,7 +321,15 @@ function AcrossApp() {
     })();
 
     return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, token]);
+
+  useEffect(() => {
+    void readNotificationSoundEnabled().then(enabled => {
+      notificationSoundEnabled = enabled;
+      setSoundEnabled(enabled);
+    });
+  }, []);
 
   useEffect(() => {
     if (stage !== "app" || !token) return;
@@ -378,12 +402,23 @@ function AcrossApp() {
       const controller = new AbortController();
       setTimeout(() => controller.abort(), 5000);
       const r = await fetch(`${API_URL}/api/v1/auth/session`, { headers: { Authorization: `Bearer ${storedToken}` }, signal: controller.signal });
-      if (!r.ok) { await clearSession(); setStage("auth"); return; }
+      if (r.status === 401 || r.status === 403) {
+        await clearSession(); setStage("auth"); return;
+      }
+      if (!r.ok) throw new Error(`session validation unavailable: ${r.status}`);
       setToken(storedToken);
       setStage("app");
       void loadProducts();
       loadProfile(storedToken).catch(() => {});
-    } catch { await clearSession(); setStage("auth"); }
+    } catch {
+      const [storedToken, expiry] = await Promise.all([SecureStore.getItemAsync(TOKEN_KEY), SecureStore.getItemAsync(EXPIRY_KEY)]);
+      if (storedToken && expiry && Date.now() < Number(expiry) * 1000) {
+        setToken(storedToken);
+        setStage("app");
+        return;
+      }
+      await clearSession(); setStage("auth");
+    }
   }
 
   async function loadNotifications(authToken: string | null = token) {
@@ -410,7 +445,8 @@ function AcrossApp() {
     } catch {}
   }
 
-  async function registerPushNotifications(authToken: string) {
+  async function registerPushNotifications(authToken: string, soundPreference?: boolean) {
+    const effectiveSound = soundPreference ?? await readNotificationSoundEnabled();
     if (Platform.OS !== "android" && Platform.OS !== "ios") return;
     try {
       if (Platform.OS === "android") {
@@ -419,6 +455,11 @@ function AcrossApp() {
           importance: Notifications.AndroidImportance.MAX,
           sound: "default",
           vibrationPattern: [0, 250, 180, 250]
+        });
+        await Notifications.setNotificationChannelAsync("orders-silent", {
+          name: "Order updates (silent)",
+          importance: Notifications.AndroidImportance.DEFAULT,
+          sound: null
         });
       }
       const current = await Notifications.getPermissionsAsync();
@@ -431,7 +472,7 @@ function AcrossApp() {
       await fetch(`${API_URL}/api/v1/notifications/push-token`, {
         method: "POST",
         headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ token: pushToken, platform: Platform.OS })
+        body: JSON.stringify({ token: pushToken, platform: Platform.OS, sound_enabled: effectiveSound })
       });
     } catch {
       // Registration retries on the next authenticated app session.
@@ -444,6 +485,14 @@ function AcrossApp() {
       await fetch(`${API_URL}/api/v1/notifications/${id}/read`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
       if (reload) await loadNotifications();
     } catch {}
+  }
+
+  async function toggleNotificationSound() {
+    const next = !soundEnabled;
+    notificationSoundEnabled = next;
+    setSoundEnabled(next);
+    await writeNotificationSoundEnabled(next);
+    if (token) await registerPushNotifications(token, next);
   }
 
   async function openNotification(notification: any) {
@@ -596,8 +645,13 @@ function AcrossApp() {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
         try {
-          const fresh = force ? `?fresh=${Date.now()}` : "";
-          const r = await fetch(`${API_URL}/api/v1/products${fresh}`, { signal: controller.signal, headers: force ? { "Cache-Control": "no-cache" } : undefined });
+          const params = new URLSearchParams();
+          if (force) params.set("fresh", String(Date.now()));
+          if (buyerCoordinatesRef.current) {
+            params.set("latitude", String(buyerCoordinatesRef.current.latitude));
+            params.set("longitude", String(buyerCoordinatesRef.current.longitude));
+          }
+          const r = await fetch(`${API_URL}/api/v1/products?${params.toString()}`, { signal: controller.signal, headers: force ? { "Cache-Control": "no-cache" } : undefined });
           if (!r.ok) throw new Error(`catalog request failed: ${r.status}`);
           const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
           setProducts(catalog);
@@ -1300,6 +1354,7 @@ function AcrossApp() {
             <Text style={{ fontWeight: "900", fontSize: 16 }}>Notifications</Text>
             <View style={{ flexDirection: "row", gap: 12 }}>
               {unreadCount > 0 && <Pressable onPress={markAllRead}><Text style={{ color: "#FF4747", fontSize: 12, fontWeight: "700" }}>Mark all read</Text></Pressable>}
+              <Pressable onPress={() => void toggleNotificationSound()}><Text style={{ color: "#496B60", fontSize: 12, fontWeight: "700" }}>Sound {soundEnabled ? "on" : "off"}</Text></Pressable>
               <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color="#8C8C8C" /></Pressable>
             </View>
           </View>

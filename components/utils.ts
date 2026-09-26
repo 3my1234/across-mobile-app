@@ -81,6 +81,7 @@ export function mapProduct(raw: any): import("./types").Product {
     delivery_min_days: Number(raw.delivery_min_days ?? raw.factory_details?.delivery_min_days ?? 0),
     delivery_max_days: Number(raw.delivery_max_days ?? raw.factory_details?.delivery_max_days ?? 0),
     delivery_methods: raw.delivery_methods ?? raw.factory_details?.delivery_methods ?? [],
-    atlantic_last_mile: Boolean(raw.atlantic_last_mile ?? raw.factory_details?.atlantic_last_mile)
+    atlantic_last_mile: Boolean(raw.atlantic_last_mile ?? raw.factory_details?.atlantic_last_mile),
+    distance_km: raw.distance_km == null ? undefined : Number(raw.distance_km)
   };
 }
