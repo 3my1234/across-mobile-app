@@ -105,7 +105,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
   const [slotId, setSlotId] = useState("");
   const [safetyAcknowledged, setSafetyAcknowledged] = useState(false);
   const [contact, setContact] = useState<{ email?: string; phone?: string } | null>(null);
-  const [nearby, setNearby] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [nearby, setNearby] = useState<{ latitude: number; longitude: number; accuracy?: number; label?: string } | null>(null);
   const [locationRequested, setLocationRequested] = useState(false);
 
   const [cacheNotice, setCacheNotice] = useState("");
@@ -148,8 +148,20 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       return null;
     }
 
-    const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-    return { latitude: position.coords.latitude, longitude: position.coords.longitude };
+    let position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+    if (position.coords.accuracy == null || position.coords.accuracy > 5000) {
+      position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+    }
+    const accuracy = position.coords.accuracy ?? undefined;
+    if (accuracy == null || accuracy > 10000) throw new Error("Your phone could not get a reliable location. Move outdoors or near a window, disable any VPN, and retry.");
+    let label = "";
+    try {
+      const places = await Location.reverseGeocodeAsync({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+      const place = places[0]; label = [place?.district || place?.city, place?.region].filter(Boolean).join(", ");
+    } catch {
+      // Nearby search still works when the optional readable place lookup fails.
+    }
+    return { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy, label };
   }, []);
 
   const loadListings = useCallback(async (refresh = false, cursor = "") => {
@@ -170,7 +182,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       setListingCursor(String(body.next_cursor || ""));
       if (nearby && !type && !search.trim()) {
         const snapshot = await writeNearbySnapshot(nearby, incoming);
-        setCacheNotice(`Saved ${snapshot.items.length} nearby services for offline use`);
+        setCacheNotice(snapshot.items.length ? `Saved ${snapshot.items.length} nearby services for offline use` : "");
       } else {
         setCacheNotice("");
       }
@@ -191,8 +203,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
     }
   }, [nearby, search, type]);
 
-  async function toggleNearby() {
-    if (nearby) { setNearby(null); return; }
+  async function refreshNearby() {
     setLoading(true);
     try {
       const position = await readNearbyPosition();
@@ -444,7 +455,11 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             <Ionicons name="search" size={20} color="#777" />
             <TextInput value={search} onChangeText={setSearch} placeholder="Hotels, cars, property, services" style={styles.grow} returnKeyType="search" />
           </View>
-          <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void toggleNearby()}><Ionicons name={nearby ? "location" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Showing nearest providers within 100 km" : "Find services near me"}</Text></Pressable>
+          <View style={styles.nearbyActions}>
+            <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Refresh my location" : "Find services near me"}</Text></Pressable>
+            {!!nearby && <Pressable style={styles.showAllButton} onPress={() => setNearby(null)}><Text style={styles.showAllText}>Show all</Text></Pressable>}
+          </View>
+          {!!nearby && <Text style={styles.locationSummary}>Nearby filter active within 100 km{nearby.label ? ` of ${nearby.label}` : ""}{typeof nearby.accuracy === "number" ? ` · accuracy ±${Math.round(nearby.accuracy)} m` : ""}</Text>}
           {!!cacheNotice && <Text style={styles.cacheNotice}>{cacheNotice}</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
@@ -472,7 +487,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
                   </View>
                 </Pressable>
               )}
-              ListEmptyComponent={<EmptyState icon="business-outline" title="No matching verified listings" message={error || "Try another search or category."} />}
+              ListEmptyComponent={<EmptyState icon="business-outline" title="No matching verified listings" message={error || (nearby ? "No approved services were found within 100 km of the location shown above. Refresh your location or select Show all." : "Try another search or category.")} />}
               ListFooterComponent={loadingMore ? <ActivityIndicator color="#FF4747" style={styles.pageLoader} /> : null}
             />
           )}
@@ -533,10 +548,14 @@ const styles = StyleSheet.create({
   stars: { flexDirection: "row", gap: 8 },
   cacheNotice: { marginHorizontal: 14, marginBottom: 7, color: "#496B60", fontSize: 11, fontWeight: "700" },
   rating: { marginTop: 3, color: "#A66A00", fontSize: 11, fontWeight: "900" },
-  nearbyButton: { marginHorizontal: 12, marginBottom: 8, minHeight: 42, borderRadius: 10, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF" },
+  nearbyActions: { marginHorizontal: 12, marginBottom: 6, flexDirection: "row", gap: 8 },
+  nearbyButton: { flex: 1, minHeight: 42, borderRadius: 10, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF" },
   nearbyButtonActive: { backgroundColor: "#FF4747" },
   nearbyText: { color: "#FF4747", fontWeight: "900" },
   nearbyTextActive: { color: "#FFF" },
+  showAllButton: { minHeight: 42, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: "#D9D9D9", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF" },
+  showAllText: { color: "#333", fontWeight: "900" },
+  locationSummary: { marginHorizontal: 14, marginBottom: 7, color: "#496B60", fontSize: 11, fontWeight: "800" },
   distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
   chipScroller: { height: 46, maxHeight: 46, flexGrow: 0 },
   chips: { height: 46, paddingHorizontal: 12, gap: 8, paddingBottom: 8, alignItems: "center" },

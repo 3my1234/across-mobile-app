@@ -303,9 +303,13 @@ function AcrossApp() {
         if (!cancelled && !servicesEnabled && Platform.OS === "android") {
           await Location.enableNetworkProviderAsync();
         }
-        const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        let position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        if (position.coords.accuracy == null || position.coords.accuracy > 5000) {
+          position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Highest });
+        }
         if (cancelled) return;
-        const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        if (position.coords.accuracy == null || position.coords.accuracy > 10000) return;
+        const coordinates = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy };
         buyerCoordinatesRef.current = coordinates;
         const query = new URLSearchParams({ latitude: String(coordinates.latitude), longitude: String(coordinates.longitude), radius_km: "100", limit: "100" });
         const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/nearby?${query.toString()}`);

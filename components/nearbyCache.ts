@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-export type NearbyCoordinates = { latitude: number; longitude: number };
+export type NearbyCoordinates = { latitude: number; longitude: number; accuracy?: number; label?: string };
 export type NearbySnapshot<T = Record<string, unknown>> = {
   version: 1;
   fetchedAt: string;
