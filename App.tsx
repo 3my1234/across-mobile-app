@@ -1417,9 +1417,15 @@ function AcrossApp() {
 		  <View><Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>Flash Sale</Text><Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>Limited-time verified deals</Text></View>
 		</View>
 	  ) : activeTab !== "home" && (
-        <View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
-          <Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>{NAV_ITEMS.find(i => i.key === activeTab)?.label ?? "Atlantic Express"}</Text>
-          <Text style={{ marginTop: 2, color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>{activeTab === "cart" ? `${totals.items} items` : "Atlantic Express"}</Text>
+        <View style={s.simpleHeaderWrap}>
+          {activeTab === "services" ? (
+            <View style={s.brandRow}>
+              <Image source={LOGO} style={s.brandLogo} resizeMode="contain" />
+              <View style={{ flex: 1 }}><Text style={s.brandTitle}>Services</Text><Text style={s.brandSubtitle}>Atlantic Express verified providers</Text></View>
+            </View>
+          ) : (
+            <><Text style={s.simpleHeaderTitle}>{NAV_ITEMS.find(i => i.key === activeTab)?.label ?? "Atlantic Express"}</Text><Text style={s.simpleHeaderMeta}>{activeTab === "cart" ? `${totals.items} items` : "Atlantic Express"}</Text></>
+          )}
         </View>
       )}
 

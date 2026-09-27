@@ -15,7 +15,7 @@
     "splash": {
       "image": "./assets/atlantic-express-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#F8FBFA"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": false,
@@ -27,7 +27,7 @@
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "foregroundImage": "./assets/atlantic-express-logo.png",
-        "backgroundColor": "#0F3D35"
+        "backgroundColor": "#000000"
       },
       "permissions": [
         "android.permission.RECORD_AUDIO",

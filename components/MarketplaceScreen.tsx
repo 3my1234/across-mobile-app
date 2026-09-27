@@ -459,8 +459,8 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Refresh my location" : "Find services near me"}</Text></Pressable>
             {!!nearby && <Pressable style={styles.showAllButton} onPress={() => setNearby(null)}><Text style={styles.showAllText}>Show all</Text></Pressable>}
           </View>
-          {!!nearby && <Text style={styles.locationSummary}>Nearby filter active within 100 km{nearby.label ? ` of ${nearby.label}` : ""}{typeof nearby.accuracy === "number" ? ` · accuracy ±${Math.round(nearby.accuracy)} m` : ""}</Text>}
-          {!!cacheNotice && <Text style={styles.cacheNotice}>{cacheNotice}</Text>}
+          {!!nearby && <View style={styles.locationStrip}><Ionicons name="navigate-circle" size={16} color="#12805F" /><Text numberOfLines={1} style={styles.locationSummary}>{nearby.label || "Current location"} · 100 km{typeof nearby.accuracy === "number" ? ` · ±${Math.round(nearby.accuracy)} m` : ""}</Text></View>}
+          {!!cacheNotice && <View style={styles.cacheStrip}><Ionicons name="cloud-done-outline" size={14} color="#496B60" /><Text numberOfLines={1} style={styles.cacheNotice}>{cacheNotice}</Text></View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
@@ -483,7 +483,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
                     <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
                     {typeof item.distance_km === "number" && <Text style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
-                    {!!item.review_count && <Text style={styles.rating}>Rating {item.average_rating?.toFixed(1)} ({item.review_count})</Text>}
+                    {!!item.review_count && <View style={styles.ratingRow}><Ionicons name="star" size={12} color="#E8A100" /><Text style={styles.rating}>{item.average_rating?.toFixed(1)} ({item.review_count})</Text></View>}
                   </View>
                 </Pressable>
               )}
@@ -537,35 +537,38 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   loader: { marginTop: 50 },
   pageLoader: { marginVertical: 18 },
-  modeBar: { marginHorizontal: 12, marginTop: 10, padding: 4, borderRadius: 12, backgroundColor: "#EDEDED", flexDirection: "row" },
-  modeButton: { flex: 1, minHeight: 40, alignItems: "center", justifyContent: "center", borderRadius: 9 },
+  modeBar: { marginHorizontal: 10, marginTop: 7, padding: 3, borderRadius: 14, backgroundColor: "#EDEDED", flexDirection: "row" },
+  modeButton: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center", borderRadius: 11 },
   modeButtonActive: { backgroundColor: "#FFF" },
   modeText: { color: "#777", fontWeight: "800" },
   modeTextActive: { color: "#191919" },
-  search: { minHeight: 48, margin: 12, paddingHorizontal: 12, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#E8E8E8" },
+  search: { minHeight: 42, marginHorizontal: 10, marginTop: 8, marginBottom: 8, paddingHorizontal: 12, borderRadius: 14, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#DEDEDE" },
   reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
   reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
   stars: { flexDirection: "row", gap: 8 },
-  cacheNotice: { marginHorizontal: 14, marginBottom: 7, color: "#496B60", fontSize: 11, fontWeight: "700" },
-  rating: { marginTop: 3, color: "#A66A00", fontSize: 11, fontWeight: "900" },
-  nearbyActions: { marginHorizontal: 12, marginBottom: 6, flexDirection: "row", gap: 8 },
-  nearbyButton: { flex: 1, minHeight: 42, borderRadius: 10, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, backgroundColor: "#FFF" },
+  cacheStrip: { marginHorizontal: 12, marginBottom: 3, flexDirection: "row", alignItems: "center", gap: 5 },
+  cacheNotice: { flex: 1, color: "#496B60", fontSize: 10, fontWeight: "700" },
+  ratingRow: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 4 },
+  rating: { color: "#A66A00", fontSize: 11, fontWeight: "900" },
+  nearbyActions: { marginHorizontal: 10, marginBottom: 4, flexDirection: "row", gap: 7 },
+  nearbyButton: { flex: 1, minHeight: 36, borderRadius: 14, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#FFF" },
   nearbyButtonActive: { backgroundColor: "#FF4747" },
   nearbyText: { color: "#FF4747", fontWeight: "900" },
   nearbyTextActive: { color: "#FFF" },
-  showAllButton: { minHeight: 42, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1, borderColor: "#D9D9D9", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF" },
+  showAllButton: { minHeight: 36, paddingHorizontal: 13, borderRadius: 14, borderWidth: 1, borderColor: "#D9D9D9", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF" },
   showAllText: { color: "#333", fontWeight: "900" },
-  locationSummary: { marginHorizontal: 14, marginBottom: 7, color: "#496B60", fontSize: 11, fontWeight: "800" },
+  locationStrip: { marginHorizontal: 12, marginBottom: 3, minHeight: 20, flexDirection: "row", alignItems: "center", gap: 5 },
+  locationSummary: { flex: 1, color: "#2E5C4E", fontSize: 10, fontWeight: "800" },
   distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
-  chipScroller: { height: 46, maxHeight: 46, flexGrow: 0 },
-  chips: { height: 46, paddingHorizontal: 12, gap: 8, paddingBottom: 8, alignItems: "center" },
-  chip: { height: 36, paddingHorizontal: 14, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
+  chipScroller: { height: 39, maxHeight: 39, flexGrow: 0 },
+  chips: { height: 39, paddingHorizontal: 10, gap: 7, paddingBottom: 5, alignItems: "center" },
+  chip: { height: 31, paddingHorizontal: 13, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: "#FF4747", borderColor: "#FF4747" },
   chipText: { fontWeight: "700", color: "#555", lineHeight: 18 },
   chipTextActive: { color: "#FFF" },
-  listHeading: { paddingHorizontal: 14, paddingVertical: 8, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  listHeading: { paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },
-  card: { flex: 1, backgroundColor: "#FFF", borderRadius: 12, overflow: "hidden", marginBottom: 8, maxWidth: "49%" },
+  card: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", marginBottom: 8, maxWidth: "49%", borderWidth: 1, borderColor: "#ECECEC" },
   cardImage: { width: "100%", aspectRatio: 1, backgroundColor: "#EEE" },
   cardBody: { padding: 10 },
   cardTitle: { fontSize: 14, fontWeight: "800", color: "#191919", minHeight: 38 },
@@ -591,7 +594,7 @@ const styles = StyleSheet.create({
   slotActive: { borderColor: "#FF4747", backgroundColor: "#FFF4F4" },
   input: { borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 12, marginTop: 10, backgroundColor: "#FFF" },
   textarea: { minHeight: 110, textAlignVertical: "top" },
-  primary: { backgroundColor: "#FF4747", borderRadius: 11, padding: 14, alignItems: "center", marginTop: 12 },
+  primary: { backgroundColor: "#111111", borderRadius: 16, padding: 14, alignItems: "center", marginTop: 12, borderBottomWidth: 3, borderBottomColor: "#FF4747" },
   primaryText: { color: "#FFF", fontWeight: "900" },
   secondary: { backgroundColor: "#F0F4F2", borderRadius: 11, padding: 14, alignItems: "center", marginTop: 10 },
   secondaryText: { color: "#19332B", fontWeight: "900" },
