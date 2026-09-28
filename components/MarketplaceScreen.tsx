@@ -59,6 +59,23 @@ type BuyerRequest = {
   message?: string;
   created_at: string;
 };
+type Conversation = {
+  id: string;
+  listing_id: string;
+  listing_title: string;
+  counterpart_name: string;
+  status: string;
+  last_message: string;
+  last_message_at: string;
+  unread_count: number;
+  subscription_active: boolean;
+};
+type ConversationMessage = {
+  id: string;
+  sender_type: "buyer" | "provider";
+  body: string;
+  created_at: string;
+};
 
 const LISTING_TYPES = [
   { key: "", label: "All" },
@@ -85,11 +102,15 @@ function apiMessage(body: any, fallback: string) {
   return String(body?.message || body?.error || fallback);
 }
 
-export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | null; bottomInset?: number }) {
+export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore" }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages" }) {
   const { width: viewportWidth } = useWindowDimensions();
-  const [mode, setMode] = useState<"explore" | "requests">("explore");
+  const [mode, setMode] = useState<"explore" | "requests" | "messages">(initialMode);
   const [items, setItems] = useState<Listing[]>([]);
   const [requests, setRequests] = useState<BuyerRequest[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
+  const [conversationDraft, setConversationDraft] = useState("");
   const [selected, setSelected] = useState<Listing | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [type, setType] = useState("");
@@ -111,6 +132,10 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
   const [cacheNotice, setCacheNotice] = useState("");
   const [reviewedRequests, setReviewedRequests] = useState<Record<string, number>>({});
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   const readNearbyPosition = useCallback(async () => {
     let permission = await Location.getForegroundPermissionsAsync();
@@ -261,13 +286,92 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
     }
   }, [authHeaders]);
 
+  const loadConversations = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true); else setLoading(true);
+    setError("");
+    try {
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations`, { headers: authHeaders });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiMessage(body, "Your messages could not be loaded"));
+      setConversations(Array.isArray(body.items) ? body.items : []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Your messages could not be loaded");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [authHeaders]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       if (mode === "explore") void loadListings();
-      else void loadRequests();
+      else if (mode === "requests") void loadRequests();
+      else void loadConversations();
     }, mode === "explore" ? 250 : 0);
     return () => clearTimeout(timer);
-  }, [loadListings, loadRequests, mode]);
+  }, [loadConversations, loadListings, loadRequests, mode]);
+
+  async function startConversation() {
+    if (!selected || !requestMessage.trim()) {
+      Alert.alert("Write a message", "Tell the provider what you need before starting a conversation.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${selected.id}/conversations`, {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: requestMessage.trim() })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiMessage(body, "Message could not be sent"));
+      setRequestMessage("");
+      setSelected(null);
+      setMode("messages");
+      await loadConversations();
+    } catch (messageError) {
+      Alert.alert("Unable to message provider", messageError instanceof Error ? messageError.message : "Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function openConversation(conversation: Conversation) {
+    setLoading(true);
+    try {
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages`, { headers: authHeaders });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiMessage(body, "Conversation could not be loaded"));
+      setConversationMessages(Array.isArray(body.items) ? body.items : []);
+      setSelectedConversation({ ...conversation, unread_count: 0 });
+      setConversations(current => current.map(item => item.id === conversation.id ? { ...item, unread_count: 0 } : item));
+    } catch (messageError) {
+      Alert.alert("Unable to open messages", messageError instanceof Error ? messageError.message : "Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function sendConversationMessage() {
+    if (!selectedConversation || !conversationDraft.trim()) return;
+    setLoading(true);
+    try {
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${selectedConversation.id}/messages`, {
+        method: "POST",
+        headers: { ...authHeaders, "Content-Type": "application/json" },
+        body: JSON.stringify({ message: conversationDraft.trim() })
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(apiMessage(body, "Message could not be sent"));
+      setConversationDraft("");
+      await openConversation(selectedConversation);
+      void loadConversations();
+    } catch (messageError) {
+      Alert.alert("Unable to send message", messageError instanceof Error ? messageError.message : "Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function openListing(item: Listing) {
     setSelected(item);
@@ -366,6 +470,34 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
   const heading = LISTING_TYPES.find(item => item.key === type)?.label || "Services";
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
+  if (selectedConversation) {
+    return (
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.fill}>
+        <View style={styles.detailHeader}>
+          <Pressable onPress={() => { setSelectedConversation(null); void loadConversations(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back to messages">
+            <Ionicons name="arrow-back" size={25} />
+          </Pressable>
+          <View style={styles.grow}><Text style={styles.detailHeaderTitle} numberOfLines={1}>{selectedConversation.listing_title}</Text><Text style={styles.meta}>{selectedConversation.counterpart_name}</Text></View>
+        </View>
+        <ScrollView style={styles.grow} contentContainerStyle={styles.messageThread}>
+          {conversationMessages.map(message => (
+            <View key={message.id} style={[styles.messageBubble, message.sender_type === "buyer" ? styles.messageMine : styles.messageTheirs]}>
+              <Text style={message.sender_type === "buyer" ? styles.messageMineText : styles.body}>{message.body}</Text>
+              <Text style={[styles.messageTime, message.sender_type === "buyer" && styles.messageMineTime]}>{new Date(message.created_at).toLocaleString()}</Text>
+            </View>
+          ))}
+        </ScrollView>
+        <View style={[styles.messageComposer, { paddingBottom: bottomInset + 8 }]}>
+          {!selectedConversation.subscription_active && <Text style={styles.subscriptionPaused}>The provider subscription is inactive, so messaging is temporarily paused.</Text>}
+          <TextInput value={conversationDraft} onChangeText={setConversationDraft} editable={selectedConversation.subscription_active && !loading} placeholder="Write a message" multiline maxLength={2000} style={[styles.input, styles.messageInput]} />
+          <Pressable disabled={!selectedConversation.subscription_active || loading || !conversationDraft.trim()} style={[styles.primary, (!selectedConversation.subscription_active || loading || !conversationDraft.trim()) && styles.disabled]} onPress={() => void sendConversationMessage()}>
+            <Text style={styles.primaryText}>{loading ? "Sending…" : "Send message"}</Text>
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    );
+  }
+
   if (selected) {
     const requiresSafetyAcknowledgement = !selected.direct_booking;
     return (
@@ -427,6 +559,9 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             <Pressable disabled={loading} style={[styles.primary, loading && styles.disabled]} onPress={submitRequest}>
               <Text style={styles.primaryText}>{loading ? "Sending…" : selected.direct_booking ? "Request booking" : "Send enquiry"}</Text>
             </Pressable>
+            <Pressable disabled={loading || !requestMessage.trim()} style={[styles.secondary, (loading || !requestMessage.trim()) && styles.disabled]} onPress={() => void startConversation()}>
+              <Text style={styles.secondaryText}>Message provider</Text>
+            </Pressable>
             <Pressable disabled={requiresSafetyAcknowledgement && !safetyAcknowledged} style={[styles.secondary, requiresSafetyAcknowledgement && !safetyAcknowledged && styles.disabled]} onPress={revealContact}>
               <Text style={styles.secondaryText}>View verified provider contact</Text>
             </Pressable>
@@ -448,6 +583,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
       <View style={styles.modeBar}>
         <Pressable style={[styles.modeButton, mode === "explore" && styles.modeButtonActive]} onPress={() => setMode("explore")}><Text style={[styles.modeText, mode === "explore" && styles.modeTextActive]}>Explore</Text></Pressable>
         <Pressable style={[styles.modeButton, mode === "requests" && styles.modeButtonActive]} onPress={() => setMode("requests")}><Text style={[styles.modeText, mode === "requests" && styles.modeTextActive]}>My requests</Text></Pressable>
+        <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Messages</Text></Pressable>
       </View>
       {mode === "explore" ? (
         <>
@@ -492,7 +628,7 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
             />
           )}
         </>
-      ) : loading && !requests.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
+      ) : mode === "requests" ? (loading && !requests.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
         <FlatList
           data={requests}
           keyExtractor={item => item.id}
@@ -522,6 +658,25 @@ export function MarketplaceScreen({ token, bottomInset = 0 }: { token: string | 
           )}
           ListEmptyComponent={<EmptyState icon="calendar-outline" title="No requests yet" message={error || "Bookings and enquiries you send will appear here."} />}
           ListFooterComponent={loadingMore ? <ActivityIndicator color="#FF4747" style={styles.pageLoader} /> : null}
+        />
+      )) : loading && !conversations.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
+        <FlatList
+          data={conversations}
+          keyExtractor={item => item.id}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadConversations(true)} tintColor="#FF4747" />}
+          contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 24 }}
+          renderItem={({ item }) => (
+            <Pressable style={styles.requestCard} onPress={() => void openConversation(item)}>
+              <View style={styles.requestHeader}>
+                <Text style={styles.requestTitle} numberOfLines={2}>{item.listing_title}</Text>
+                {!!item.unread_count && <Text style={styles.status}>{item.unread_count} new</Text>}
+              </View>
+              <Text style={styles.meta}>{item.counterpart_name} · {new Date(item.last_message_at).toLocaleString()}</Text>
+              <Text style={styles.body} numberOfLines={2}>{item.last_message}</Text>
+              {!item.subscription_active && <Text style={styles.subscriptionPaused}>Provider subscription inactive — messaging paused</Text>}
+            </Pressable>
+          )}
+          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title="No messages yet" message={error || "Open a verified provider and select Message provider to begin."} />}
         />
       )}
     </View>
@@ -594,7 +749,7 @@ const styles = StyleSheet.create({
   slotActive: { borderColor: "#FF4747", backgroundColor: "#FFF4F4" },
   input: { borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 12, marginTop: 10, backgroundColor: "#FFF" },
   textarea: { minHeight: 110, textAlignVertical: "top" },
-  primary: { backgroundColor: "#111111", borderRadius: 16, padding: 14, alignItems: "center", marginTop: 12, borderBottomWidth: 3, borderBottomColor: "#FF4747" },
+  primary: { backgroundColor: "#FF4747", borderRadius: 16, padding: 14, alignItems: "center", marginTop: 12, borderBottomWidth: 3, borderBottomColor: "#D92F3A" },
   primaryText: { color: "#FFF", fontWeight: "900" },
   secondary: { backgroundColor: "#F0F4F2", borderRadius: 11, padding: 14, alignItems: "center", marginTop: 10 },
   secondaryText: { color: "#19332B", fontWeight: "900" },
@@ -605,5 +760,15 @@ const styles = StyleSheet.create({
   requestHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   requestTitle: { flex: 1, color: "#191919", fontSize: 16, fontWeight: "900" },
   status: { color: "#A5282E", backgroundColor: "#FFF1F1", borderRadius: 999, paddingHorizontal: 9, paddingVertical: 5, overflow: "hidden", fontSize: 11, fontWeight: "900", textTransform: "capitalize" },
-  requestDate: { marginTop: 8, color: "#333", fontWeight: "700" }
+  requestDate: { marginTop: 8, color: "#333", fontWeight: "700" },
+  messageThread: { padding: 14, gap: 9 },
+  messageBubble: { maxWidth: "84%", borderRadius: 16, paddingHorizontal: 13, paddingVertical: 10 },
+  messageMine: { alignSelf: "flex-end", backgroundColor: "#FF4747", borderBottomRightRadius: 4 },
+  messageTheirs: { alignSelf: "flex-start", backgroundColor: "#FFFFFF", borderBottomLeftRadius: 4, borderWidth: 1, borderColor: "#E7E7E7" },
+  messageMineText: { color: "#FFFFFF", lineHeight: 20 },
+  messageTime: { color: "#888", fontSize: 10, marginTop: 5 },
+  messageMineTime: { color: "#FFE3E3" },
+  messageComposer: { backgroundColor: "#FFFFFF", paddingHorizontal: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#E5E5E5" },
+  messageInput: { minHeight: 54, maxHeight: 110, textAlignVertical: "top" },
+  subscriptionPaused: { color: "#A5282E", fontSize: 12, fontWeight: "800", marginTop: 8 }
 });

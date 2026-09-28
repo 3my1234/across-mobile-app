@@ -85,6 +85,7 @@ function AcrossApp() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [serviceInitialMode, setServiceInitialMode] = useState<"explore" | "requests" | "messages">("explore");
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,6 +122,7 @@ function AcrossApp() {
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const [supportSubject, setSupportSubject] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
+  const [supportReply, setSupportReply] = useState("");
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [ticketMessages, setTicketMessages] = useState<SupportMessage[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -504,6 +506,7 @@ function AcrossApp() {
     const notificationId = String(notification?.id || notification?.notification_id || "");
     if (notificationId) await markNotificationRead(notificationId, false);
     const orderId = String(notification?.order_id || notification?.data?.order_id || "");
+    const notificationType = String(notification?.type || notification?.notification_type || "");
     setShowNotifications(false);
     if (orderId) {
       setFocusedOrderId(orderId);
@@ -516,6 +519,14 @@ function AcrossApp() {
       setTimeout(() => {
         trackScrollRef.current?.scrollTo({ y: Math.max(0, (orderOffsetsRef.current[orderId] || 0) - 12), animated: true });
       }, 250);
+    } else if (notificationType === "marketplace_message") {
+      setServiceInitialMode("messages");
+      setActiveTab("services");
+    } else if (notificationType === "marketplace_request") {
+      setServiceInitialMode("requests");
+      setActiveTab("services");
+    } else if (notificationType === "ticket_reply") {
+      setActiveTab("support");
     }
     await loadNotifications(token);
   }
@@ -1197,6 +1208,27 @@ function AcrossApp() {
     try { const r = await fetch(`${API_URL}/api/v1/support/tickets/${ticketId}/messages`, { headers: { Authorization: `Bearer ${token}` } }); if (r.ok) { const d = await r.json(); setTicketMessages(d.messages || []); } } catch {}
   }
 
+  async function replyToSupportTicket() {
+    if (!token || !selectedTicket || !supportReply.trim()) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`${API_URL}/api/v1/support/tickets/${selectedTicket.id}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: supportReply.trim() })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || payload?.message || "Failed to send reply");
+      setSupportReply("");
+      setSelectedTicket(current => current ? { ...current, status: "open" } : current);
+      await Promise.all([loadTicketMessages(selectedTicket.id), loadSupportTickets()]);
+    } catch (error) {
+      Alert.alert("Reply not sent", error instanceof Error ? error.message : "Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ---- Profile ----
   async function loadProfile(authToken: string | null = token) {
     if (!authToken) return;
@@ -1454,7 +1486,7 @@ function AcrossApp() {
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
         )}
 
-        {activeTab === "services" && <MarketplaceScreen token={token} bottomInset={bottomInset} />}
+        {activeTab === "services" && <MarketplaceScreen token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} />}
 
         {activeTab === "cart" && (
           <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
@@ -1625,6 +1657,14 @@ function AcrossApp() {
                     <Text style={{ marginTop: 4, color: "#8C8C8C", fontSize: 11 }}>{new Date(m.created_at).toLocaleString()}</Text>
                   </View>
                 ))}
+                {selectedTicket.status !== "closed" ? (
+                  <>
+                    <TextInput style={s.supportMessageInput} value={supportReply} onChangeText={setSupportReply} placeholder="Reply to Atlantic Express support" multiline maxLength={5000} textAlignVertical="top" />
+                    <Pressable style={[s.supportSubmitButton, (busy || !supportReply.trim()) && s.disabled]} onPress={() => void replyToSupportTicket()} disabled={busy || !supportReply.trim()}>
+                      <Text style={s.supportSubmitButtonText}>{busy ? "Sending reply..." : "Send reply"}</Text>
+                    </Pressable>
+                  </>
+                ) : <Text style={{ marginTop: 14, color: "#8C8C8C" }}>This support ticket is closed.</Text>}
               </View>
             ) : (
               <View>
