@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, Image, ImageBackground,
+  ActivityIndicator, Alert, Animated, Dimensions, Image,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
   RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View
 } from "react-native";
@@ -84,23 +84,53 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
   }
 
   return (
-    <ImageBackground source={LOGO} resizeMode="contain" style={s.authBg} imageStyle={s.authBgImage}>
+    <View style={s.authBg}>
+      <View style={s.authAccentTop} />
+      <View style={s.authAccentBottom} />
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.authKeyboard}>
           <ScrollView ref={authScrollRef} contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
-            <Image source={LOGO} style={s.authLogo} resizeMode="contain" />
+            <View style={s.authBrand}>
+              <Image source={LOGO} style={[s.authLogo, !isWelcome && s.authLogoCompact]} resizeMode="contain" />
+              <Text style={s.authEyebrow}>ATLANTIC EXPRESS</Text>
+            </View>
             {isWelcome ? (
-              <View style={s.authPanel}>
-                <Text style={s.authTitle}>Shop China. Pay in Naira. Track to your door.</Text>
-                <Text style={s.authCopy}>Sign in to access your cart, secure payments, saved details, and delivery tracking.</Text>
+              <>
+                <View style={s.authHero}>
+                  <Text style={s.authTitle}>Shop products. Find trusted services. Get it delivered.</Text>
+                  <Text style={s.authCopy}>Discover local and international products, connect with nearby providers, pay securely, and track every order in one place.</Text>
+                  <View style={s.authFeatureRow}>
+                    <View style={s.authFeature}>
+                      <View style={s.authFeatureIcon}><Ionicons name="bag-handle-outline" size={18} color={COLORS.primary} /></View>
+                      <Text style={s.authFeatureText}>Products</Text>
+                    </View>
+                    <View style={s.authFeature}>
+                      <View style={s.authFeatureIcon}><Ionicons name="location-outline" size={18} color={COLORS.primary} /></View>
+                      <Text style={s.authFeatureText}>Nearby services</Text>
+                    </View>
+                    <View style={s.authFeature}>
+                      <View style={s.authFeatureIcon}><Ionicons name="navigate-outline" size={18} color={COLORS.primary} /></View>
+                      <Text style={s.authFeatureText}>Live tracking</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={s.authPanel}>
                 {!!noticeText && (
                   <View style={s.authNotice}>
                     <Ionicons name="alert-circle-outline" size={16} color="#B54708" />
                     <Text style={s.authNoticeText}>{noticeText}</Text>
                   </View>
                 )}
-                <Pressable style={s.primaryButton} onPress={() => onModeChange("signup")}><Text style={s.primaryButtonText}>Create Account</Text></Pressable>
+                <Pressable style={s.authPrimaryButton} onPress={() => onModeChange("signup")}>
+                  <Text style={s.primaryButtonText}>Create free account</Text>
+                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                </Pressable>
+                <View style={s.authDivider}>
+                  <View style={s.authDividerLine} />
+                  <Text style={s.authDividerText}>or continue with</Text>
+                  <View style={s.authDividerLine} />
+                </View>
                 <Pressable
                   style={[s.gmailButton, googleBusy && s.disabled]}
                   onPress={onGoogle}
@@ -111,12 +141,23 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
                   {(!googleReady && !googleTimedOut) || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name={googleReady ? "logo-google" : "refresh"} size={18} color="#101817" />}
                   <Text style={s.gmailButtonText}>{googleBusy ? "Opening Google…" : googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Connecting Google sign-in…"}</Text>
                 </Pressable>
-                {!googleReady && googleTimedOut && <Text style={s.authCopy}>Google took longer than expected. Check your connection, retry, or use email sign-in.</Text>}
-                <Pressable style={s.textButton} onPress={() => onModeChange("signin")}><Text style={s.textButtonText}>I have an account</Text></Pressable>
-              </View>
+                {!googleReady && googleTimedOut && (
+                  <View style={s.authInlineMessage}>
+                    <Ionicons name="information-circle-outline" size={17} color="#667085" />
+                    <Text style={s.authInlineMessageText}>Google is taking longer than expected. Retry, or sign in securely with email.</Text>
+                  </View>
+                )}
+                <Pressable style={s.authEmailButton} onPress={() => onModeChange("signin")}>
+                  <Ionicons name="mail-outline" size={18} color="#202725" />
+                  <Text style={s.authEmailButtonText}>Sign in with email</Text>
+                </Pressable>
+                <Text style={s.authTerms}>By continuing, you agree to Atlantic Express&apos; terms and privacy policy.</Text>
+                </View>
+              </>
             ) : (
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
+                <Text style={s.authFormCopy}>{mode === "signin" ? "Access your orders, messages, saved details, and provider requests." : "Join the marketplace to shop, book services, pay securely, and track your orders."}</Text>
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
@@ -130,7 +171,7 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </ImageBackground>
+    </View>
   );
 }
 
