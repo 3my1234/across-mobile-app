@@ -220,9 +220,8 @@ function AcrossApp() {
   const totals = useMemo(() => {
     const items = cart.reduce((sum, i) => sum + i.quantity, 0);
     const amount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-    const customs = amount * 0.2;
-    const vat = items > 0 ? 100 : 0;
-    return { items, amount, customs, vat, payablePreview: amount + customs + vat };
+    const platformFee = Math.round(amount * 0.01 * 100) / 100;
+    return { items, amount, platformFee, payablePreview: amount + platformFee };
   }, [cart]);
 
   const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
@@ -1542,8 +1541,7 @@ function AcrossApp() {
               <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
               <View style={s.panel}>
                 <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(totals.amount)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Customs (20%)</Text><Text style={s.metricValue}>{money(totals.customs)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>VAT</Text><Text style={s.metricValue}>{money(totals.vat)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total) : money(totals.payablePreview)}</Text></View>
                 <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>

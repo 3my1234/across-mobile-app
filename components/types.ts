@@ -37,6 +37,7 @@ export type Quote = {
   shipping_fee: number;
   vat_fee: number;
   stamp_duty_fee?: number;
+  platform_fee: number;
   grand_total: number;
   currency: string;
 };
@@ -48,6 +49,7 @@ export type OrderSummary = {
   shipping_fee: number;
   customs_fee: number;
   vat_fee: number;
+  platform_fee: number;
   order_status: string;
   current_tracking_stage: string;
   package_label: string;
