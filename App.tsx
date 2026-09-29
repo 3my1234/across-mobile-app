@@ -59,8 +59,8 @@ function trackingProgress(order: OrderSummary) {
   const status = String(order.fulfillment?.status || "").toLowerCase();
   if (route === "merchant_local") {
     const statusIndex: Record<string, number> = {
-      pending: 0, accepted: 1, packed: 2, handed_to_atlantic: 3,
-      local_hub: 3, ready_for_pickup: 4, out_for_delivery: 4, delivered: 5
+      pending: 0, accepted: 1, packed: 2,
+      ready_for_pickup: 4, out_for_delivery: 4, delivered: 5
     };
     return { stages: LOCAL_TRACKING_STAGES, currentIndex: statusIndex[status] ?? 0 };
   }
@@ -68,7 +68,7 @@ function trackingProgress(order: OrderSummary) {
     const statusIndex: Record<string, number> = {
       pending: 0, accepted: 1, processing: 1, dispatched_from_origin: 2,
       international_transit: 3, customs_clearance: 3, local_hub: 4,
-      handed_to_atlantic: 4, ready_for_pickup: 5, out_for_delivery: 5, delivered: 6
+      ready_for_pickup: 5, out_for_delivery: 5, delivered: 6
     };
     return { stages: INTERNATIONAL_TRACKING_STAGES, currentIndex: statusIndex[status] ?? 0 };
   }
@@ -906,8 +906,12 @@ function AcrossApp() {
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }
   function addToCart(p: Product) {
-    const source = `${p.fulfillment_mode || "atlantic_import"}:${p.provider_id || "atlantic"}`;
-    const existingSource = cart[0] ? `${cart[0].product.fulfillment_mode || "atlantic_import"}:${cart[0].product.provider_id || "atlantic"}` : source;
+    if (!p.provider_id || !p.fulfillment_mode) {
+      Alert.alert("Product unavailable", "This product is not linked to a verified seller-managed fulfilment route.");
+      return;
+    }
+    const source = `${p.fulfillment_mode}:${p.provider_id}`;
+    const existingSource = cart[0] ? `${cart[0].product.fulfillment_mode}:${cart[0].product.provider_id}` : source;
     if (cart.length && source !== existingSource) {
       Alert.alert(
         "Start a separate seller cart?",
@@ -1633,7 +1637,7 @@ function AcrossApp() {
                   </View>
                   <Text style={{ marginTop: 10, color: "#191919", fontWeight: "900" }}>{money(order.total_amount)}</Text>
                   {!!order.package_label && <Text style={{ marginTop: 4, color: "#66736F", fontSize: 12 }}>Package: {order.package_label}</Text>}
-                  {!!order.fulfillment && order.fulfillment.route !== "atlantic_import" && (
+                  {!!order.fulfillment && (
                     <View style={{ marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: "#F3F8F6", borderWidth: 1, borderColor: "#D9E9E2" }}>
                       <Text style={{ color: "#66736F", fontSize: 12, fontWeight: "800" }}>{fulfillmentRouteLabel(order.fulfillment.route)}</Text>
                       <Text style={{ marginTop: 4, color: "#101817", fontSize: 16, fontWeight: "900" }}>{readableFulfillmentStatus(order.fulfillment.status)}</Text>

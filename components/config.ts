@@ -21,7 +21,7 @@ export const INTERNATIONAL_TRACKING_STAGES = [
 
 export const LOCAL_TRACKING_STAGES = [
   "Order Placed","Seller Confirmed","Preparing Order",
-  "Ready for Handover","Out for Delivery / Ready for Pickup","Delivered"
+  "Ready for Pickup / Delivery","Out for Delivery / Ready for Pickup","Delivered"
 ] as const;
 
 export const BOTTOM_NAV_HEIGHT = 58;

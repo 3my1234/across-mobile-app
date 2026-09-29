@@ -406,7 +406,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
           <View style={styles.galleryCount}><Text style={styles.galleryCountText}>{galleryIndex + 1}/{images.length}</Text></View>
           <View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
-            <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally" : isCrossBorderMerchantProduct ? "International seller" : "International marketplace"}</Text>
+            <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally from seller" : isCrossBorderMerchantProduct ? "International seller" : "Seller fulfilment unavailable"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
             <Text style={styles.detailSku}>SKU {product.sku}</Text>
             <View style={styles.detailPriceRow}>
@@ -418,7 +418,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Purchased</Text><Text style={styles.detailMetaValue}>{Number(product.sold_count || 0).toLocaleString()} sold</Text></View>
             <View style={styles.detailMetaRow}>
               <Text style={styles.detailMetaLabel}>Fulfilment</Text>
-              <Text style={styles.detailMetaValue}>{isLocalMerchantProduct ? "Seller-managed local delivery" : isCrossBorderMerchantProduct ? "Seller-managed international delivery" : "International delivery"}</Text>
+              <Text style={styles.detailMetaValue}>{isLocalMerchantProduct ? "Seller-managed local delivery" : isCrossBorderMerchantProduct ? "Seller-managed international delivery" : "Unavailable"}</Text>
             </View>
             {!!product.inventory_location && (
               <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Dispatch location</Text><Text style={styles.detailMetaValue}>{product.inventory_location}</Text></View>

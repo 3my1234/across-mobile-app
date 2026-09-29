@@ -16,7 +16,7 @@ export type Product = {
   sold_count: number;
   average_rating: number;
   provider_id?: string;
-  fulfillment_mode?: "atlantic_import" | "merchant_local" | "merchant_cross_border";
+  fulfillment_mode?: "merchant_local" | "merchant_cross_border";
   inventory_country_code?: string;
   inventory_city?: string;
   inventory_location?: string;
@@ -26,7 +26,6 @@ export type Product = {
   distance_km?: number;
   delivery_max_days?: number;
   delivery_methods?: string[];
-  atlantic_last_mile?: boolean;
 };
 
 export type CartItem = { product: Product; quantity: number };
@@ -56,8 +55,8 @@ export type OrderSummary = {
   item_count: number;
   items_summary: string;
   fulfillment?: {
-    route: "atlantic_import" | "merchant_local" | "merchant_cross_border";
-    owner: "atlantic" | "merchant" | "atlantic_last_mile";
+    route: "merchant_local" | "merchant_cross_border";
+    owner: "merchant";
     status: string;
     carrier: string;
     tracking_number: string;
