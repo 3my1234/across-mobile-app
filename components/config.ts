@@ -13,9 +13,15 @@ export const FALLBACK_IMAGES = [
   "https://images.unsplash.com/photo-1601524909162-ae8725290836?auto=format&fit=crop&w=700&q=70"
 ];
 
-export const TRACKING_STAGES = [
-  "Order Placed","Arrived at China Hub","In Transit Internationally",
-  "Arrived at Local Hub","Out for Delivery","Delivered"
+export const INTERNATIONAL_TRACKING_STAGES = [
+  "Order Placed","Seller Processing","Dispatched from Origin",
+  "In Transit Internationally","Arrived at Local Hub",
+  "Out for Delivery / Ready for Pickup","Delivered"
+] as const;
+
+export const LOCAL_TRACKING_STAGES = [
+  "Order Placed","Seller Confirmed","Preparing Order",
+  "Ready for Handover","Out for Delivery / Ready for Pickup","Delivered"
 ] as const;
 
 export const BOTTOM_NAV_HEIGHT = 58;

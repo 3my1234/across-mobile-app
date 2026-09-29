@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, Image,
+  ActivityIndicator, Alert, Animated, Dimensions, Image, ImageBackground,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
   RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View
 } from "react-native";
@@ -15,6 +15,8 @@ import { s } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
 import { COLORS } from "./theme";
 import { ReviewStars } from "./ReviewStars";
+
+const MOBILE_AUTH_BACKGROUND = require("../assets/mobile-background.png");
 
 // ---- Launch Screen ----
 export function LaunchScreen({ label }: { label?: string }) {
@@ -84,9 +86,7 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
   }
 
   return (
-    <View style={s.authBg}>
-      <View style={s.authAccentTop} />
-      <View style={s.authAccentBottom} />
+    <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" style={s.authBg} imageStyle={s.authBgImage}>
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.authKeyboard}>
@@ -171,7 +171,7 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
-    </View>
+    </ImageBackground>
   );
 }
 
@@ -217,6 +217,12 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
   const pulse = useRef(new Animated.Value(0)).current;
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
+  const isLocalMerchantProduct = product.fulfillment_mode === "merchant_local";
+  const isCrossBorderMerchantProduct = product.fulfillment_mode === "merchant_cross_border";
+  const originLabel = [product.inventory_city, product.inventory_country_code].filter(Boolean).join(", ")
+    || product.origin_hub.name
+    || product.origin_hub.city
+    || "International";
 
   useEffect(() => {
     setProduct(initialProduct);
@@ -400,22 +406,22 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
           <View style={styles.galleryCount}><Text style={styles.galleryCountText}>{galleryIndex + 1}/{images.length}</Text></View>
           <View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
-            <Text style={styles.productHub}>{product.category_path?.[0] || product.origin_hub.city || "China"} hub</Text>
+            <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally" : isCrossBorderMerchantProduct ? "International seller" : "International marketplace"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
             <Text style={styles.detailSku}>SKU {product.sku}</Text>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price)}</Text>
               {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price)}</Text>}
             </View>
-            <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Origin</Text><Text style={styles.detailMetaValue}>{product.origin_hub.name || product.origin_hub.city || "China"}</Text></View>
+            <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{originLabel}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Purchased</Text><Text style={styles.detailMetaValue}>{Number(product.sold_count || 0).toLocaleString()} sold</Text></View>
             <View style={styles.detailMetaRow}>
               <Text style={styles.detailMetaLabel}>Fulfilment</Text>
-              <Text style={styles.detailMetaValue}>{product.fulfillment_mode === "merchant_local" ? "Local merchant delivery" : product.fulfillment_mode === "merchant_cross_border" ? "International merchant delivery" : "Atlantic Express import"}</Text>
+              <Text style={styles.detailMetaValue}>{isLocalMerchantProduct ? "Seller-managed local delivery" : isCrossBorderMerchantProduct ? "Seller-managed international delivery" : "International delivery"}</Text>
             </View>
-            {!!(product.inventory_location || product.inventory_city || product.inventory_country_code) && (
-              <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{[product.inventory_location, product.inventory_city, product.inventory_country_code].filter(Boolean).join(", ")}</Text></View>
+            {!!product.inventory_location && (
+              <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Dispatch location</Text><Text style={styles.detailMetaValue}>{product.inventory_location}</Text></View>
             )}
             {!!product.delivery_max_days && (
               <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivery estimate</Text><Text style={styles.detailMetaValue}>{product.delivery_min_days || 0}-{product.delivery_max_days} days after processing</Text></View>

@@ -16,7 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
-import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
+import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, INTERNATIONAL_TRACKING_STAGES, LOCAL_TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
 import { money, fetchWithTimeout, sleep, mapProduct } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -51,7 +51,34 @@ function readableFulfillmentStatus(value: string) {
 function fulfillmentRouteLabel(route?: string) {
   if (route === "merchant_local") return "Local merchant delivery";
   if (route === "merchant_cross_border") return "International merchant delivery";
-  return "Atlantic Express import";
+  return "International delivery";
+}
+
+function trackingProgress(order: OrderSummary) {
+  const route = order.fulfillment?.route;
+  const status = String(order.fulfillment?.status || "").toLowerCase();
+  if (route === "merchant_local") {
+    const statusIndex: Record<string, number> = {
+      pending: 0, accepted: 1, packed: 2, handed_to_atlantic: 3,
+      local_hub: 3, ready_for_pickup: 4, out_for_delivery: 4, delivered: 5
+    };
+    return { stages: LOCAL_TRACKING_STAGES, currentIndex: statusIndex[status] ?? 0 };
+  }
+  if (route === "merchant_cross_border") {
+    const statusIndex: Record<string, number> = {
+      pending: 0, accepted: 1, processing: 1, dispatched_from_origin: 2,
+      international_transit: 3, customs_clearance: 3, local_hub: 4,
+      handed_to_atlantic: 4, ready_for_pickup: 5, out_for_delivery: 5, delivered: 6
+    };
+    return { stages: INTERNATIONAL_TRACKING_STAGES, currentIndex: statusIndex[status] ?? 0 };
+  }
+  const currentStage = order.current_tracking_stage === "Arrived at China Hub"
+    ? "Arrived at International Hub"
+    : order.current_tracking_stage;
+  return {
+    stages: INTERNATIONAL_TRACKING_STAGES,
+    currentIndex: Math.max(0, (INTERNATIONAL_TRACKING_STAGES as readonly string[]).indexOf(currentStage))
+  };
 }
 
 export default function App() {
@@ -879,13 +906,28 @@ function AcrossApp() {
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }
   function addToCart(p: Product) {
-    clearPendingPayment();
     const source = `${p.fulfillment_mode || "atlantic_import"}:${p.provider_id || "atlantic"}`;
     const existingSource = cart[0] ? `${cart[0].product.fulfillment_mode || "atlantic_import"}:${cart[0].product.provider_id || "atlantic"}` : source;
     if (cart.length && source !== existingSource) {
-      Alert.alert("Separate checkout required", "Products from different sellers or fulfilment routes must be checked out separately. Complete or clear the current cart first.");
+      Alert.alert(
+        "Start a separate seller cart?",
+        "Each seller and fulfilment route is checked out separately so payment, stock and delivery responsibility stay accurate. You can keep your current cart or replace it with this product.",
+        [
+          { text: "Keep current cart", style: "cancel" },
+          {
+            text: "Start new cart",
+            style: "destructive",
+            onPress: () => {
+              clearPendingPayment();
+              setCart([{ product: p, quantity: Math.min(1, p.inventory_count) }]);
+              Alert.alert("New cart started", `${p.title} is ready for checkout.`);
+            }
+          }
+        ]
+      );
       return;
     }
+    clearPendingPayment();
     const q = getCartQuantity(p.sku);
     const capped = Math.min(q + 1, p.inventory_count);
     setCart(items => { const e = items.find(i => i.product.sku === p.sku); if (!e) return [...items, { product: p, quantity: capped }]; return items.map(i => i.product.sku === p.sku ? { ...i, quantity: capped } : i); });
@@ -1579,7 +1621,7 @@ function AcrossApp() {
             {orders.length === 0 ? (
               <View style={s.panel}><Text style={{ color: "#8C8C8C" }}>No orders found yet. Pull down to refresh after payment.</Text></View>
             ) : orders.map(order => {
-              const currentIndex = Math.max(0, (TRACKING_STAGES as readonly string[]).indexOf(order.current_tracking_stage));
+              const { stages, currentIndex } = trackingProgress(order);
               return (
                 <View key={order.id} onLayout={event => { orderOffsetsRef.current[order.id] = event.nativeEvent.layout.y; }} style={[s.panel, focusedOrderId === order.id && { borderWidth: 2, borderColor: "#FF4747" }]}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
@@ -1600,12 +1642,12 @@ function AcrossApp() {
                       {!!order.fulfillment.estimated_delivery_at && <Text style={{ marginTop: 3, color: "#4E625C" }}>Estimated delivery: {new Date(order.fulfillment.estimated_delivery_at).toLocaleDateString()}</Text>}
                     </View>
                   )}
-                  <View style={[s.timeline, { marginTop: 16 }]}>{TRACKING_STAGES.map((stageName, index) => {
+                  <View style={[s.timeline, { marginTop: 16 }]}>{stages.map((stageName, index) => {
                     const done = index <= currentIndex;
                     return (<View key={stageName} style={s.timelineItem}>
                       <View style={[s.dot, done && s.doneDot]} />
-                      {index !== TRACKING_STAGES.length - 1 && <View style={[s.line, done && s.doneLine]} />}
-                      <View style={s.timelineText}><Text style={s.timelineTitle}>{stageName}</Text>{stageName === order.current_tracking_stage && <Text style={{ color: "#12805F", fontSize: 12, fontWeight: "800" }}>Current stage</Text>}</View>
+                      {index !== stages.length - 1 && <View style={[s.line, done && s.doneLine]} />}
+                      <View style={s.timelineText}><Text style={s.timelineTitle}>{stageName}</Text>{index === currentIndex && <Text style={{ color: "#12805F", fontSize: 12, fontWeight: "800" }}>Current stage</Text>}</View>
                     </View>);
                   })}</View>
                   {deliveryConfirmOrder?.id === order.id && (
