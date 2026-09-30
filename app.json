@@ -1,7 +1,7 @@
 {
   "expo": {
     "owner": "atlantic-express",
-    "name": "Atlantic Express",
+    "name": "Atl",
     "slug": "across",
     "scheme": "across",
     "version": "0.1.0",
@@ -36,7 +36,13 @@
       ]
     },
     "plugins": [
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "orders",
+          "color": "#FF4747"
+        }
+      ],
       [
         "expo-web-browser",
         {

@@ -527,6 +527,43 @@ function AcrossApp() {
     if (token) await registerPushNotifications(token, next);
   }
 
+  async function testNotificationSound() {
+    try {
+      if (Platform.OS === "android") {
+        await Notifications.setNotificationChannelAsync("orders", {
+          name: "Order updates",
+          importance: Notifications.AndroidImportance.MAX,
+          sound: "default",
+          vibrationPattern: [0, 250, 180, 250]
+        });
+      }
+      const current = await Notifications.getPermissionsAsync();
+      const permission = current.status === "granted" ? current : await Notifications.requestPermissionsAsync();
+      if (permission.status !== "granted") {
+        Alert.alert("Notifications disabled", "Allow notifications for Atl in your phone settings, then try again.");
+        return;
+      }
+      notificationSoundEnabled = true;
+      setSoundEnabled(true);
+      await writeNotificationSoundEnabled(true);
+      if (token) await registerPushNotifications(token, true);
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Atl notifications are ready",
+          body: "You will hear this sound for order, message, and service updates.",
+          sound: "default",
+          data: { notification_type: "sound_test" }
+        },
+        trigger: Platform.OS === "android"
+          ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 2, channelId: "orders" }
+          : { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 2 }
+      });
+      Alert.alert("Test scheduled", "Keep Atl open or move it to the background. The test notification should arrive in about two seconds.");
+    } catch {
+      Alert.alert("Unable to test notifications", "Open your phone settings and make sure notifications and sound are enabled for Atl.");
+    }
+  }
+
   async function openNotification(notification: any) {
     if (!token) return;
     const notificationId = String(notification?.id || notification?.notification_id || "");
@@ -1435,6 +1472,7 @@ function AcrossApp() {
             <Text style={{ fontWeight: "900", fontSize: 16 }}>Notifications</Text>
             <View style={{ flexDirection: "row", gap: 12 }}>
               {unreadCount > 0 && <Pressable onPress={markAllRead}><Text style={{ color: "#FF4747", fontSize: 12, fontWeight: "700" }}>Mark all read</Text></Pressable>}
+              <Pressable onPress={() => void testNotificationSound()}><Text style={{ color: "#FF4747", fontSize: 12, fontWeight: "700" }}>Test sound</Text></Pressable>
               <Pressable onPress={() => void toggleNotificationSound()}><Text style={{ color: "#496B60", fontSize: 12, fontWeight: "700" }}>Sound {soundEnabled ? "on" : "off"}</Text></Pressable>
               <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color="#8C8C8C" /></Pressable>
             </View>
