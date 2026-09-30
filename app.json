@@ -23,6 +23,7 @@
     },
     "android": {
       "package": "com.atlanticexpress.mobile",
+      "googleServicesFile": "./google-services.json",
       "edgeToEdgeEnabled": true,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {

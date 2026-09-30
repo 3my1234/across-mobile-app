@@ -19,3 +19,7 @@ yarn-error.log*
 
 .DS_Store
 Thumbs.db
+
+# Firebase Admin / service-account private keys must never be committed.
+*firebase-adminsdk*.json
+*service-account*.json
