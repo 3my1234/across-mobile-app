@@ -372,7 +372,7 @@ function AcrossApp() {
     void loadProfile(token);
     void registerPushNotifications(token);
     void pollBuyerActivity(token, true);
-    const interval = setInterval(() => { void pollBuyerActivity(token); }, 12000);
+    const interval = setInterval(() => { void pollBuyerActivity(token); }, 60000);
     const received = Notifications.addNotificationReceivedListener(() => {
       void Promise.all([loadNotifications(token), loadOrders(token)]);
     });
@@ -596,7 +596,16 @@ function AcrossApp() {
 
   async function markAllRead() {
     if (!token) return;
-    try { await fetch(`${API_URL}/api/v1/notifications/read-all`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } }); await loadNotifications(); } catch {}
+    const previous = notifications;
+    setNotifications(items => items.map(item => ({ ...item, is_read: true })));
+    try {
+      const response = await fetch(`${API_URL}/api/v1/notifications/read-all`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error("Could not mark notifications as read");
+      await loadNotifications();
+    } catch {
+      setNotifications(previous);
+      Alert.alert("Unable to update notifications", "Check your connection and try again.");
+    }
   }
 
   async function saveSession(s: any) {
@@ -814,7 +823,7 @@ function AcrossApp() {
       const d = await readResponseBody(r);
       if (d.requires_email_verification) {
         setAuthMode("signin");
-        Alert.alert("Verify your email", "We sent you a verification email. Confirm it before signing in.");
+        Alert.alert("Verify your email", "Your verification email is queued. Delivery is usually quick, but can take several minutes. Confirm it before signing in and avoid requesting duplicates immediately.");
         return;
       }
       if (r.status === 409) {
@@ -844,6 +853,12 @@ function AcrossApp() {
         body: JSON.stringify({ email: normalizedEmail })
       });
       const d = await readResponseBody(r);
+      if (r.status === 429) {
+        const seconds = Math.max(1, Number(d?.retry_after_seconds || r.headers.get("Retry-After") || 60));
+        const minutes = Math.max(1, Math.ceil(seconds / 60));
+        Alert.alert("Email still being delivered", `Please wait about ${minutes} minute${minutes === 1 ? "" : "s"} before requesting another copy. Check the inbox again first.`);
+        return;
+      }
       if (!r.ok) throw new Error(formatHttpError(r, d, "Could not resend verification"));
       Alert.alert("Verification email", d?.message || "If the account exists, a verification email has been sent.");
     } catch (e) {
@@ -1469,11 +1484,9 @@ function AcrossApp() {
       {showNotifications && (
         <View style={{ position: "absolute", top: insets.top + 48, right: 8, left: 8, backgroundColor: "#FFFFFF", borderRadius: 12, zIndex: 99, maxHeight: 400, borderWidth: 1, borderColor: "#EDEDED", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 10 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
-            <Text style={{ fontWeight: "900", fontSize: 16 }}>Notifications</Text>
-            <View style={{ flexDirection: "row", gap: 12 }}>
+            <View style={{ flex: 1 }} />
+            <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
               {unreadCount > 0 && <Pressable onPress={markAllRead}><Text style={{ color: "#FF4747", fontSize: 12, fontWeight: "700" }}>Mark all read</Text></Pressable>}
-              <Pressable onPress={() => void testNotificationSound()}><Text style={{ color: "#FF4747", fontSize: 12, fontWeight: "700" }}>Test sound</Text></Pressable>
-              <Pressable onPress={() => void toggleNotificationSound()}><Text style={{ color: "#496B60", fontSize: 12, fontWeight: "700" }}>Sound {soundEnabled ? "on" : "off"}</Text></Pressable>
               <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color="#8C8C8C" /></Pressable>
             </View>
           </View>
@@ -1599,7 +1612,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "account" && (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView ref={accountScrollRef} alwaysBounceVertical keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
               <Pressable onPress={pickAvatar}>
@@ -1639,6 +1652,12 @@ function AcrossApp() {
                 <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
               <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>New accounts receive 100 XP. Purchase rewards: below ₦1,000 = 10 XP; ₦1,000–₦9,999 = 100 XP; ₦10,000–₦99,999 = 500 XP; ₦100,000–₦499,999 = 1,000 XP; ₦500,000+ = 2,500 XP.</Text>
+            </View>
+            <View style={s.panel}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                <View style={{ flex: 1 }}><Text style={s.panelTitle}>Notification sound</Text><Text style={{ color: "#66736F", fontSize: 12, lineHeight: 18 }}>Play a sound for orders, messages, services and account updates.</Text></View>
+                <Pressable style={[s.primaryButtonSmall, !soundEnabled && s.secondaryButton]} onPress={() => void toggleNotificationSound()}><Text style={soundEnabled ? s.primaryButtonText : s.secondaryButtonText}>{soundEnabled ? "On" : "Off"}</Text></Pressable>
+              </View>
             </View>
             <View style={s.quickLinks}>
               {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
@@ -1715,7 +1734,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView
             ref={supportScrollRef}
             alwaysBounceVertical

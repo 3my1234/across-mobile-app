@@ -72,9 +72,19 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [authKeyboardVisible, setAuthKeyboardVisible] = useState(false);
   const authScrollRef = useRef<ScrollView | null>(null);
   const isWelcome = mode === "welcome";
   const title = mode === "signin" ? "Welcome back" : "Create your Atlantic Express account";
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardDidShow", () => setAuthKeyboardVisible(true));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setAuthKeyboardVisible(false));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   async function submit() {
     if (mode === "signin") await onSubmit("/api/v1/auth/login", { email, password });
@@ -82,15 +92,15 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
   }
 
   function revealAuthForm(target: number) {
-    setTimeout(() => authScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(target, 96, true), Platform.OS === "android" ? 320 : 180);
+    setTimeout(() => authScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(target, 120, true), Platform.OS === "android" ? 120 : 180);
   }
 
   return (
     <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" style={s.authBg} imageStyle={s.authBgImage}>
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={s.authKeyboard}>
-          <ScrollView ref={authScrollRef} contentContainerStyle={s.authScroll} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
+          <ScrollView ref={authScrollRef} contentContainerStyle={[s.authScroll, authKeyboardVisible && { paddingBottom: 220 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
             <View style={s.authBrand}>
               <Image source={LOGO} style={[s.authLogo, !isWelcome && s.authLogoCompact]} resizeMode="contain" />
               <Text style={s.authEyebrow}>ATLANTIC EXPRESS</Text>
@@ -378,7 +388,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
 
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
-      <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.detailHeader}>
           <Pressable style={styles.detailBackButton} onPress={onClose}><Ionicons name="arrow-back" size={22} color="#101817" /></Pressable>
           <Text style={styles.detailHeaderTitle}>Product details</Text>
