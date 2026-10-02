@@ -96,7 +96,8 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
   }
 
   return (
-    <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" style={s.authBg} imageStyle={s.authBgImage}>
+    <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" blurRadius={2} style={s.authBg} imageStyle={s.authBgImage}>
+      <View pointerEvents="none" style={s.authBackdrop} />
       <StatusBar style="dark" />
       <SafeAreaView style={s.authSafe}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
@@ -108,22 +109,7 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
             {isWelcome ? (
               <>
                 <View style={s.authHero}>
-                  <Text style={s.authTitle}>Shop products. Find trusted services. Get it delivered.</Text>
-                  <Text style={s.authCopy}>Discover local and international products, connect with nearby providers, pay securely, and track every order in one place.</Text>
-                  <View style={s.authFeatureRow}>
-                    <View style={s.authFeature}>
-                      <View style={s.authFeatureIcon}><Ionicons name="bag-handle-outline" size={18} color={COLORS.primary} /></View>
-                      <Text style={s.authFeatureText}>Products</Text>
-                    </View>
-                    <View style={s.authFeature}>
-                      <View style={s.authFeatureIcon}><Ionicons name="location-outline" size={18} color={COLORS.primary} /></View>
-                      <Text style={s.authFeatureText}>Nearby services</Text>
-                    </View>
-                    <View style={s.authFeature}>
-                      <View style={s.authFeatureIcon}><Ionicons name="navigate-outline" size={18} color={COLORS.primary} /></View>
-                      <Text style={s.authFeatureText}>Live tracking</Text>
-                    </View>
-                  </View>
+                  <Text style={s.authTitle}>Discover local and international products, connect with nearby providers, pay securely, and track every order in one place.</Text>
                 </View>
                 <View style={s.authPanel}>
                 {!!noticeText && (

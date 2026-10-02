@@ -40,6 +40,8 @@ export type Quote = {
   platform_fee: number;
   grand_total: number;
   currency: string;
+  customer_pays_gateway_fee?: boolean;
+  gateway_fee_note?: string;
 };
 
 export type OrderSummary = {
