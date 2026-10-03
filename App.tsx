@@ -1697,6 +1697,14 @@ function AcrossApp() {
                     <View style={{ marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: "#F3F8F6", borderWidth: 1, borderColor: "#D9E9E2" }}>
                       <Text style={{ color: "#66736F", fontSize: 12, fontWeight: "800" }}>{fulfillmentRouteLabel(order.fulfillment.route)}</Text>
                       <Text style={{ marginTop: 4, color: "#101817", fontSize: 16, fontWeight: "900" }}>{readableFulfillmentStatus(order.fulfillment.status)}</Text>
+                      {order.fulfillment.route === "merchant_cross_border" && order.seller_funds && order.seller_funds.status !== "settled" && (
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={{ color: "#B54708", fontWeight: "800" }}>
+                            {order.seller_funds.status === "failed" || order.seller_funds.status === "reversed" ? "Seller payout needs attention" : "Payment confirmed — seller settlement pending"}
+                          </Text>
+                          <Text style={{ marginTop: 4, color: "#4E625C" }}>You have already paid. The seller must receive the payout before purchasing or dispatching this imported order. You do not need to pay again.</Text>
+                        </View>
+                      )}
                       {!!order.fulfillment.current_location && <Text style={{ marginTop: 4, color: "#4E625C" }}>Current location: {order.fulfillment.current_location}</Text>}
                       {!!order.fulfillment.carrier && <Text style={{ marginTop: 3, color: "#4E625C" }}>Carrier: {order.fulfillment.carrier}{order.fulfillment.tracking_number ? ` · ${order.fulfillment.tracking_number}` : ""}</Text>}
                       {!!order.fulfillment.estimated_delivery_at && <Text style={{ marginTop: 3, color: "#4E625C" }}>Estimated delivery: {new Date(order.fulfillment.estimated_delivery_at).toLocaleDateString()}</Text>}

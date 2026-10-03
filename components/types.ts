@@ -58,6 +58,7 @@ export type OrderSummary = {
   created_at: string;
   item_count: number;
   items_summary: string;
+  seller_funds?: { status: "pending" | "on_hold" | "settled" | "failed" | "reversed" };
   fulfillment?: {
     route: "merchant_local" | "merchant_cross_border";
     owner: "merchant";
