@@ -57,6 +57,7 @@ type BuyerRequest = {
   review_rating?: number | null;
   provider_name: string;
   message?: string;
+  party_size?: number;
   created_at: string;
 };
 type Conversation = {
@@ -100,6 +101,12 @@ const money = (value: number | null, currency = "NGN") => value == null
 
 function apiMessage(body: any, fallback: string) {
   return String(body?.message || body?.error || fallback);
+}
+
+function bookingQuantityCopy(listingType: string) {
+  if (listingType === "hotel" || listingType === "short_let") return { label: "Number of guests", help: "How many people will stay?", unit: "guest" };
+  if (["car_rental", "car_wash", "mechanic"].includes(listingType)) return { label: "Number of vehicles", help: "How many vehicles is this booking for?", unit: "vehicle" };
+  return { label: "Number of people receiving this service", help: "Enter 1 when booking only for yourself. This is not the number of days.", unit: "person" };
 }
 
 export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore" }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages" }) {
@@ -500,6 +507,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
 
   if (selected) {
     const requiresSafetyAcknowledgement = !selected.direct_booking;
+    const quantityCopy = bookingQuantityCopy(selected.listing_type);
     return (
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.fill}>
         <ScrollView
@@ -543,14 +551,16 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           )}
           {selected.direct_booking && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Choose availability</Text>
+              <Text style={styles.sectionTitle}>Choose a date and time</Text>
               {slots.length ? slots.map(slot => (
                 <Pressable key={slot.id} onPress={() => setSlotId(current => current === slot.id ? "" : slot.id)} style={[styles.slot, slotId === slot.id && styles.slotActive]}>
                   <Ionicons name={slotId === slot.id ? "radio-button-on" : "radio-button-off"} size={20} color="#FF4747" />
-                  <Text style={styles.grow}>{new Date(slot.starts_at).toLocaleString()} · {slot.remaining} left</Text>
+                  <Text style={styles.grow}>{new Date(slot.starts_at).toLocaleString()} · {slot.remaining} booking {slot.remaining === 1 ? "spot" : "spots"} left</Text>
                 </Pressable>
-              )) : <Text style={styles.meta}>No fixed time slots are published. You can still send a flexible booking request.</Text>}
-              <TextInput value={partySize} onChangeText={setPartySize} keyboardType="number-pad" placeholder="Guests / vehicles" style={styles.input} />
+              )) : <Text style={styles.meta}>The provider has not added fixed times. Write your preferred date and time in the message below.</Text>}
+              <Text style={styles.fieldLabel}>{quantityCopy.label}</Text>
+              <Text style={styles.fieldHelp}>{quantityCopy.help}</Text>
+              <TextInput value={partySize} onChangeText={setPartySize} keyboardType="number-pad" placeholder="Enter a number" accessibilityLabel={quantityCopy.label} style={styles.input} />
             </View>
           )}
           <View style={styles.section}>
@@ -583,7 +593,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       <View style={styles.modeBar}>
         <Pressable style={[styles.modeButton, mode === "explore" && styles.modeButtonActive]} onPress={() => setMode("explore")}><Text style={[styles.modeText, mode === "explore" && styles.modeTextActive]}>Explore</Text></Pressable>
         <Pressable style={[styles.modeButton, mode === "requests" && styles.modeButtonActive]} onPress={() => setMode("requests")}><Text style={[styles.modeText, mode === "requests" && styles.modeTextActive]}>My requests</Text></Pressable>
-        <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Messages</Text></Pressable>
+        <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Provider chat</Text></Pressable>
       </View>
       {mode === "explore" ? (
         <>
@@ -640,11 +650,12 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             <View style={styles.requestCard}>
               <View style={styles.requestHeader}><Text style={styles.requestTitle} numberOfLines={2}>{item.listing_title}</Text><Text style={styles.status}>{item.status.replaceAll("_", " ")}</Text></View>
               <Text style={styles.meta}>{item.provider_name} · {item.request_type.replaceAll("_", " ")}</Text>
+              {!!item.party_size && <Text style={styles.requestDate}>For {item.party_size} {bookingQuantityCopy(item.listing_type).unit}{item.party_size === 1 ? "" : "s"}</Text>}
               {!!item.starts_at && <Text style={styles.requestDate}>{new Date(item.starts_at).toLocaleString()}</Text>}
               {!!item.message && <Text style={styles.body}>{item.message}</Text>}
               {item.status === "completed" && (
                 <View style={styles.reviewRow}>
-                  <Text style={styles.reviewLabel}>{(reviewedRequests[item.id] || item.review_rating) ? "Your rating" : "Rate this provider - earn 50 XP"}</Text>
+                  <Text style={styles.reviewLabel}>{(reviewedRequests[item.id] || item.review_rating) ? "Your rating" : "Rate this provider - earn 10 XP"}</Text>
                   <View style={styles.stars}>
                     {[1, 2, 3, 4, 5].map(rating => (
                       <Pressable key={rating} onPress={() => void submitReview(item, rating)} accessibilityLabel={`Rate ${rating} stars`}>
@@ -676,7 +687,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               {!item.subscription_active && <Text style={styles.subscriptionPaused}>Provider subscription inactive — messaging paused</Text>}
             </Pressable>
           )}
-          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title="No messages yet" message={error || "Open a verified provider and select Message provider to begin."} />}
+          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title="No provider chats yet" message={error || "This area is for conversations with service providers. For Atlantic Express help, open Support from the main menu."} />}
         />
       )}
     </View>
@@ -697,7 +708,7 @@ const styles = StyleSheet.create({
   modeButtonActive: { backgroundColor: "#FFF" },
   modeText: { color: "#777", fontWeight: "800" },
   modeTextActive: { color: "#191919" },
-  search: { minHeight: 42, marginHorizontal: 10, marginTop: 8, marginBottom: 8, paddingHorizontal: 12, borderRadius: 14, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#DEDEDE" },
+  search: { minHeight: 38, marginHorizontal: 10, marginTop: 6, marginBottom: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#DEDEDE" },
   reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
   reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
   stars: { flexDirection: "row", gap: 8 },
@@ -715,11 +726,11 @@ const styles = StyleSheet.create({
   locationStrip: { marginHorizontal: 12, marginBottom: 3, minHeight: 20, flexDirection: "row", alignItems: "center", gap: 5 },
   locationSummary: { flex: 1, color: "#2E5C4E", fontSize: 10, fontWeight: "800" },
   distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
-  chipScroller: { height: 39, maxHeight: 39, flexGrow: 0 },
-  chips: { height: 39, paddingHorizontal: 10, gap: 7, paddingBottom: 5, alignItems: "center" },
-  chip: { height: 31, paddingHorizontal: 13, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
+  chipScroller: { height: 48, maxHeight: 48, flexGrow: 0 },
+  chips: { height: 48, paddingHorizontal: 10, gap: 7, paddingVertical: 5, alignItems: "center" },
+  chip: { height: 38, paddingHorizontal: 13, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: "#FF4747", borderColor: "#FF4747" },
-  chipText: { fontWeight: "700", color: "#555", lineHeight: 18 },
+  chipText: { fontWeight: "700", color: "#555", lineHeight: 22 },
   chipTextActive: { color: "#FFF" },
   listHeading: { paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },
@@ -747,6 +758,8 @@ const styles = StyleSheet.create({
   checkRow: { flexDirection: "row", gap: 8, alignItems: "center", marginTop: 12 },
   slot: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: "#DDD", flexDirection: "row", alignItems: "center", gap: 8, marginTop: 8 },
   slotActive: { borderColor: "#FF4747", backgroundColor: "#FFF4F4" },
+  fieldLabel: { color: "#191919", fontWeight: "900", marginTop: 14 },
+  fieldHelp: { color: "#66736F", fontSize: 12, lineHeight: 18, marginTop: 3 },
   input: { borderWidth: 1, borderColor: "#DDD", borderRadius: 10, padding: 12, marginTop: 10, backgroundColor: "#FFF" },
   textarea: { minHeight: 110, textAlignVertical: "top" },
   primary: { backgroundColor: "#FF4747", borderRadius: 16, padding: 14, alignItems: "center", marginTop: 12, borderBottomWidth: 3, borderBottomColor: "#D92F3A" },

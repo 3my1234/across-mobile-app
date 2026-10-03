@@ -1268,7 +1268,7 @@ function AcrossApp() {
       const data = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, data, "Confirmation failed"));
       setDeliveryConfirmOrder(null);
-      Alert.alert("Receipt confirmed", "Thank you. Your review reward is now available; leave a review to claim ₦500 off your next order.");
+      Alert.alert("Receipt confirmed", "Thank you. Your review reward is now available; leave a review to claim ₦10 off your next order.");
       await loadOrders(token);
       await loadNotifications(token);
     } catch (e) {
@@ -1652,7 +1652,7 @@ function AcrossApp() {
                 <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: "#FF4747" }}>{xpBalance} XP</Text><Text style={{ color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>= ₦{xpBalance} discount</Text></View>
                 <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
-              <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>New accounts receive 100 XP. Purchase rewards: below ₦1,000 = 10 XP; ₦1,000–₦9,999 = 100 XP; ₦10,000–₦99,999 = 500 XP; ₦100,000–₦499,999 = 1,000 XP; ₦500,000+ = 2,500 XP.</Text>
+              <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>New accounts receive a one-time 650 XP welcome bonus. Purchase rewards: below ₦1,000 = 1 XP; ₦1,000–₦9,999 = 2 XP; ₦10,000–₦99,999 = 5 XP; ₦100,000–₦499,999 = 10 XP; ₦500,000+ = 25 XP.</Text>
             </View>
             <View style={s.panel}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
@@ -1826,7 +1826,7 @@ function AcrossApp() {
             </View>
             <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: "#191919" }}>Package Delivered?</Text>
             <Text style={{ marginTop: 8, fontSize: 14, color: "#595959", textAlign: "center", lineHeight: 20 }}>
-              Did you receive your package? Confirming unlocks your review reward. Leave a review to claim ₦500 off your next order.
+              Did you receive your package? Confirming unlocks your review reward. Leave a review to claim ₦10 off your next order.
             </Text>
             <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
               <Pressable

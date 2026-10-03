@@ -18,7 +18,7 @@ export const s = StyleSheet.create({
   authEyebrow: { marginTop: 10, color: "#55615D", fontSize: 11, lineHeight: 14, fontWeight: "900", letterSpacing: 2.2 },
   authHero: { marginBottom: 14 },
   authPanel: { borderWidth: 1, borderColor: "rgba(226,231,228,0.92)", borderRadius: 24, padding: 20, backgroundColor: "rgba(255,255,255,0.94)", shadowColor: "#17201D", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.10, shadowRadius: 24, elevation: 5 },
-  authTitle: { color: "#17201D", fontSize: 29, lineHeight: 35, fontWeight: "900", letterSpacing: -0.6 },
+  authTitle: { color: "#17201D", fontSize: 25, lineHeight: 31, fontWeight: "900", letterSpacing: -0.35 },
   authCopy: { marginTop: 10, color: "#66706D", fontSize: 15, lineHeight: 22 },
   authFormCopy: { marginTop: 8, marginBottom: 6, color: "#66706D", fontSize: 14, lineHeight: 21 },
   authFeatureRow: { flexDirection: "row", gap: 8, marginTop: 18 },
