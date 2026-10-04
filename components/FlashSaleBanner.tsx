@@ -34,8 +34,8 @@ export function FlashSaleBanner({ flashSales, onSelectProduct, onViewAll }: Prop
               resizeMode="cover"
             />
 			<Text numberOfLines={1} style={styles.productTitle}>{p.title}</Text>
-			<Text style={styles.price}>{money(p.price)}</Text>
-			{p.compare_at_price ? <Text style={styles.old}>{money(p.compare_at_price)}</Text> : null}
+			<Text style={styles.price}>{money(p.price, p.currency)}</Text>
+			{p.compare_at_price ? <Text style={styles.old}>{money(p.compare_at_price, p.currency)}</Text> : null}
           </Pressable>
         ))}
       </ScrollView>

@@ -36,10 +36,10 @@ export function ProductCard({ product, cartQuantity, onPress }: Props) {
         {typeof product.distance_km === "number" && <Text style={styles.nearby}>{product.distance_km.toFixed(1)} km away</Text>}
         <View style={styles.footer}>
           <View>
-            <Text style={styles.price}>{money(currentPrice)}</Text>
+            <Text style={styles.price}>{money(currentPrice, product.currency)}</Text>
             {comparePrice > currentPrice && (
               <View style={styles.discountRow}>
-                <Text style={styles.compare}>{money(comparePrice)}</Text>
+                <Text style={styles.compare}>{money(comparePrice, product.currency)}</Text>
                 <Text style={styles.discountBadge}>-{discountPercent}%</Text>
               </View>
             )}

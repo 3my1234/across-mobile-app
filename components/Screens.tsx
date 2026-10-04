@@ -53,6 +53,9 @@ export function StartupErrorScreen({ message }: { message: string }) {
 
 // ---- Auth Screen ----
 interface AuthProps {
+  countryCode: string;
+  buyerMarkets: { country_code: string; currency_code: string }[];
+  onCountryChange: (countryCode: string) => void;
   mode: AuthMode;
   busy: boolean;
   googleReady: boolean;
@@ -66,7 +69,7 @@ interface AuthProps {
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -154,6 +157,8 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
                 <Text style={s.authFormCopy}>{mode === "signin" ? "Access your orders, messages, saved details, and provider requests." : "Join the marketplace to shop, book services, pay securely, and track your orders."}</Text>
+                {mode === "signup" && !!noticeText && <Text style={s.authFormCopy}>{noticeText}</Text>}
+                {mode === "signup" && <><Text style={s.authFormCopy}>Delivery country and checkout currency</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: countryCode === market.country_code ? COLORS.primary : "#D0D5DD" }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
@@ -174,6 +179,7 @@ export function AuthScreen({ mode, busy, googleReady, googleTimedOut, googleBusy
 // ---- Product Detail Screen ----
 interface DetailProps {
   product: Product;
+  destination: { country_code: string; state: string; city: string };
   token: string | null;
   cartQuantity: number;
   onClose: () => void;
@@ -183,7 +189,7 @@ interface DetailProps {
   onSelectProduct: (product: Product) => void;
 }
 
-export function ProductDetailScreen({ product: initialProduct, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct }: DetailProps) {
+export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct }: DetailProps) {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
   const windowWidth = Dimensions.get("window").width;
@@ -219,6 +225,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     || product.origin_hub.name
     || product.origin_hub.city
     || "International";
+  const deliveryAreaLabel = (product.delivery_areas || []).map(area => [area.city, area.state, area.country_code].filter(Boolean).join(", ")).join("; ");
 
   useEffect(() => {
     setProduct(initialProduct);
@@ -227,7 +234,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     loadDetail();
     // The product id and session token are the intentional request keys.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialProduct.id, token]);
+  }, [initialProduct.id, token, destination.country_code, destination.state, destination.city]);
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
@@ -251,8 +258,9 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
     setReviewText("");
     setReviewImages([]);
     const productTask = (async () => {
-      const fresh = force ? `?fresh=${Date.now()}` : "";
-      const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}${fresh}`, { headers: force ? { "Cache-Control": "no-cache" } : undefined });
+      const params = new URLSearchParams(destination);
+      if (force) params.set("fresh", String(Date.now()));
+      const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}?${params}`, { headers: force ? { "Cache-Control": "no-cache" } : undefined });
       if (pr.ok) { const d = await pr.json(); if (d.product) { const mapped = mapProduct(d.product); setProduct(mapped); onProductChange(mapped); } }
     })();
     const reviewTask = (async () => {
@@ -271,7 +279,8 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
       setReviewError(error instanceof Error ? error.message : "Reviews are temporarily unavailable");
     }).finally(() => setLoading(false));
     const recommendationTask = (async () => {
-      const rec = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?limit=10`);
+      const recParams = new URLSearchParams({ limit: "10", ...destination });
+      const rec = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?${recParams}`);
       if (rec.ok) {
         const d = await rec.json();
         setRecommendations((d.products ?? []).map(mapProduct));
@@ -406,10 +415,11 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
             <Text style={styles.detailTitle}>{product.title}</Text>
             <Text style={styles.detailSku}>SKU {product.sku}</Text>
             <View style={styles.detailPriceRow}>
-              <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price)}</Text>
-              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price)}</Text>}
+              <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price, product.currency)}</Text>
+              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price, product.currency)}</Text>}
             </View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{originLabel}</Text></View>
+            {deliveryAreaLabel ? <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivers to</Text><Text style={styles.detailMetaValue}>{deliveryAreaLabel}</Text></View> : null}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Purchased</Text><Text style={styles.detailMetaValue}>{Number(product.sold_count || 0).toLocaleString()} sold</Text></View>
             <View style={styles.detailMetaRow}>
@@ -466,7 +476,7 @@ export function ProductDetailScreen({ product: initialProduct, token, cartQuanti
                     <Pressable key={item.id} style={styles.recommendationCard} onPress={() => onSelectProduct(item)}>
                       <ResilientImage uris={item.image_urls} style={styles.recommendationImage} resizeMode="cover" />
                       <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
-                      <Text style={styles.recommendationPrice}>{money(item.flash_sale_price || item.price)}</Text>
+                      <Text style={styles.recommendationPrice}>{money(item.flash_sale_price || item.price, item.currency)}</Text>
                     </Pressable>
                   ))}
                 </View>
