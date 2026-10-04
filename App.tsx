@@ -109,6 +109,10 @@ function AcrossApp() {
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
   const [token, setToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stockView, setStockView] = useState<"all" | "local" | "international">("all");
+  const [internationalProducts, setInternationalProducts] = useState<Product[]>([]);
+  const [internationalLoading, setInternationalLoading] = useState(false);
+  const [internationalRefreshVersion, setInternationalRefreshVersion] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("home");
@@ -197,9 +201,9 @@ function AcrossApp() {
   const categories = useMemo(() => {
     const names = new Set<string>();
     names.add("All");
-    products.forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
+    (stockView === "international" ? internationalProducts : products).forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
     return Array.from(names);
-  }, [products]);
+  }, [products, internationalProducts, stockView]);
 
   function revealInput(scrollRef: { current: ScrollView | null }, inputRef: { current: TextInput | null }, extraOffset = 96) {
     setTimeout(() => {
@@ -214,7 +218,8 @@ function AcrossApp() {
 
   const visibleProducts = useMemo(() => {
     // Deals belong to the dedicated Flash Sale experience, not the ordinary feed.
-    let filtered = products.filter(product => !product.is_flash_sale);
+    let filtered = (stockView === "international" ? internationalProducts : products).filter(product => !product.is_flash_sale);
+    if (stockView === "local") filtered = filtered.filter(product => product.inventory_country_code === catalogCountry);
     if (selectedCategory !== "All") {
       filtered = filtered.filter(p => p.category_path?.some(c => c.toLowerCase() === selectedCategory.toLowerCase()));
     }
@@ -223,7 +228,7 @@ function AcrossApp() {
       filtered = filtered.filter(p => p.title.toLowerCase().includes(q) || p.category_path?.some(c => c.toLowerCase().includes(q)) || p.sku.toLowerCase().includes(q));
     }
     return filtered;
-  }, [products, selectedCategory, searchQuery]);
+  }, [products, internationalProducts, stockView, catalogCountry, selectedCategory, searchQuery]);
 
   const totals = useMemo(() => {
     const items = cart.reduce((sum, i) => sum + i.quantity, 0);
@@ -267,6 +272,7 @@ function AcrossApp() {
     setQuote(null);
     setSelectedProduct(null);
     setProducts([]);
+    setInternationalProducts([]);
     setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }, [catalogCountry]);
@@ -280,6 +286,7 @@ function AcrossApp() {
     setQuote(null);
     setSelectedProduct(null);
     setProducts([]);
+    setInternationalProducts([]);
     setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
     void (async () => {
@@ -288,6 +295,30 @@ function AcrossApp() {
       await loadProducts(true);
     })();
   }, [catalogCountry, catalogState, catalogCity]);
+
+  useEffect(() => {
+    if (stockView !== "international" || stage !== "app") return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
+    setInternationalLoading(true);
+    const params = new URLSearchParams({ country_code: catalogCountry, stock_scope: "international" });
+    if (catalogState) params.set("state", catalogState);
+    if (catalogCity) params.set("city", catalogCity);
+    void (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/products?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`catalog request failed: ${response.status}`);
+        const catalog: Product[] = ((await response.json()).products ?? []).map(mapProduct);
+        if (!controller.signal.aborted) setInternationalProducts(catalog);
+      } catch {
+        if (!controller.signal.aborted) setInternationalProducts([]);
+      } finally {
+        clearTimeout(timeout);
+        if (!controller.signal.aborted) setInternationalLoading(false);
+      }
+    })();
+    return () => { controller.abort(); clearTimeout(timeout); };
+  }, [stockView, stage, catalogCountry, catalogState, catalogCity, internationalRefreshVersion]);
 
   useEffect(() => {
     if (stage !== "auth" || (privyReady && !googleSessionClearing)) {
@@ -865,6 +896,7 @@ function AcrossApp() {
     if (refreshing) return;
     setRefreshing(true);
     try {
+      if (stockView === "international") setInternationalRefreshVersion(version => version + 1);
       const tasks: Promise<unknown>[] = [loadProducts(true)];
       if (token) tasks.push(loadOrders(token), loadNotifications(token), loadProfile(token), loadXPBalance(token));
       if (includeSupport) tasks.push(loadSupportTickets());
@@ -1588,7 +1620,7 @@ function AcrossApp() {
                 <Text style={{ color: "#191919", fontSize: 17, fontWeight: "900" }}>Atlantic Express</Text>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 }}>
                   <Ionicons name="location-outline" size={12} color="#8C8C8C" />
-                  <Text style={{ color: "#8C8C8C", fontSize: 11, fontWeight: "700" }}>Deliver to Nigeria</Text>
+                  <Text style={{ color: "#8C8C8C", fontSize: 11, fontWeight: "700" }}>Deliver to {catalogCountry}</Text>
                 </View>
               </View>
             </View>
@@ -1606,6 +1638,15 @@ function AcrossApp() {
                 {categories.map(cat => (
                   <Pressable key={cat} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E8E8E8", backgroundColor: "#FFFFFF" }, selectedCategory === cat && { borderColor: "#FF4747", backgroundColor: "#FFF1F1" }]} onPress={() => setSelectedCategory(cat)}>
                     <Text style={[{ color: "#595959", fontWeight: "800", fontSize: 12 }, selectedCategory === cat && { color: "#FF4747" }]}>{cat}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+            <View style={{ paddingBottom: 7, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
+                {([ ["all", "All products"], ["local", "In your country"], ["international", "Ships from abroad"] ] as const).map(([view, label]) => (
+                  <Pressable key={view} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#F5F5F5" }, stockView === view && { backgroundColor: "#191919" }]} onPress={() => { setSelectedCategory("All"); setStockView(view); }}>
+                    <Text style={{ color: stockView === view ? "#FFFFFF" : "#595959", fontWeight: "800", fontSize: 12 }}>{label}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -1650,10 +1691,11 @@ function AcrossApp() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
             ListHeaderComponent={<><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: "#FFFFFF" }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>Trending now</Text>
-                <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{visibleProducts.length} items</Text>
+                <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
+                <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
-			</View><FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} /></>}
+			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
+            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{internationalLoading && stockView === "international" ? "Loading products..." : "No products available for this delivery area"}</Text></View>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
         )}
 
