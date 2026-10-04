@@ -227,9 +227,10 @@ function AcrossApp() {
 
   const totals = useMemo(() => {
     const items = cart.reduce((sum, i) => sum + i.quantity, 0);
-    const amount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-    const platformFee = Math.round(amount * 0.01 * 100) / 100;
-    return { items, amount, platformFee, payablePreview: amount + platformFee };
+    const amount = cart.reduce((sum, i) => sum + (i.product.price - (i.product.delivery_fee || 0)) * i.quantity, 0);
+    const delivery = cart.reduce((sum, i) => sum + (i.product.delivery_fee || 0) * i.quantity, 0);
+    const platformFee = Math.round((amount + delivery) * 0.01 * 100) / 100;
+    return { items, amount, delivery, platformFee, payablePreview: amount + delivery + platformFee };
   }, [cart]);
 
   const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
@@ -1098,7 +1099,7 @@ function AcrossApp() {
       const q = await r.json() as Quote;
       setQuote(q);
       await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
-      await payWithFlutterwave(q);
+      Alert.alert("Review your total", `Product ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee, q.currency)} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
 
@@ -1663,16 +1664,17 @@ function AcrossApp() {
             {cart.length === 0 ? (
               <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
-              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price, item.product.currency)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
+              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
               <View style={s.panel}>
-                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview, cart[0]?.product.currency)}</Text></View>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
                 <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
-                    <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Pay using Flutterwave"}</Text>
+                    <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Review total"}</Text>
                   </View>
                 </Pressable>
                 {quote ? (

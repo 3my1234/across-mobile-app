@@ -37,6 +37,7 @@ export function ProductCard({ product, cartQuantity, onPress }: Props) {
         <View style={styles.footer}>
           <View>
             <Text style={styles.price}>{money(currentPrice, product.currency)}</Text>
+            {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
             {comparePrice > currentPrice && (
               <View style={styles.discountRow}>
                 <Text style={styles.compare}>{money(comparePrice, product.currency)}</Text>

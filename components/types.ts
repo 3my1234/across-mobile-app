@@ -7,6 +7,7 @@ export type Product = {
   image_urls: string[];
   currency: string;
   price: number;
+  delivery_fee?: number;
   compare_at_price?: number;
   inventory_count: number;
   origin_hub: { id: string; name: string; city: string };
@@ -26,7 +27,7 @@ export type Product = {
   distance_km?: number;
   delivery_max_days?: number;
   delivery_methods?: string[];
-  delivery_areas?: { country_code: string; state?: string; city?: string; delivered_price?: number; currency_code?: string }[];
+  delivery_areas?: { country_code: string; state?: string; city?: string; delivered_price?: number; delivery_fee?: number; currency_code?: string }[];
 };
 
 export type CartItem = { product: Product; quantity: number };
