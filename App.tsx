@@ -174,6 +174,12 @@ function AcrossApp() {
   const [detectedRegionName, setDetectedRegionName] = useState("");
   const [detectedCityName, setDetectedCityName] = useState("");
   const [detectedPostalCode, setDetectedPostalCode] = useState("");
+  const [buyerMarkets, setBuyerMarkets] = useState<{ country_code: string; currency_code: string }[]>([{ country_code: "NG", currency_code: "NGN" }]);
+  const [selectedMarketCountry, setSelectedMarketCountry] = useState("");
+  const [profileCountryCode, setProfileCountryCode] = useState("");
+  const catalogCountry = String(profile?.country_code || selectedMarketCountry || (buyerMarkets.some(m => m.country_code === detectedCountryCode) ? detectedCountryCode : "NG")).toUpperCase();
+  const catalogState = String(profile?.state || detectedRegionName || "").trim();
+  const catalogCity = String(profile?.city || detectedCityName || "").trim();
 	const [showFlashSale, setShowFlashSale] = useState(false);
 	const [flashSaleProducts, setFlashSaleProducts] = useState<Product[]>([]);
 	const [flashSaleCursor, setFlashSaleCursor] = useState("");
@@ -182,6 +188,7 @@ function AcrossApp() {
   const [flashSaleSearch, setFlashSaleSearch] = useState("");
   const flashSaleRequest = useRef(0);
   const productLoadInFlight = useRef<Promise<void> | null>(null);
+  const catalogRequestKeyRef = useRef("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showDiscountOffer, setShowDiscountOffer] = useState(false);
   const discountPromptSeen = useRef(false);
@@ -232,6 +239,12 @@ function AcrossApp() {
   }, 0), [flashSaleProducts]);
 
   useEffect(() => {
+    void fetch(`${API_URL}/api/v1/buyer-markets`).then(r => r.ok ? r.json() : null).then(data => {
+      if (Array.isArray(data?.markets) && data.markets.length) setBuyerMarkets(data.markets);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     // Start public catalogue and browser preparation at process launch rather
     // than waiting for authentication to finish.
     void loadProducts();
@@ -243,6 +256,19 @@ function AcrossApp() {
       if (Platform.OS === "android") void WebBrowser.coolDownAsync().catch(() => {});
     };
   }, []);
+
+  useEffect(() => {
+    const key = `${catalogCountry}|${catalogState}|${catalogCity}`;
+    if (catalogRequestKeyRef.current === key) return;
+    const previousKey = catalogRequestKeyRef.current;
+    catalogRequestKeyRef.current = key;
+    if (!previousKey) return;
+    void (async () => {
+      if (productLoadInFlight.current) await productLoadInFlight.current;
+      if (catalogRequestKeyRef.current !== key) return;
+      await loadProducts(true);
+    })();
+  }, [catalogCountry, catalogState, catalogCity]);
 
   useEffect(() => {
     if (stage !== "auth" || (privyReady && !googleSessionClearing)) {
@@ -733,6 +759,9 @@ function AcrossApp() {
         const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
         try {
           const params = new URLSearchParams();
+          params.set("country_code", catalogCountry);
+          if (catalogState) params.set("state", catalogState);
+          if (catalogCity) params.set("city", catalogCity);
           if (force) params.set("fresh", String(Date.now()));
           if (buyerCoordinatesRef.current) {
             params.set("latitude", String(buyerCoordinatesRef.current.latitude));
@@ -743,6 +772,13 @@ function AcrossApp() {
           const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
           setProducts(catalog);
           await hydrateCart(catalog);
+          if (force) {
+            setCart(current => current.flatMap(entry => {
+              const product = catalog.find(candidate => candidate.sku === entry.product.sku);
+              return product && product.inventory_count > 0 ? [{ product, quantity: Math.min(entry.quantity, product.inventory_count) }] : [];
+            }));
+            clearPendingPayment();
+          }
           catalog.slice(0, 12).forEach(product => {
             const uri = product.image_urls?.[0];
             if (uri) void Image.prefetch(uri).catch(() => false);
@@ -770,7 +806,9 @@ function AcrossApp() {
 		setFlashSaleLoading(true);
 		try {
 			const cursor = reset ? "" : flashSaleCursor;
-			const params = new URLSearchParams({ limit: "24" });
+			const params = new URLSearchParams({ limit: "24", country_code: catalogCountry });
+			if (catalogState) params.set("state", catalogState);
+			if (catalogCity) params.set("city", catalogCity);
 			if (query.trim()) params.set("search", query.trim());
 			if (cursor) params.set("cursor", cursor);
 			const response = await fetch(`${API_URL}/api/v1/products/flash-sale?${params.toString()}`);
@@ -819,7 +857,7 @@ function AcrossApp() {
   async function authenticate(path: string, payload: Record<string, string>) {
     setBusy(true);
     try {
-      const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify(payload) });
+      const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Client-Country-Code": catalogCountry }, body: JSON.stringify(payload) });
       const d = await readResponseBody(r);
       if (d.requires_email_verification) {
         setAuthMode("signin");
@@ -891,7 +929,7 @@ function AcrossApp() {
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
       if (!privyToken) throw new Error("Could not get access token");
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ privy_token: privyToken }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken }) });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
       await saveSession(d); setOauthBusy(false);
@@ -963,10 +1001,10 @@ function AcrossApp() {
     }
     const source = `${p.fulfillment_mode}:${p.provider_id}`;
     const existingSource = cart[0] ? `${cart[0].product.fulfillment_mode}:${cart[0].product.provider_id}` : source;
-    if (cart.length && source !== existingSource) {
+    if (cart.length && (source !== existingSource || p.currency !== cart[0].product.currency)) {
       Alert.alert(
         "Start a separate seller cart?",
-        "Each seller and fulfilment route is checked out separately so payment, stock and delivery responsibility stay accurate. You can keep your current cart or replace it with this product.",
+        "Products from different sellers, routes or currencies are checked out separately. You can keep your current cart or replace it with this product.",
         [
           { text: "Keep current cart", style: "cancel" },
           {
@@ -999,12 +1037,15 @@ function AcrossApp() {
     const missingProfileFields = [
       !String(profile?.full_name || "").trim() ? "full name" : "",
       !String(profile?.email || "").trim() ? "email" : "",
-      !String(profile?.phone || "").trim() ? "phone number" : ""
+      !String(profile?.phone || "").trim() ? "phone number" : "",
+      !String(profile?.address || "").trim() ? "street address" : "",
+      !String(profile?.city || "").trim() ? "city" : "",
+      !String(profile?.state || "").trim() ? "state" : ""
     ].filter(Boolean);
     if (profile && missingProfileFields.length > 0) {
       setActiveTab("account");
       setEditingProfile(true);
-      Alert.alert("Complete your profile", `Add your ${missingProfileFields.join(", ")} before purchasing. Your phone is used for payment authentication and delivery contact.`);
+      Alert.alert("Complete your profile", `Add your ${missingProfileFields.join(", ")} before purchasing. Your delivery address is checked against the seller's delivery area.`);
       return;
     }
     if (quote) {
@@ -1013,7 +1054,7 @@ function AcrossApp() {
     }
     setBusy(true); try {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: "NG", items }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items }) });
       if (r.status === 401) { await logout(); return; }
       if (!r.ok) {
         const errData = await r.json().catch(() => ({}));
@@ -1334,6 +1375,7 @@ function AcrossApp() {
       const data = await readResponseBody(response);
       if (!response.ok) throw new Error(formatHttpError(response, data, "Could not load profile"));
       setProfile(data);
+      setProfileCountryCode(data.country_code || "NG");
       setProfileName(data.full_name || "");
       setProfilePhone(data.phone || "");
       setProfileRegion(data.region || "");
@@ -1353,6 +1395,7 @@ function AcrossApp() {
     setBusy(true);
     try {
       const body: any = {
+        country_code: profileCountryCode,
         full_name: profileName.trim(),
         phone: profilePhone.trim(),
         region: profileRegion.trim(),
@@ -1365,7 +1408,7 @@ function AcrossApp() {
       if (profileAvatar.startsWith("https://") || profileAvatar.startsWith("http://")) body.avatar_url = profileAvatar;
       const response = await fetch(`${API_URL}/api/v1/profile`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(catalogCountry ? { "X-Client-Country-Code": catalogCountry } : {}) },
         body: JSON.stringify(body)
       });
       const data = await readResponseBody(response);
@@ -1453,12 +1496,12 @@ function AcrossApp() {
     })();
   }, [stage, token, profile, detectedRegionName, detectedCityName, detectedPostalCode, detectedCountryCode]);
 
-  const countryNotice = detectedCountryCode && detectedCountryCode !== "NG"
-    ? `Service is currently available in Nigeria only. Detected ${detectedCountryName || detectedCountryCode}.`
+  const countryNotice = detectedCountryCode && !buyerMarkets.some(market => market.country_code === detectedCountryCode)
+    ? `Checkout is not yet enabled for ${detectedCountryName || detectedCountryCode}. Choose an enabled country only if you can receive deliveries there.`
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-	if (stage === "auth") return <AuthScreen mode={authMode} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -1589,11 +1632,11 @@ function AcrossApp() {
             {cart.length === 0 ? (
               <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
-              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
+              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price, item.product.currency)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
               <View style={s.panel}>
-                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(totals.amount)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total) : money(totals.payablePreview)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview, cart[0]?.product.currency)}</Text></View>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
                 <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -1635,6 +1678,8 @@ function AcrossApp() {
                 </Pressable>
                 <TextInput style={s.input} value={profileName} onChangeText={setProfileName} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Full name" />
                 <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Phone number" keyboardType="phone-pad" />
+                <Text style={{ marginBottom: 8, fontWeight: "700", color: "#30423D" }}>Delivery country and checkout currency</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => { if (profileCountryCode !== market.country_code) { setProfileCountryCode(market.country_code); setProfileAddress(""); setProfileCity(""); setProfileState(""); setProfilePostalCode(""); } }} style={[s.secondaryButton, { marginRight: 8, borderColor: profileCountryCode === market.country_code ? "#12805F" : "#D0D5DD" }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView>
                 <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Region" />
                 <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Street address" />
                 <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="City" />
@@ -1691,7 +1736,7 @@ function AcrossApp() {
                     </View>
                     <Text style={{ color: order.order_status === "Paid" ? "#12805F" : "#B54708", fontWeight: "900" }}>{order.order_status}</Text>
                   </View>
-                  <Text style={{ marginTop: 10, color: "#191919", fontWeight: "900" }}>{money(order.total_amount)}</Text>
+                  <Text style={{ marginTop: 10, color: "#191919", fontWeight: "900" }}>{money(order.total_amount, order.currency)}</Text>
                   {!!order.package_label && <Text style={{ marginTop: 4, color: "#66736F", fontSize: 12 }}>Package: {order.package_label}</Text>}
                   {!!order.fulfillment && (
                     <View style={{ marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: "#F3F8F6", borderWidth: 1, borderColor: "#D9E9E2" }}>
@@ -1872,7 +1917,7 @@ function AcrossApp() {
         </View>
       </Modal>
 
-      {selectedProduct && <ProductDetailScreen product={selectedProduct} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
+      {selectedProduct && <ProductDetailScreen product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
     </View>
   );
 }

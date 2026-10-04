@@ -26,6 +26,7 @@ export type Product = {
   distance_km?: number;
   delivery_max_days?: number;
   delivery_methods?: string[];
+  delivery_areas?: { country_code: string; state?: string; city?: string; delivered_price?: number; currency_code?: string }[];
 };
 
 export type CartItem = { product: Product; quantity: number };

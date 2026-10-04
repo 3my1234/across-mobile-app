@@ -1,9 +1,13 @@
 import { API_URL } from "./config";
 
-export function money(value: number) {
-  return new Intl.NumberFormat("en-NG", {
-    style: "currency", currency: "NGN", maximumFractionDigits: 0
-  }).format(value);
+export function money(value: number, currency = "NGN") {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency", currency, maximumFractionDigits: 2
+    }).format(value);
+  } catch {
+    return `${currency} ${Number(value || 0).toFixed(2)}`;
+  }
 }
 
 export function normalizeMediaUrl(rawUrl: string): string {
@@ -81,6 +85,7 @@ export function mapProduct(raw: any): import("./types").Product {
     delivery_min_days: Number(raw.delivery_min_days ?? raw.factory_details?.delivery_min_days ?? 0),
     delivery_max_days: Number(raw.delivery_max_days ?? raw.factory_details?.delivery_max_days ?? 0),
     delivery_methods: raw.delivery_methods ?? raw.factory_details?.delivery_methods ?? [],
+    delivery_areas: raw.delivery_areas ?? raw.factory_details?.delivery_areas ?? [],
     distance_km: raw.distance_km == null ? undefined : Number(raw.distance_km)
   };
 }
