@@ -608,7 +608,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           {!!nearby && <View style={styles.locationStrip}><Ionicons name="navigate-circle" size={16} color="#12805F" /><Text numberOfLines={1} style={styles.locationSummary}>{nearby.label || "Current location"} · 100 km{typeof nearby.accuracy === "number" ? ` · ±${Math.round(nearby.accuracy)} m` : ""}</Text></View>}
           {!!cacheNotice && <View style={styles.cacheStrip}><Ionicons name="cloud-done-outline" size={14} color="#496B60" /><Text numberOfLines={1} style={styles.cacheNotice}>{cacheNotice}</Text></View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
-            {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
+            {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
           {loading && !items.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
@@ -703,12 +703,12 @@ const styles = StyleSheet.create({
   grow: { flex: 1 },
   loader: { marginTop: 50 },
   pageLoader: { marginVertical: 18 },
-  modeBar: { marginHorizontal: 10, marginTop: 7, padding: 3, borderRadius: 14, backgroundColor: "#EDEDED", flexDirection: "row" },
+  modeBar: { marginHorizontal: 10, marginTop: 4, padding: 3, borderRadius: 14, backgroundColor: "#EDEDED", flexDirection: "row" },
   modeButton: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center", borderRadius: 11 },
   modeButtonActive: { backgroundColor: "#FFF" },
   modeText: { color: "#777", fontWeight: "800" },
   modeTextActive: { color: "#191919" },
-  search: { minHeight: 38, marginHorizontal: 10, marginTop: 6, marginBottom: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#DEDEDE" },
+  search: { minHeight: 38, marginHorizontal: 10, marginTop: 6, marginBottom: 4, paddingHorizontal: 12, borderRadius: 14, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#DEDEDE" },
   reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
   reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
   stars: { flexDirection: "row", gap: 8 },
@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
   cacheNotice: { flex: 1, color: "#496B60", fontSize: 10, fontWeight: "700" },
   ratingRow: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 4 },
   rating: { color: "#A66A00", fontSize: 11, fontWeight: "900" },
-  nearbyActions: { marginHorizontal: 10, marginBottom: 4, flexDirection: "row", gap: 7 },
+  nearbyActions: { marginHorizontal: 10, marginBottom: 2, flexDirection: "row", gap: 7 },
   nearbyButton: { flex: 1, minHeight: 36, borderRadius: 14, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#FFF" },
   nearbyButtonActive: { backgroundColor: "#FF4747" },
   nearbyText: { color: "#FF4747", fontWeight: "900" },
@@ -726,11 +726,11 @@ const styles = StyleSheet.create({
   locationStrip: { marginHorizontal: 12, marginBottom: 3, minHeight: 20, flexDirection: "row", alignItems: "center", gap: 5 },
   locationSummary: { flex: 1, color: "#2E5C4E", fontSize: 10, fontWeight: "800" },
   distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
-  chipScroller: { height: 48, maxHeight: 48, flexGrow: 0 },
-  chips: { height: 48, paddingHorizontal: 10, gap: 7, paddingVertical: 5, alignItems: "center" },
-  chip: { height: 38, paddingHorizontal: 13, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
+  chipScroller: { height: 52, maxHeight: 52, flexGrow: 0 },
+  chips: { height: 52, paddingHorizontal: 10, gap: 7, paddingVertical: 6, alignItems: "center" },
+  chip: { height: 40, paddingHorizontal: 12, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: "#FF4747", borderColor: "#FF4747" },
-  chipText: { fontWeight: "700", color: "#555", lineHeight: 22 },
+  chipText: { fontSize: 13, lineHeight: 18, fontWeight: "800", color: "#555", includeFontPadding: false },
   chipTextActive: { color: "#FFF" },
   listHeading: { paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },

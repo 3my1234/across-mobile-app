@@ -112,7 +112,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
             {isWelcome ? (
               <>
                 <View style={s.authHero}>
-                  <Text style={s.authTitle}>Discover local and international products, connect with nearby providers, pay securely, and track every order in one place.</Text>
+                  <Text style={s.authWelcomeTitle} maxFontSizeMultiplier={1.2}>Discover local and international products, connect with nearby providers, pay securely, and track every order in one place.</Text>
                 </View>
                 <View style={s.authPanel}>
                 {!!noticeText && (
