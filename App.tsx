@@ -109,6 +109,10 @@ function AcrossApp() {
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
   const [token, setToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stockView, setStockView] = useState<"all" | "local" | "international">("all");
+  const [internationalProducts, setInternationalProducts] = useState<Product[]>([]);
+  const [internationalLoading, setInternationalLoading] = useState(false);
+  const [internationalRefreshVersion, setInternationalRefreshVersion] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("home");
@@ -197,9 +201,9 @@ function AcrossApp() {
   const categories = useMemo(() => {
     const names = new Set<string>();
     names.add("All");
-    products.forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
+    (stockView === "international" ? internationalProducts : products).forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
     return Array.from(names);
-  }, [products]);
+  }, [products, internationalProducts, stockView]);
 
   function revealInput(scrollRef: { current: ScrollView | null }, inputRef: { current: TextInput | null }, extraOffset = 96) {
     setTimeout(() => {
@@ -214,7 +218,8 @@ function AcrossApp() {
 
   const visibleProducts = useMemo(() => {
     // Deals belong to the dedicated Flash Sale experience, not the ordinary feed.
-    let filtered = products.filter(product => !product.is_flash_sale);
+    let filtered = (stockView === "international" ? internationalProducts : products).filter(product => !product.is_flash_sale);
+    if (stockView === "local") filtered = filtered.filter(product => product.inventory_country_code === catalogCountry);
     if (selectedCategory !== "All") {
       filtered = filtered.filter(p => p.category_path?.some(c => c.toLowerCase() === selectedCategory.toLowerCase()));
     }
@@ -223,13 +228,14 @@ function AcrossApp() {
       filtered = filtered.filter(p => p.title.toLowerCase().includes(q) || p.category_path?.some(c => c.toLowerCase().includes(q)) || p.sku.toLowerCase().includes(q));
     }
     return filtered;
-  }, [products, selectedCategory, searchQuery]);
+  }, [products, internationalProducts, stockView, catalogCountry, selectedCategory, searchQuery]);
 
   const totals = useMemo(() => {
     const items = cart.reduce((sum, i) => sum + i.quantity, 0);
-    const amount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-    const platformFee = Math.round(amount * 0.01 * 100) / 100;
-    return { items, amount, platformFee, payablePreview: amount + platformFee };
+    const amount = cart.reduce((sum, i) => sum + (i.product.price - (i.product.delivery_fee || 0)) * i.quantity, 0);
+    const delivery = cart.reduce((sum, i) => sum + (i.product.delivery_fee || 0) * i.quantity, 0);
+    const platformFee = Math.round((amount + delivery) * 0.01 * 100) / 100;
+    return { items, amount, delivery, platformFee, payablePreview: amount + delivery + platformFee };
   }, [cart]);
 
   const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
@@ -266,6 +272,7 @@ function AcrossApp() {
     setQuote(null);
     setSelectedProduct(null);
     setProducts([]);
+    setInternationalProducts([]);
     setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }, [catalogCountry]);
@@ -279,6 +286,7 @@ function AcrossApp() {
     setQuote(null);
     setSelectedProduct(null);
     setProducts([]);
+    setInternationalProducts([]);
     setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
     void (async () => {
@@ -287,6 +295,30 @@ function AcrossApp() {
       await loadProducts(true);
     })();
   }, [catalogCountry, catalogState, catalogCity]);
+
+  useEffect(() => {
+    if (stockView !== "international" || stage !== "app") return;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
+    setInternationalLoading(true);
+    const params = new URLSearchParams({ country_code: catalogCountry, stock_scope: "international" });
+    if (catalogState) params.set("state", catalogState);
+    if (catalogCity) params.set("city", catalogCity);
+    void (async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/v1/products?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error(`catalog request failed: ${response.status}`);
+        const catalog: Product[] = ((await response.json()).products ?? []).map(mapProduct);
+        if (!controller.signal.aborted) setInternationalProducts(catalog);
+      } catch {
+        if (!controller.signal.aborted) setInternationalProducts([]);
+      } finally {
+        clearTimeout(timeout);
+        if (!controller.signal.aborted) setInternationalLoading(false);
+      }
+    })();
+    return () => { controller.abort(); clearTimeout(timeout); };
+  }, [stockView, stage, catalogCountry, catalogState, catalogCity, internationalRefreshVersion]);
 
   useEffect(() => {
     if (stage !== "auth" || (privyReady && !googleSessionClearing)) {
@@ -864,6 +896,7 @@ function AcrossApp() {
     if (refreshing) return;
     setRefreshing(true);
     try {
+      if (stockView === "international") setInternationalRefreshVersion(version => version + 1);
       const tasks: Promise<unknown>[] = [loadProducts(true)];
       if (token) tasks.push(loadOrders(token), loadNotifications(token), loadProfile(token), loadXPBalance(token));
       if (includeSupport) tasks.push(loadSupportTickets());
@@ -1098,7 +1131,7 @@ function AcrossApp() {
       const q = await r.json() as Quote;
       setQuote(q);
       await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
-      await payWithFlutterwave(q);
+      Alert.alert("Review your total", `Product ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee, q.currency)} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
 
@@ -1587,7 +1620,7 @@ function AcrossApp() {
                 <Text style={{ color: "#191919", fontSize: 17, fontWeight: "900" }}>Atlantic Express</Text>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 }}>
                   <Ionicons name="location-outline" size={12} color="#8C8C8C" />
-                  <Text style={{ color: "#8C8C8C", fontSize: 11, fontWeight: "700" }}>Deliver to Nigeria</Text>
+                  <Text style={{ color: "#8C8C8C", fontSize: 11, fontWeight: "700" }}>Deliver to {catalogCountry}</Text>
                 </View>
               </View>
             </View>
@@ -1605,6 +1638,15 @@ function AcrossApp() {
                 {categories.map(cat => (
                   <Pressable key={cat} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E8E8E8", backgroundColor: "#FFFFFF" }, selectedCategory === cat && { borderColor: "#FF4747", backgroundColor: "#FFF1F1" }]} onPress={() => setSelectedCategory(cat)}>
                     <Text style={[{ color: "#595959", fontWeight: "800", fontSize: 12 }, selectedCategory === cat && { color: "#FF4747" }]}>{cat}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+            <View style={{ paddingBottom: 7, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
+                {([ ["all", "All products"], ["local", "In your country"], ["international", "Ships from abroad"] ] as const).map(([view, label]) => (
+                  <Pressable key={view} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#F5F5F5" }, stockView === view && { backgroundColor: "#191919" }]} onPress={() => { setSelectedCategory("All"); setStockView(view); }}>
+                    <Text style={{ color: stockView === view ? "#FFFFFF" : "#595959", fontWeight: "800", fontSize: 12 }}>{label}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -1649,10 +1691,11 @@ function AcrossApp() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
             ListHeaderComponent={<><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: "#FFFFFF" }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>Trending now</Text>
-                <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{visibleProducts.length} items</Text>
+                <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
+                <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
-			</View><FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} /></>}
+			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
+            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{internationalLoading && stockView === "international" ? "Loading products..." : "No products available for this delivery area"}</Text></View>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
         )}
 
@@ -1663,16 +1706,17 @@ function AcrossApp() {
             {cart.length === 0 ? (
               <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
-              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price, item.product.currency)}</Text><View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
+              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
               <View style={s.panel}>
-                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview, cart[0]?.product.currency)}</Text></View>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
                 <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                     <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
-                    <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Pay using Flutterwave"}</Text>
+                    <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Review total"}</Text>
                   </View>
                 </Pressable>
                 {quote ? (

@@ -34,9 +34,11 @@ export function ProductCard({ product, cartQuantity, onPress }: Props) {
           </Text>
         </View>
         {typeof product.distance_km === "number" && <Text style={styles.nearby}>{product.distance_km.toFixed(1)} km away</Text>}
+        {product.fulfillment_mode === "merchant_cross_border" && product.stock_state !== "import_on_demand" && product.inventory_country_code && <Text style={styles.abroad}>Ships from {product.inventory_country_code}</Text>}
         <View style={styles.footer}>
           <View>
             <Text style={styles.price}>{money(currentPrice, product.currency)}</Text>
+            {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
             {comparePrice > currentPrice && (
               <View style={styles.discountRow}>
                 <Text style={styles.compare}>{money(comparePrice, product.currency)}</Text>
@@ -63,6 +65,7 @@ const styles = StyleSheet.create({
   ratingRow: { marginTop: 6, flexDirection: "row", alignItems: "center", gap: 5 },
   ratingText: { color: "#6F6F6F", fontSize: 11, fontWeight: "700" },
   nearby: { marginTop: 5, color: "#12805F", fontSize: 11, fontWeight: "900" },
+  abroad: { marginTop: 5, color: "#52679A", fontSize: 11, fontWeight: "800" },
   footer: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
   price: { color: "#FF4747", fontSize: 15, fontWeight: "900" },
   discountRow: { marginTop: 3, flexDirection: "row", alignItems: "center", gap: 6 },

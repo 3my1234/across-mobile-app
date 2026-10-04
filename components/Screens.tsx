@@ -418,6 +418,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price, product.currency)}</Text>
               {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price, product.currency)}</Text>}
             </View>
+            {!!product.delivery_fee && <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Price breakdown</Text><Text style={styles.detailMetaValue}>{money((product.flash_sale_price || product.price) - product.delivery_fee, product.currency)} product + {money(product.delivery_fee, product.currency)} delivery</Text></View>}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{originLabel}</Text></View>
             {deliveryAreaLabel ? <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivers to</Text><Text style={styles.detailMetaValue}>{deliveryAreaLabel}</Text></View> : null}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>

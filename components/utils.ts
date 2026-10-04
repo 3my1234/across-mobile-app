@@ -72,6 +72,7 @@ export function mapProduct(raw: any): import("./types").Product {
     id: raw.id, sku: raw.sku, title: raw.title, description: raw.description ?? "",
     category_path: raw.category_path ?? [], image_urls: normalizeMediaUrls(raw.image_urls ?? []),
     currency: raw.currency ?? "NGN", price: raw.price ?? raw.local_selling_price ?? 0,
+    delivery_fee: Number(raw.delivery_fee || 0),
     compare_at_price: raw.compare_at_price, inventory_count: raw.inventory_count ?? 0,
     origin_hub: raw.origin_hub ?? { id: "", name: "", city: "" },
     is_flash_sale: raw.is_flash_sale, flash_sale_price: raw.flash_sale_price,
