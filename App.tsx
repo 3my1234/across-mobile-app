@@ -180,6 +180,7 @@ function AcrossApp() {
   const catalogCountry = String(profile?.country_code || selectedMarketCountry || (buyerMarkets.some(m => m.country_code === detectedCountryCode) ? detectedCountryCode : "NG")).toUpperCase();
   const catalogState = String(profile?.state || detectedRegionName || "").trim();
   const catalogCity = String(profile?.city || detectedCityName || "").trim();
+	const previousCatalogCountry = useRef(catalogCountry);
 	const [showFlashSale, setShowFlashSale] = useState(false);
 	const [flashSaleProducts, setFlashSaleProducts] = useState<Product[]>([]);
 	const [flashSaleCursor, setFlashSaleCursor] = useState("");
@@ -258,11 +259,28 @@ function AcrossApp() {
   }, []);
 
   useEffect(() => {
+    if (previousCatalogCountry.current === catalogCountry) return;
+    previousCatalogCountry.current = catalogCountry;
+    // A saved quote and cart belong to their original delivery market.
+    setCart([]);
+    setQuote(null);
+    setSelectedProduct(null);
+    setProducts([]);
+    setFlashSaleProducts([]);
+    void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
+  }, [catalogCountry]);
+
+  useEffect(() => {
     const key = `${catalogCountry}|${catalogState}|${catalogCity}`;
     if (catalogRequestKeyRef.current === key) return;
     const previousKey = catalogRequestKeyRef.current;
     catalogRequestKeyRef.current = key;
     if (!previousKey) return;
+    setQuote(null);
+    setSelectedProduct(null);
+    setProducts([]);
+    setFlashSaleProducts([]);
+    void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
     void (async () => {
       if (productLoadInFlight.current) await productLoadInFlight.current;
       if (catalogRequestKeyRef.current !== key) return;
@@ -736,7 +754,7 @@ function AcrossApp() {
         setCart(restored);
         if (pendingRaw) {
           const pending = JSON.parse(pendingRaw);
-          if (pending?.quote?.order_id && pending?.cart_fingerprint === cartFingerprint(restored)) {
+          if (pending?.quote?.order_id && pending?.quote?.country_code === catalogCountry && pending?.cart_fingerprint === cartFingerprint(restored)) {
             setQuote(pending.quote as Quote);
             restoredPendingPayment.current = true;
           } else {
@@ -1034,6 +1052,19 @@ function AcrossApp() {
 
   async function checkout() {
     if (!token || cart.length === 0) return;
+    const market = buyerMarkets.find(item => item.country_code === catalogCountry);
+    if (!market || cart.some(item => item.product.currency !== market.currency_code)) {
+      clearPendingPayment();
+      Alert.alert("Delivery market changed", "Refresh your cart to see the delivered prices for your country before paying.");
+      void loadProducts(true);
+      return;
+    }
+    if (quote && (quote.country_code !== catalogCountry || quote.currency !== market.currency_code)) {
+      clearPendingPayment();
+      Alert.alert("Delivery market changed", "Your previous checkout price belongs to another delivery country. Review the current price and try again.");
+      void loadProducts(true);
+      return;
+    }
     const missingProfileFields = [
       !String(profile?.full_name || "").trim() ? "full name" : "",
       !String(profile?.email || "").trim() ? "email" : "",
