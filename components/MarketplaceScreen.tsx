@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -20,6 +20,7 @@ import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
 import { ResilientImage } from "./ResilientImage";
 import { fetchWithTimeout } from "./utils";
+import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 import { filterNearbySnapshot, readCachedContact, readNearbySnapshot, writeCachedContact, writeNearbySnapshot } from "./nearbyCache";
 
 type Listing = {
@@ -137,6 +138,11 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const [locationRequested, setLocationRequested] = useState(false);
 
   const [cacheNotice, setCacheNotice] = useState("");
+  const listingRequest = useRef(0);
+  const detailRequest = useRef(0);
+  const onlineListingsLoaded = useRef(false);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const [reviewedRequests, setReviewedRequests] = useState<Record<string, number>>({});
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
@@ -197,6 +203,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }, []);
 
   const loadListings = useCallback(async (refresh = false, cursor = "") => {
+    const request = ++listingRequest.current;
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
@@ -206,11 +213,18 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       if (cursor && !nearby) query.set("cursor", cursor);
       if (nearby) { query.set("latitude", String(nearby.latitude)); query.set("longitude", String(nearby.longitude)); query.set("radius_km", "100"); }
       const endpoint = nearby ? "nearby" : "listings";
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/${endpoint}?${query.toString()}`);
+      const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/marketplace/${endpoint}?${query.toString()}`), { headers: { "Cache-Control": "no-cache" } });
       const body = await response.json().catch(() => ({}));
+      if (request !== listingRequest.current) return;
+      if (response.status >= 400 && response.status < 500) { setError(apiMessage(body, "Services are unavailable for this search")); return; }
       if (!response.ok) throw new Error(apiMessage(body, "Services are temporarily unavailable"));
       const incoming: Listing[] = Array.isArray(body.items) ? body.items : [];
+      onlineListingsLoaded.current = true;
       setItems(current => cursor ? [...current, ...incoming.filter(item => !current.some(existing => existing.id === item.id))] : incoming);
+      setSelected(current => {
+        const updated = current && incoming.find(item => item.id === current.id);
+        return updated ? { ...current, ...updated } : current;
+      });
       setListingCursor(String(body.next_cursor || ""));
       if (nearby && !type && !search.trim()) {
         const snapshot = await writeNearbySnapshot(nearby, incoming);
@@ -220,6 +234,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       }
     } catch (loadError) {
       const snapshot = await readNearbySnapshot<Listing>();
+      if (request !== listingRequest.current) return;
       if (snapshot) {
         setNearby(snapshot.coordinates);
         setItems(filterNearbySnapshot(snapshot.items, type, search));
@@ -229,9 +244,11 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
         setError(loadError instanceof Error ? loadError.message : "Services are temporarily unavailable");
       }
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
+      if (request === listingRequest.current) {
+        setLoading(false);
+        setLoadingMore(false);
+        setRefreshing(false);
+      }
     }
   }, [nearby, search, type]);
 
@@ -263,7 +280,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   useEffect(() => {
     let active = true;
     void readNearbySnapshot<Listing>().then(snapshot => {
-      if (!active || !snapshot) return;
+      if (!active || !snapshot || onlineListingsLoaded.current) return;
       setNearby(snapshot.coordinates);
       setItems(snapshot.items);
       setCacheNotice(`Saved results from ${new Date(snapshot.fetchedAt).toLocaleString()}`);
@@ -317,6 +334,26 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     }, mode === "explore" ? 250 : 0);
     return () => clearTimeout(timer);
   }, [loadConversations, loadListings, loadRequests, mode]);
+
+  useCatalogFreshness(async () => {
+    await Promise.allSettled([mode === "explore" ? loadListings(true) : Promise.resolve(), selectedRef.current ? refreshSelectedListing(selectedRef.current.id) : Promise.resolve()]);
+  });
+
+  async function refreshSelectedListing(id: string) {
+    const request = ++detailRequest.current;
+    const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/marketplace/listings/${id}`), { headers: { "Cache-Control": "no-cache" } });
+    if (request !== detailRequest.current) return;
+    if (response.status === 404) {
+      setSelected(current => current?.id === id ? null : current);
+      setItems(current => current.filter(item => item.id !== id));
+      return;
+    }
+    if (!response.ok) throw new Error("Service details are temporarily unavailable");
+    const updated = await response.json();
+    if (request !== detailRequest.current) return;
+    setSelected(current => current?.id === id ? updated : current);
+    setItems(current => current.map(item => item.id === id ? { ...item, ...updated } : item));
+  }
 
   async function startConversation() {
     if (!selected || !requestMessage.trim()) {
@@ -388,8 +425,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     setSlots([]);
     setError("");
     try {
-      const detailResponse = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${item.id}`);
-      if (detailResponse.ok) setSelected(await detailResponse.json());
+      await refreshSelectedListing(item.id);
       if (item.direct_booking) {
         const slotResponse = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${item.id}/availability`);
         if (slotResponse.ok) {

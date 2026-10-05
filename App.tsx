@@ -25,6 +25,8 @@ import { NAV_ITEMS } from "./components/NavItems";
 import { MarketplaceScreen } from "./components/MarketplaceScreen";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
 import { readNotificationSoundEnabled, writeNearbySnapshot, writeNotificationSoundEnabled } from "./components/nearbyCache";
+import { freshCatalogURL, useCatalogFreshness } from "./components/catalogFreshness";
+import { cartOfferFingerprint, latestProductSnapshot, reconcileCart } from "./components/catalogState";
 
 import { s } from "./components/Styles";
 
@@ -196,7 +198,18 @@ function AcrossApp() {
 	const [flashSaleLoading, setFlashSaleLoading] = useState(false);
   const [flashSaleSearch, setFlashSaleSearch] = useState("");
   const flashSaleRequest = useRef(0);
+  const flashSaleContext = useRef({ visible: showFlashSale, search: flashSaleSearch });
+  flashSaleContext.current = { visible: showFlashSale, search: flashSaleSearch };
   const productLoadInFlight = useRef<Promise<void> | null>(null);
+  const productLoadContext = useRef({ key: "", fresh: false });
+  const productSnapshots = useRef(new Map<string, Product>());
+  const productReloadQueued = useRef<{ key: string; promise: Promise<void> } | null>(null);
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
+  const paymentProtectedRef = useRef(false);
+  paymentProtectedRef.current = paymentBusy || paymentState === "waiting";
+  const selectedProductRef = useRef(selectedProduct);
+  selectedProductRef.current = selectedProduct;
   const catalogRequestKeyRef = useRef("");
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showDiscountOffer, setShowDiscountOffer] = useState(false);
@@ -258,7 +271,7 @@ function AcrossApp() {
   useEffect(() => {
     // Start public catalogue and browser preparation at process launch rather
     // than waiting for authentication to finish.
-    void loadProducts();
+    void loadProducts(true);
     if (Platform.OS === "android") void WebBrowser.warmUpAsync().catch(() => {});
     restoreSession();
     bootTimer.current = setTimeout(() => setStage(prev => prev === "booting" ? "auth" : prev), SESSION_TIMEOUT);
@@ -276,6 +289,7 @@ function AcrossApp() {
     setQuote(null);
     setSelectedProduct(null);
     setProducts([]);
+    productSnapshots.current.clear();
     setInternationalProducts([]);
     setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
@@ -290,6 +304,7 @@ function AcrossApp() {
     setQuote(null);
     setSelectedProduct(null);
     setProducts([]);
+    productSnapshots.current.clear();
     setInternationalProducts([]);
     setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
@@ -310,10 +325,10 @@ function AcrossApp() {
     if (catalogCity) params.set("city", catalogCity);
     void (async () => {
       try {
-        const response = await fetch(`${API_URL}/api/v1/products?${params.toString()}`, { signal: controller.signal });
+        const response = await fetch(freshCatalogURL(`${API_URL}/api/v1/products?${params.toString()}`), { signal: controller.signal, headers: { "Cache-Control": "no-cache" } });
         if (!response.ok) throw new Error(`catalog request failed: ${response.status}`);
         const catalog: Product[] = ((await response.json()).products ?? []).map(mapProduct);
-        if (!controller.signal.aborted) setInternationalProducts(catalog);
+        if (!controller.signal.aborted) { setInternationalProducts(catalog); applyProductSnapshots(catalog); }
       } catch {
         if (!controller.signal.aborted) setInternationalProducts([]);
       } finally {
@@ -322,7 +337,21 @@ function AcrossApp() {
       }
     })();
     return () => { controller.abort(); clearTimeout(timeout); };
+    // Reconciliation reads current snapshots/payment state through refs; only
+    // destination, view, and refresh changes should restart this fetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stockView, stage, catalogCountry, catalogState, catalogCity, internationalRefreshVersion]);
+
+  useCatalogFreshness(async () => {
+    if (stockView === "international") setInternationalRefreshVersion(version => version + 1);
+    await loadProducts(true);
+  }, stage === "app");
+
+  useEffect(() => {
+    if (stage === "app" && (activeTab === "home" || activeTab === "cart")) void loadProducts(true);
+    // The loader coalesces requests and rejects an older destination response.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, activeTab]);
 
   useEffect(() => {
     if (stage !== "auth" || (privyReady && !googleSessionClearing)) {
@@ -370,8 +399,6 @@ function AcrossApp() {
   useEffect(() => {
     if (stage !== "app" || activeTab !== "home" || showFlashSale) return;
     void loadFlashSales(true, "");
-    const interval = setInterval(() => { void loadFlashSales(true, ""); }, 15000);
-    return () => clearInterval(interval);
     // Request ordering is guarded by flashSaleRequest inside the loader.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, activeTab, showFlashSale]);
@@ -494,7 +521,6 @@ function AcrossApp() {
     const subscription = AppState.addEventListener("change", nextState => {
       if (nextState !== "active" || stage !== "app" || !token) return;
       void pollBuyerActivity(token, true);
-      void loadProducts();
       if (!quote) return;
       stopPaymentPolling();
       setPaymentState("waiting");
@@ -786,6 +812,7 @@ function AcrossApp() {
           const quantity = Math.min(Math.max(Number(entry?.quantity) || 0, 0), product?.inventory_count || 0);
           return product && quantity > 0 ? [{ product, quantity }] : [];
         });
+        cartRef.current = restored;
         setCart(restored);
         if (pendingRaw) {
           const pending = JSON.parse(pendingRaw);
@@ -805,7 +832,23 @@ function AcrossApp() {
   }
 
   async function loadProducts(force = false) {
-    if (productLoadInFlight.current) return productLoadInFlight.current;
+    const key = `${catalogCountry}|${catalogState}|${catalogCity}`;
+    if (productLoadInFlight.current) {
+      const existing = productLoadInFlight.current;
+      const context = productLoadContext.current;
+      if (!force && context.key === key) return existing;
+      if (productReloadQueued.current?.key === key) return productReloadQueued.current.promise;
+      const queued = (async () => {
+        await existing;
+        if (catalogRequestKeyRef.current && catalogRequestKeyRef.current !== key) return;
+        await loadProducts(force);
+      })();
+      productReloadQueued.current = { key, promise: queued };
+      try { await queued; }
+      finally { if (productReloadQueued.current?.promise === queued) productReloadQueued.current = null; }
+      return;
+    }
+    productLoadContext.current = { key, fresh: force };
     const task = (async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const controller = new AbortController();
@@ -823,20 +866,25 @@ function AcrossApp() {
           const r = await fetch(`${API_URL}/api/v1/products?${params.toString()}`, { signal: controller.signal, headers: force ? { "Cache-Control": "no-cache" } : undefined });
           if (!r.ok) throw new Error(`catalog request failed: ${r.status}`);
           const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
-          setProducts(catalog);
+          if (catalogRequestKeyRef.current && catalogRequestKeyRef.current !== key) return;
+          setProducts(catalog.map(item => latestProductSnapshot(productSnapshots.current.get(item.id), item)));
           await hydrateCart(catalog);
-          if (force) {
-            setCart(current => current.flatMap(entry => {
-              const product = catalog.find(candidate => candidate.sku === entry.product.sku);
-              return product && product.inventory_count > 0 ? [{ product, quantity: Math.min(entry.quantity, product.inventory_count) }] : [];
-            }));
-            clearPendingPayment();
-          }
+          applyProductSnapshots(catalog);
+          // A bounded feed may omit a cart/detail item. Revalidate those by ID
+          // rather than dropping them simply because they are outside the feed.
+          const extra = [...cartRef.current.map(entry => entry.product), ...(selectedProductRef.current ? [selectedProductRef.current] : [])]
+            .filter((item, index, all) => !catalog.some(candidate => candidate.id === item.id) && all.findIndex(candidate => candidate.id === item.id) === index);
+          await Promise.allSettled(extra.map(async item => {
+            const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/products/${item.id}?${params}`), { headers: { "Cache-Control": "no-cache" } });
+            if (catalogRequestKeyRef.current !== key) return;
+            if (response.ok) { const data = await response.json(); if (data.product) applyProductSnapshots([mapProduct(data.product)]); }
+            else if (response.status === 404) applyProductSnapshots([], [item.id]);
+          }));
           catalog.slice(0, 12).forEach(product => {
             const uri = product.image_urls?.[0];
             if (uri) void Image.prefetch(uri).catch(() => false);
           });
-		  void loadFlashSales(true, "");
+          void loadFlashSales(true, flashSaleContext.current.visible ? flashSaleContext.current.search : "");
           return;
         } catch {
           if (attempt < 2) await sleep(350 * (attempt + 1));
@@ -864,13 +912,14 @@ function AcrossApp() {
 			if (catalogCity) params.set("city", catalogCity);
 			if (query.trim()) params.set("search", query.trim());
 			if (cursor) params.set("cursor", cursor);
-			const response = await fetch(`${API_URL}/api/v1/products/flash-sale?${params.toString()}`);
+			const response = await fetch(freshCatalogURL(`${API_URL}/api/v1/products/flash-sale?${params.toString()}`), { headers: { "Cache-Control": "no-cache" } });
 			if (!response.ok) throw new Error("Flash sales are temporarily unavailable");
 			const data = await response.json();
 			if (requestID !== flashSaleRequest.current) return;
 			const page = data.page ?? {};
 			const incoming = (data.products ?? []).map(mapProduct);
 			setFlashSaleProducts(current => reset ? incoming : [...current, ...incoming]);
+            applyProductSnapshots(incoming);
 			setFlashSaleCursor(page.next_cursor ?? "");
 			setFlashSaleHasMore(Boolean(page.has_more));
 		} catch (error: any) {
@@ -1221,10 +1270,23 @@ function AcrossApp() {
     } finally { setPaymentBusy(false); }
   }
   function updateProductSnapshot(updated: Product) {
-    setSelectedProduct(updated);
-    setProducts(items => items.map(item => item.id === updated.id ? updated : item));
-    setFlashSaleProducts(items => items.map(item => item.id === updated.id ? updated : item));
-    setCart(items => items.map(item => item.product.id === updated.id ? { ...item, product: updated, quantity: Math.min(item.quantity, updated.inventory_count) } : item).filter(item => item.quantity > 0));
+    applyProductSnapshots([updated]);
+  }
+
+  function applyProductSnapshots(updated: Product[], unavailable: string[] = []) {
+    const snapshots = new Map(updated.map(item => [item.id, latestProductSnapshot(productSnapshots.current.get(item.id), item)]));
+    snapshots.forEach((item, id) => productSnapshots.current.set(id, item));
+    unavailable.forEach(id => productSnapshots.current.delete(id));
+    const reconcile = (items: Product[]) => items.filter(item => !unavailable.includes(item.id)).map(item => snapshots.get(item.id) || item);
+    setProducts(reconcile);
+    setInternationalProducts(reconcile);
+    setFlashSaleProducts(items => reconcile(items).filter(item => item.is_flash_sale));
+    setSelectedProduct(item => item ? unavailable.includes(item.id) ? null : snapshots.get(item.id) || item : null);
+    const previous = cartRef.current;
+    const next = reconcileCart(previous, snapshots, new Set(unavailable));
+    if (cartOfferFingerprint(previous) !== cartOfferFingerprint(next) && !paymentProtectedRef.current && !restoredPendingPayment.current) clearPendingPayment();
+    cartRef.current = next;
+    setCart(next);
   }
 
   async function checkPendingPayment() {

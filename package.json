@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:catalog": "node scripts/test-catalog.cjs",
     "ios": "expo run:ios"
   },
   "dependencies": {

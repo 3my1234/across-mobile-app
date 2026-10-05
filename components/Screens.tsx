@@ -15,6 +15,8 @@ import { s } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
 import { COLORS } from "./theme";
 import { ReviewStars } from "./ReviewStars";
+import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
+import { latestProductSnapshot } from "./catalogState";
 
 const MOBILE_AUTH_BACKGROUND = require("../assets/mobile-background.png");
 
@@ -216,6 +218,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const detailScrollRef = useRef<ScrollView | null>(null);
   const reviewInputRef = useRef<TextInput | null>(null);
   const sectionOffsets = useRef({ overview: 0, reviews: 0, recommended: 0 });
+  const snapshotRequest = useRef(0);
+  const recommendationRequest = useRef(0);
   const pulse = useRef(new Animated.Value(0)).current;
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
@@ -231,10 +235,15 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     setProduct(initialProduct);
     setGalleryIndex(0);
     setGalleryOpen(false);
-    loadDetail();
+    void loadDetail(true);
+    return () => { snapshotRequest.current += 1; recommendationRequest.current += 1; };
     // The product id and session token are the intentional request keys.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProduct.id, token, destination.country_code, destination.state, destination.city]);
+  useEffect(() => { setProduct(initialProduct); }, [initialProduct]);
+  useCatalogFreshness(async () => {
+    await Promise.allSettled([loadProductSnapshot(true), loadRecommendations()]);
+  });
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
@@ -249,7 +258,30 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     anim.start(); return () => anim.stop();
   }, [outOfStock, pulse, cartQuantity]);
 
-  async function loadDetail(force = false) {
+  async function loadProductSnapshot(force = true) {
+    const request = ++snapshotRequest.current;
+    const params = new URLSearchParams(destination);
+    const url = `${API_URL}/api/v1/products/${initialProduct.id}?${params}`;
+    const response = await fetchWithTimeout(force ? freshCatalogURL(url) : url, { headers: force ? { "Cache-Control": "no-cache" } : undefined });
+    if (request !== snapshotRequest.current) return;
+    if (response.status === 404) { onClose(); return; }
+    if (!response.ok) throw new Error("Product details are temporarily unavailable");
+    const data = await response.json();
+    if (request !== snapshotRequest.current || !data.product) return;
+    const mapped = mapProduct(data.product);
+    setProduct(current => latestProductSnapshot(current, mapped));
+    onProductChange(mapped);
+  }
+
+  async function loadRecommendations() {
+    const request = ++recommendationRequest.current;
+    const params = new URLSearchParams({ limit: "10", ...destination });
+    const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?${params}`), { headers: { "Cache-Control": "no-cache" } });
+    const data = response.ok ? await response.json() : null;
+    if (request === recommendationRequest.current) setRecommendations((data?.products ?? []).map(mapProduct));
+  }
+
+  async function loadDetail(force = true) {
     setLoading(true);
     setReviewError("");
     setCanReview(false);
@@ -257,12 +289,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     setReviewRating(5);
     setReviewText("");
     setReviewImages([]);
-    const productTask = (async () => {
-      const params = new URLSearchParams(destination);
-      if (force) params.set("fresh", String(Date.now()));
-      const pr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}?${params}`, { headers: force ? { "Cache-Control": "no-cache" } : undefined });
-      if (pr.ok) { const d = await pr.json(); if (d.product) { const mapped = mapProduct(d.product); setProduct(mapped); onProductChange(mapped); } }
-    })();
+    const productTask = loadProductSnapshot(force);
     const reviewTask = (async () => {
       const rr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?limit=25&fresh=${Date.now()}`, {
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Cache-Control": "no-cache" }
@@ -278,16 +305,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     })().catch(error => {
       setReviewError(error instanceof Error ? error.message : "Reviews are temporarily unavailable");
     }).finally(() => setLoading(false));
-    const recommendationTask = (async () => {
-      const recParams = new URLSearchParams({ limit: "10", ...destination });
-      const rec = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?${recParams}`);
-      if (rec.ok) {
-        const d = await rec.json();
-        setRecommendations((d.products ?? []).map(mapProduct));
-      } else {
-        setRecommendations([]);
-      }
-    })();
+    const recommendationTask = loadRecommendations();
     const myReviewTask = (async () => {
       if (token) {
         const mr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine?fresh=${Date.now()}`, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } });
