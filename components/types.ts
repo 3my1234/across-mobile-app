@@ -35,6 +35,7 @@ export type CartItem = { product: Product; quantity: number };
 export type Quote = {
   order_id: string;
   country_code?: string;
+  delivery_address?: { address: string; city: string; state: string; postal_code: string; country_code: string };
   items_total: number;
   customs_fee: number;
   shipping_fee: number;

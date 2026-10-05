@@ -44,6 +44,11 @@ const SESSION_TIMEOUT = 8000;
 const GOOGLE_INIT_TIMEOUT = 8000;
 const PRODUCT_REQUEST_TIMEOUT = 9000;
 
+function deliveryAddressKey(value: any): string {
+  return [value?.country_code, value?.state, value?.city, value?.address, value?.postal_code]
+    .map(part => String(part || "").trim().toLowerCase()).join("|");
+}
+
 function readableFulfillmentStatus(value: string) {
   return String(value || "Pending").replace(/_/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
 }
@@ -146,7 +151,6 @@ function AcrossApp() {
   const lastNotificationResponseId = useRef("");
   const locationBootstrapTokenRef = useRef("");
   const [cartStorageReady, setCartStorageReady] = useState(false);
-  const persistedDetectedRegion = useRef(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [xpBalance, setXpBalance] = useState(0);
   const [xpClaimed, setXpClaimed] = useState(false);
@@ -727,7 +731,6 @@ function AcrossApp() {
     setProfilePostalCode("");
     setProfileDob("");
     setProfileAvatar("");
-    persistedDetectedRegion.current = false;
     setEditingProfile(false);
     setSelectedProduct(null);
     setSearchQuery("");
@@ -1085,6 +1088,10 @@ function AcrossApp() {
 
   async function checkout() {
     if (!token || cart.length === 0) return;
+    if (!profile) {
+      Alert.alert("Delivery address unavailable", "Reload your account details before paying.");
+      return;
+    }
     const market = buyerMarkets.find(item => item.country_code === catalogCountry);
     if (!market || cart.some(item => item.product.currency !== market.currency_code)) {
       clearPendingPayment();
@@ -1096,6 +1103,11 @@ function AcrossApp() {
       clearPendingPayment();
       Alert.alert("Delivery market changed", "Your previous checkout price belongs to another delivery country. Review the current price and try again.");
       void loadProducts(true);
+      return;
+    }
+    if (quote && (!quote.delivery_address || deliveryAddressKey(quote.delivery_address) !== deliveryAddressKey(profile))) {
+      clearPendingPayment();
+      Alert.alert("Delivery address changed", "Review a new total for your current delivery address before paying.");
       return;
     }
     const missingProfileFields = [
@@ -1131,7 +1143,7 @@ function AcrossApp() {
       const q = await r.json() as Quote;
       setQuote(q);
       await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
-      Alert.alert("Review your total", `Product ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee, q.currency)} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
+      Alert.alert("Review your total and address", `Deliver to ${[q.delivery_address?.address, q.delivery_address?.city, q.delivery_address?.state, q.delivery_address?.country_code].filter(Boolean).join(", ")}.\n\nProduct ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee, q.currency)} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
 
@@ -1477,6 +1489,7 @@ function AcrossApp() {
       });
       const data = await readResponseBody(response);
       if (!response.ok) throw new Error(formatHttpError(response, data, "Failed to save profile"));
+      if (deliveryAddressKey(body) !== deliveryAddressKey(profile)) clearPendingPayment();
       Alert.alert("Saved", "Your profile has been updated.");
       setEditingProfile(false);
       await loadProfile(token);
@@ -1531,35 +1544,6 @@ function AcrossApp() {
       setBusy(false);
     }
   }
-  useEffect(() => {
-    if (stage !== "app" || !token || !profile || persistedDetectedRegion.current) return;
-    const locationUpdate = {
-      ...(!profile.region && detectedRegionName ? { region: detectedRegionName } : {}),
-      ...(!profile.state && detectedRegionName ? { state: detectedRegionName } : {}),
-      ...(!profile.city && detectedCityName ? { city: detectedCityName } : {}),
-      ...(!profile.postal_code && detectedPostalCode ? { postal_code: detectedPostalCode } : {})
-    };
-    if (Object.keys(locationUpdate).length === 0) return;
-    persistedDetectedRegion.current = true;
-    if (locationUpdate.region) setProfileRegion(locationUpdate.region);
-    if (locationUpdate.state) setProfileState(locationUpdate.state);
-    if (locationUpdate.city) setProfileCity(locationUpdate.city);
-    if (locationUpdate.postal_code) setProfilePostalCode(locationUpdate.postal_code);
-    void (async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/v1/profile`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) },
-          body: JSON.stringify(locationUpdate)
-        });
-        if (!response.ok) persistedDetectedRegion.current = false;
-        else await loadProfile(token);
-      } catch {
-        persistedDetectedRegion.current = false;
-      }
-    })();
-  }, [stage, token, profile, detectedRegionName, detectedCityName, detectedPostalCode, detectedCountryCode]);
-
   const countryNotice = detectedCountryCode && !buyerMarkets.some(market => market.country_code === detectedCountryCode)
     ? `Checkout is not yet enabled for ${detectedCountryName || detectedCountryCode}. Choose an enabled country only if you can receive deliveries there.`
     : "";
@@ -1712,6 +1696,8 @@ function AcrossApp() {
                 <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview, cart[0]?.product.currency)}</Text></View>
+				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
+				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: "#12805F", fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
                 <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
