@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
 import { ResilientImage } from "./ResilientImage";
+import { ServiceReviews } from "./ServiceReviews";
 import { fetchWithTimeout } from "./utils";
 import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 import { filterNearbySnapshot, readCachedContact, readNearbySnapshot, writeCachedContact, writeNearbySnapshot } from "./nearbyCache";
@@ -56,6 +57,7 @@ type BuyerRequest = {
   listing_title: string;
   listing_type: string;
   review_rating?: number | null;
+  review_text?: string | null;
   provider_name: string;
   message?: string;
   party_size?: number;
@@ -144,6 +146,10 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const [reviewedRequests, setReviewedRequests] = useState<Record<string, number>>({});
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, { rating?: number; text?: string }>>({});
+  const [savingReview, setSavingReview] = useState<string | null>(null);
+  const reviewSubmitBusy = useRef(false);
+  const [highlyRated, setHighlyRated] = useState(false);
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
   useEffect(() => {
@@ -209,6 +215,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     try {
       const query = new URLSearchParams({ limit: nearby && !type && !search.trim() ? "100" : "24" });
       if (type) query.set("type", type);
+      if (highlyRated) query.set("min_rating", "4");
       if (search.trim()) query.set("search", search.trim());
       if (cursor && !nearby) query.set("cursor", cursor);
       if (nearby) { query.set("latitude", String(nearby.latitude)); query.set("longitude", String(nearby.longitude)); query.set("radius_km", "100"); }
@@ -226,7 +233,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
         return updated ? { ...current, ...updated } : current;
       });
       setListingCursor(String(body.next_cursor || ""));
-      if (nearby && !type && !search.trim()) {
+      if (nearby && !type && !search.trim() && !highlyRated) {
         const snapshot = await writeNearbySnapshot(nearby, incoming);
         setCacheNotice(snapshot.items.length ? `Saved ${snapshot.items.length} nearby services for offline use` : "");
       } else {
@@ -237,7 +244,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       if (request !== listingRequest.current) return;
       if (snapshot) {
         setNearby(snapshot.coordinates);
-        setItems(filterNearbySnapshot(snapshot.items, type, search));
+        setItems(filterNearbySnapshot(snapshot.items, type, search).filter(item => !highlyRated || ((item.review_count || 0) > 0 && (item.average_rating || 0) >= 4)));
         setCacheNotice(`Offline results saved ${new Date(snapshot.fetchedAt).toLocaleString()}`);
         setError("");
       } else {
@@ -250,7 +257,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
         setRefreshing(false);
       }
     }
-  }, [nearby, search, type]);
+  }, [nearby, search, type, highlyRated]);
 
   async function refreshNearby() {
     setLoading(true);
@@ -491,22 +498,31 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     }
   }
 
-  async function submitReview(request: BuyerRequest, rating: number) {
+  async function submitReview(request: BuyerRequest, rating: number, text: string) {
+    if (reviewSubmitBusy.current) return;
+    reviewSubmitBusy.current = true;
+    setSavingReview(request.id);
     try {
       const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${request.listing_id}/review`, {
         method: "PUT",
         headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: request.id, rating, review_text: "" })
+        body: JSON.stringify({ request_id: request.id, rating, review_text: text.trim() })
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiMessage(body, "Review could not be saved"));
       setReviewedRequests(current => ({ ...current, [request.id]: rating }));
+      setRequests(current => current.map(item => item.id === request.id ? { ...item, review_rating: rating, review_text: text.trim() } : item));
+      setReviewDrafts(current => { const next = { ...current }; delete next[request.id]; return next; });
+      void loadListings(true);
       Alert.alert(
         "Thank you",
         body.xp_awarded ? `Your review helps other customers. You earned ${body.xp_awarded} XP.` : "Your updated review has been saved."
       );
     } catch (reviewError) {
       Alert.alert("Review unavailable", reviewError instanceof Error ? reviewError.message : "Please try again.");
+    } finally {
+      reviewSubmitBusy.current = false;
+      setSavingReview(null);
     }
   }
 
@@ -567,11 +583,13 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             <Text style={styles.title}>{selected.title}</Text>
             <Text style={styles.price}>{money(selected.price, selected.currency_code)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
             <Text style={styles.meta}>{selected.provider_name} · {selected.city}, {selected.state}</Text>
+            <View style={styles.ratingRow}><Ionicons name="star" size={14} color="#E8A100" /><Text style={styles.rating}>{selected.review_count ? `${selected.average_rating?.toFixed(1)} · ${selected.review_count} customer reviews` : "No customer reviews yet"}</Text></View>
           </View>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>About this service</Text>
             <Text style={styles.body}>{selected.description}</Text>
           </View>
+          <ServiceReviews listingId={selected.id} />
           {requiresSafetyAcknowledgement && (
             <View style={styles.warning}>
               <Ionicons name="warning" size={22} color="#9A5B00" />
@@ -644,6 +662,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           {!!nearby && <View style={styles.locationStrip}><Ionicons name="navigate-circle" size={14} color="#C9353B" /><Text numberOfLines={1} style={styles.locationSummary}>{nearby.label || "Current location"} · 100 km{typeof nearby.accuracy === "number" ? ` · ±${Math.round(nearby.accuracy)} m` : ""}</Text></View>}
           {!!cacheNotice && <View style={styles.cacheStrip}><Ionicons name="cloud-done-outline" size={14} color="#C9353B" /><Text numberOfLines={1} style={styles.cacheNotice}>{cacheNotice}</Text></View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
+            <Pressable accessibilityRole="button" accessibilityState={{ selected: highlyRated }} accessibilityLabel="Filter services rated four stars and above" onPress={() => setHighlyRated(value => !value)} style={[styles.chip, highlyRated && styles.chipActive]}><Ionicons name="star" size={12} color={highlyRated ? "#FFF" : "#A66A00"} /><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, highlyRated && styles.chipTextActive]}>4★ & up</Text></Pressable>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
@@ -666,7 +685,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                     <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
                     {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
-                    {!!item.review_count && <View style={styles.ratingRow}><Ionicons name="star" size={12} color="#E8A100" /><Text style={styles.rating}>{item.average_rating?.toFixed(1)} ({item.review_count})</Text></View>}
+                    <View style={styles.ratingRow}><Ionicons name="star" size={12} color="#E8A100" /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
                   </View>
                 </Pressable>
               )}
@@ -695,11 +714,13 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                   <Text style={styles.reviewLabel}>{(reviewedRequests[item.id] || item.review_rating) ? "Your rating" : "Rate this provider - earn 10 XP"}</Text>
                   <View style={styles.stars}>
                     {[1, 2, 3, 4, 5].map(rating => (
-                      <Pressable key={rating} onPress={() => void submitReview(item, rating)} accessibilityLabel={`Rate ${rating} stars`}>
-                        <Ionicons name={rating <= (reviewedRequests[item.id] || item.review_rating || 0) ? "star" : "star-outline"} size={25} color="#E8A100" />
+                      <Pressable key={rating} disabled={!!savingReview} style={styles.reviewStar} onPress={() => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], rating } }))} accessibilityRole="radio" accessibilityState={{ checked: rating === (reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0), disabled: !!savingReview }} accessibilityLabel={`Rate ${rating} stars`}>
+                        <Ionicons name={rating <= (reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0) ? "star" : "star-outline"} size={25} color="#E8A100" />
                       </Pressable>
                     ))}
                   </View>
+                  <TextInput accessibilityLabel="Your service review" editable={!savingReview} multiline maxLength={1000} placeholder="Tell other customers about your experience (optional)" value={reviewDrafts[item.id]?.text ?? item.review_text ?? ""} onChangeText={text => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], text } }))} style={[styles.input, styles.textarea]} />
+                  <Pressable disabled={!!savingReview || !(reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating)} style={[styles.primary, (!!savingReview || !(reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating)) && styles.disabled]} onPress={() => void submitReview(item, reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0, reviewDrafts[item.id]?.text ?? item.review_text ?? "")}><Text style={styles.primaryText}>{savingReview === item.id ? "Saving review…" : item.review_rating ? "Update review" : "Submit review"}</Text></Pressable>
                 </View>
               )}
             </View>
@@ -751,6 +772,7 @@ const styles = StyleSheet.create({
   reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
   reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
   stars: { flexDirection: "row", gap: 8 },
+  reviewStar: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   cacheStrip: { flexShrink: 0, marginHorizontal: 12, marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 5 },
   cacheNotice: { flex: 1, color: "#C9353B", fontSize: 10, fontWeight: "700" },
   ratingRow: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 4 },
