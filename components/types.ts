@@ -7,6 +7,8 @@ export type Product = {
   image_urls: string[];
   currency: string;
   price: number;
+  updated_at?: string;
+  catalog_version?: number;
   delivery_fee?: number;
   compare_at_price?: number;
   inventory_count: number;
