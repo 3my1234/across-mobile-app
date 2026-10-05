@@ -1657,6 +1657,11 @@ function AcrossApp() {
       )}
 
       {/* Home header */}
+      {activeTab !== "home" && !showFlashSale && (
+        <View style={{ height: 40, paddingHorizontal: 14, justifyContent: "center", backgroundColor: "#FFFFFF" }}>
+          <Image source={LOGO} style={{ width: 28, height: 28 }} resizeMode="contain" />
+        </View>
+      )}
       {activeTab === "home" && (
         <View style={{ backgroundColor: "#FFFFFF", zIndex: 10 }}>
           <Animated.View style={{ height: logoHeight, opacity: logoOpacity, overflow: "hidden", paddingHorizontal: 14, justifyContent: "center" }}>
@@ -1706,18 +1711,7 @@ function AcrossApp() {
 		  <Pressable onPress={() => setShowFlashSale(false)} accessibilityLabel="Back to shop"><Ionicons name="arrow-back" size={24} color="#191919" /></Pressable>
 		  <View><Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>Flash Sale</Text><Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>Limited-time verified deals</Text></View>
 		</View>
-	  ) : activeTab !== "home" && (
-        <View style={s.simpleHeaderWrap}>
-          {activeTab === "services" ? (
-            <View style={s.brandRow}>
-              <Image source={LOGO} style={s.brandLogo} resizeMode="contain" />
-              <View style={{ flex: 1 }}><Text style={s.brandTitle}>Services</Text><Text style={s.brandSubtitle}>Atlantic Express verified providers</Text></View>
-            </View>
-          ) : (
-            <><Text style={s.simpleHeaderTitle}>{NAV_ITEMS.find(i => i.key === activeTab)?.label ?? "Atlantic Express"}</Text><Text style={s.simpleHeaderMeta}>{activeTab === "cart" ? `${totals.items} items` : "Atlantic Express"}</Text></>
-          )}
-        </View>
-      )}
+	  ) : null}
 
       <View style={s.content}>
 		{showFlashSale ? (

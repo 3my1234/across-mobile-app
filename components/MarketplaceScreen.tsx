@@ -627,28 +627,29 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   return (
     <View style={styles.fill}>
       <View style={styles.modeBar}>
-        <Pressable style={[styles.modeButton, mode === "explore" && styles.modeButtonActive]} onPress={() => setMode("explore")}><Text style={[styles.modeText, mode === "explore" && styles.modeTextActive]}>Explore</Text></Pressable>
-        <Pressable style={[styles.modeButton, mode === "requests" && styles.modeButtonActive]} onPress={() => setMode("requests")}><Text style={[styles.modeText, mode === "requests" && styles.modeTextActive]}>My requests</Text></Pressable>
-        <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Provider chat</Text></Pressable>
+        <Pressable style={[styles.modeButton, mode === "explore" && styles.modeButtonActive]} onPress={() => setMode("explore")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "explore" && styles.modeTextActive]}>Explore</Text></Pressable>
+        <Pressable style={[styles.modeButton, mode === "requests" && styles.modeButtonActive]} onPress={() => setMode("requests")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "requests" && styles.modeTextActive]}>My requests</Text></Pressable>
+        <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Provider chat</Text></Pressable>
       </View>
       {mode === "explore" ? (
         <>
           <View style={styles.search}>
             <Ionicons name="search" size={20} color="#777" />
-            <TextInput value={search} onChangeText={setSearch} placeholder="Hotels, cars, property, services" style={styles.grow} returnKeyType="search" />
+            <TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" />
           </View>
           <View style={styles.nearbyActions}>
-            <Pressable style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={18} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Refresh my location" : "Find services near me"}</Text></Pressable>
+            <Pressable accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Refresh location" : "Near me"}</Text></Pressable>
             {!!nearby && <Pressable style={styles.showAllButton} onPress={() => setNearby(null)}><Text style={styles.showAllText}>Show all</Text></Pressable>}
           </View>
-          {!!nearby && <View style={styles.locationStrip}><Ionicons name="navigate-circle" size={16} color="#12805F" /><Text numberOfLines={1} style={styles.locationSummary}>{nearby.label || "Current location"} · 100 km{typeof nearby.accuracy === "number" ? ` · ±${Math.round(nearby.accuracy)} m` : ""}</Text></View>}
-          {!!cacheNotice && <View style={styles.cacheStrip}><Ionicons name="cloud-done-outline" size={14} color="#496B60" /><Text numberOfLines={1} style={styles.cacheNotice}>{cacheNotice}</Text></View>}
+          {!!nearby && <View style={styles.locationStrip}><Ionicons name="navigate-circle" size={14} color="#C9353B" /><Text numberOfLines={1} style={styles.locationSummary}>{nearby.label || "Current location"} · 100 km{typeof nearby.accuracy === "number" ? ` · ±${Math.round(nearby.accuracy)} m` : ""}</Text></View>}
+          {!!cacheNotice && <View style={styles.cacheStrip}><Ionicons name="cloud-done-outline" size={14} color="#C9353B" /><Text numberOfLines={1} style={styles.cacheNotice}>{cacheNotice}</Text></View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
           {loading && !items.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
             <FlatList
+              style={styles.results}
               data={items}
               keyExtractor={item => item.id}
               numColumns={2}
@@ -664,7 +665,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                     <Text numberOfLines={2} style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
-                    {typeof item.distance_km === "number" && <Text style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
+                    {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
                     {!!item.review_count && <View style={styles.ratingRow}><Ionicons name="star" size={12} color="#E8A100" /><Text style={styles.rating}>{item.average_rating?.toFixed(1)} ({item.review_count})</Text></View>}
                   </View>
                 </Pressable>
@@ -737,44 +738,46 @@ function EmptyState({ icon, title, message }: { icon: keyof typeof Ionicons.glyp
 const styles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: "#F7F7F7" },
   grow: { flex: 1 },
+  results: { flex: 1 },
+  searchInput: { flex: 1, fontSize: 13, paddingVertical: 8, color: "#191919" },
   loader: { marginTop: 50 },
   pageLoader: { marginVertical: 18 },
-  modeBar: { marginHorizontal: 10, marginTop: 4, padding: 3, borderRadius: 14, backgroundColor: "#EDEDED", flexDirection: "row" },
-  modeButton: { flex: 1, minHeight: 34, alignItems: "center", justifyContent: "center", borderRadius: 11 },
+  modeBar: { flexShrink: 0, marginHorizontal: 10, marginTop: 4, padding: 2, borderRadius: 12, backgroundColor: "#EDEDED", flexDirection: "row" },
+  modeButton: { flex: 1, minHeight: 44, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", borderRadius: 10 },
   modeButtonActive: { backgroundColor: "#FFF" },
-  modeText: { color: "#777", fontWeight: "800" },
+  modeText: { color: "#777", fontSize: 12, fontWeight: "800", textAlign: "center" },
   modeTextActive: { color: "#191919" },
-  search: { minHeight: 38, marginHorizontal: 10, marginTop: 6, marginBottom: 4, paddingHorizontal: 12, borderRadius: 14, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#DEDEDE" },
+  search: { flexShrink: 0, minHeight: 40, marginHorizontal: 10, marginTop: 5, marginBottom: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#DEDEDE" },
   reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
   reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
   stars: { flexDirection: "row", gap: 8 },
-  cacheStrip: { marginHorizontal: 12, marginBottom: 3, flexDirection: "row", alignItems: "center", gap: 5 },
-  cacheNotice: { flex: 1, color: "#496B60", fontSize: 10, fontWeight: "700" },
+  cacheStrip: { flexShrink: 0, marginHorizontal: 12, marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 5 },
+  cacheNotice: { flex: 1, color: "#C9353B", fontSize: 10, fontWeight: "700" },
   ratingRow: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 4 },
   rating: { color: "#A66A00", fontSize: 11, fontWeight: "900" },
-  nearbyActions: { marginHorizontal: 10, marginBottom: 2, flexDirection: "row", gap: 7 },
-  nearbyButton: { flex: 1, minHeight: 36, borderRadius: 14, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#FFF" },
+  nearbyActions: { flexShrink: 0, marginHorizontal: 10, marginBottom: 2, flexDirection: "row", gap: 7 },
+  nearbyButton: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: "#FFF" },
   nearbyButtonActive: { backgroundColor: "#FF4747" },
-  nearbyText: { color: "#FF4747", fontWeight: "900" },
+  nearbyText: { color: "#FF4747", fontSize: 12, fontWeight: "900" },
   nearbyTextActive: { color: "#FFF" },
-  showAllButton: { minHeight: 36, paddingHorizontal: 13, borderRadius: 14, borderWidth: 1, borderColor: "#D9D9D9", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF" },
-  showAllText: { color: "#333", fontWeight: "900" },
-  locationStrip: { marginHorizontal: 12, marginBottom: 3, minHeight: 20, flexDirection: "row", alignItems: "center", gap: 5 },
-  locationSummary: { flex: 1, color: "#2E5C4E", fontSize: 10, fontWeight: "800" },
+  showAllButton: { minHeight: 44, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: "#D9D9D9", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF" },
+  showAllText: { color: "#333", fontSize: 12, fontWeight: "900" },
+  locationStrip: { flexShrink: 0, marginHorizontal: 12, marginBottom: 2, minHeight: 16, flexDirection: "row", alignItems: "center", gap: 5 },
+  locationSummary: { flex: 1, color: "#C9353B", fontSize: 10, fontWeight: "800" },
   distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
-  chipScroller: { height: 52, maxHeight: 52, flexGrow: 0 },
-  chips: { height: 52, paddingHorizontal: 10, gap: 7, paddingVertical: 6, alignItems: "center" },
-  chip: { height: 40, paddingHorizontal: 12, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
+  chipScroller: { height: 52, minHeight: 52, flexGrow: 0, flexShrink: 0 },
+  chips: { minHeight: 52, paddingHorizontal: 10, gap: 6, paddingVertical: 4, alignItems: "center" },
+  chip: { minHeight: 44, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: "#FF4747", borderColor: "#FF4747" },
   chipText: { fontSize: 13, lineHeight: 18, fontWeight: "800", color: "#555", includeFontPadding: false },
   chipTextActive: { color: "#FFF" },
-  listHeading: { paddingHorizontal: 12, paddingVertical: 6, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  listHeading: { flexShrink: 0, paddingHorizontal: 12, paddingVertical: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },
   card: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", marginBottom: 8, maxWidth: "49%", borderWidth: 1, borderColor: "#ECECEC" },
-  cardImage: { width: "100%", aspectRatio: 1, backgroundColor: "#EEE" },
-  cardBody: { padding: 10 },
-  cardTitle: { fontSize: 14, fontWeight: "800", color: "#191919", minHeight: 38 },
-  cardPrice: { fontSize: 16, fontWeight: "900", color: "#FF4747", marginTop: 4 },
+  cardImage: { width: "100%", aspectRatio: 1.35, backgroundColor: "#EEE" },
+  cardBody: { padding: 8 },
+  cardTitle: { fontSize: 13, lineHeight: 17, fontWeight: "800", color: "#191919", minHeight: 34 },
+  cardPrice: { fontSize: 15, fontWeight: "900", color: "#FF4747", marginTop: 3 },
   meta: { color: "#777", fontSize: 12, marginTop: 3 },
   empty: { alignItems: "center", padding: 50, gap: 8 },
   emptyText: { color: "#777", fontSize: 13, textAlign: "center", lineHeight: 20 },

@@ -72,6 +72,7 @@ interface AuthProps {
 }
 
 export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+  const authInsets = useSafeAreaInsets();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -104,9 +105,9 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
     <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" blurRadius={2} style={s.authBg} imageStyle={s.authBgImage}>
       <View pointerEvents="none" style={s.authBackdrop} />
       <StatusBar style="dark" />
-      <SafeAreaView style={s.authSafe}>
+      <View style={[s.authSafe, { paddingTop: authInsets.top, paddingBottom: authInsets.bottom, paddingLeft: authInsets.left, paddingRight: authInsets.right }]}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
-          <ScrollView ref={authScrollRef} contentContainerStyle={[s.authScroll, authKeyboardVisible && { paddingBottom: 220 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
+          <ScrollView ref={authScrollRef} contentInsetAdjustmentBehavior="never" contentContainerStyle={[s.authScroll, isWelcome && s.authWelcomeScroll, authKeyboardVisible && { paddingBottom: 220 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
             <View style={s.authBrand}>
               <Image source={LOGO} style={[s.authLogo, !isWelcome && s.authLogoCompact]} resizeMode="contain" />
               <Text style={s.authEyebrow}>ATLANTIC EXPRESS</Text>
@@ -173,7 +174,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
             )}
           </ScrollView>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </View>
     </ImageBackground>
   );
 }
