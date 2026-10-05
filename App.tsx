@@ -586,8 +586,8 @@ function AcrossApp() {
     const generation = ++notificationRequest.current;
     try {
       const [listR, countR] = await Promise.all([
-        fetch(`${API_URL}/api/v1/notifications`, { headers: { Authorization: `Bearer ${authToken}` } }),
-        fetch(`${API_URL}/api/v1/notifications/unread-count`, { headers: { Authorization: `Bearer ${authToken}` } })
+        fetchWithTimeout(`${API_URL}/api/v1/notifications`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } }),
+        fetchWithTimeout(`${API_URL}/api/v1/notifications/unread-count`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } })
       ]);
       const [list, count] = await Promise.all([listR.ok ? listR.json() : null, countR.ok ? countR.json() : null]);
       if (generation !== notificationRequest.current || authToken !== sessionTokenRef.current) return;
@@ -598,7 +598,7 @@ function AcrossApp() {
 
   async function pollBuyerActivity(authToken: string, force = false) {
     try {
-      const response = await fetch(`${API_URL}/api/v1/notifications/activity`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/notifications/activity`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } });
       if (!response.ok) return;
       const data = await response.json();
       const nextToken = String(data.change_token || "");
@@ -1461,14 +1461,14 @@ function AcrossApp() {
   async function loadXPBalance(authToken: string | null = token) {
     if (!authToken) return;
     const generation = ++xpRequest.current;
-    try { const r = await fetch(`${API_URL}/api/v1/xp/balance`, { headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); if (generation !== xpRequest.current || sessionTokenRef.current !== authToken) return; setXpBalance(d.xp || 0); setXpReserved(d.reserved_xp || 0); setXpEnabled(d.redemption_enabled === true); } } catch {}
+    try { const r = await fetchWithTimeout(`${API_URL}/api/v1/xp/balance`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); if (generation !== xpRequest.current || sessionTokenRef.current !== authToken) return; setXpBalance(d.xp || 0); setXpReserved(d.reserved_xp || 0); setXpEnabled(d.redemption_enabled === true); } } catch {}
   }
 
   async function loadOrders(authToken: string | null = token) {
     if (!authToken) return [] as OrderSummary[];
     const generation = ++ordersRequest.current;
     try {
-      const r = await fetch(`${API_URL}/api/v1/orders`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/orders`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } });
       if (r.ok) {
         const data = await r.json(); if (generation !== ordersRequest.current || authToken !== sessionTokenRef.current) return [];
         const ordersList = data.orders || [];
@@ -1591,7 +1591,7 @@ function AcrossApp() {
     if (!authToken) return;
     const generation = ++profileRequest.current;
     try {
-      const response = await fetch(`${API_URL}/api/v1/profile`, { headers: { Authorization: `Bearer ${authToken}` } });
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/profile`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } });
       const data = await readResponseBody(response);
       if (!response.ok) throw new Error(formatHttpError(response, data, "Could not load profile"));
       if (generation !== profileRequest.current || authToken !== sessionTokenRef.current) return;
