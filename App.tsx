@@ -1,3 +1,4 @@
+import { SupportConversation } from "./components/SupportConversation";
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
@@ -9,7 +10,7 @@ import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Alert, Animated, AppState, Dimensions, Image,
+  ActivityIndicator, Alert, Animated, AppState, Dimensions, Image,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
   Text, TextInput, View
 } from "react-native";
@@ -155,13 +156,31 @@ function AcrossApp() {
   const [cartStorageReady, setCartStorageReady] = useState(false);
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [xpBalance, setXpBalance] = useState(0);
+  const [xpReserved, setXpReserved] = useState(0);
+  const [xpEnabled, setXpEnabled] = useState(false);
+  const [useXP, setUseXP] = useState(false);
+  const [supportError, setSupportError] = useState("");
+  const [supportLoading, setSupportLoading] = useState(false);
+  const supportTicketRequest = useRef(0);
+  const supportMessageRequest = useRef(0);
+  const xpRequest = useRef(0);
+  const ordersRequest = useRef(0);
+  const profileRequest = useRef(0);
+  const notificationRequest = useRef(0);
+  const sessionTokenRef = useRef(token);
+  sessionTokenRef.current = token;
   const [xpClaimed, setXpClaimed] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
+  const supportTicketsRef = useRef(supportTickets); supportTicketsRef.current = supportTickets;
+  const [ticketListCursor, setTicketListCursor] = useState("");
+  const [showSupportForm, setShowSupportForm] = useState(false);
   const [supportSubject, setSupportSubject] = useState("");
   const [supportMessage, setSupportMessage] = useState("");
-  const [supportReply, setSupportReply] = useState("");
+  const [supportCursor, setSupportCursor] = useState("");
+  const [messageLoading, setMessageLoading] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [ticketMessages, setTicketMessages] = useState<SupportMessage[]>([]);
+  const ticketMessagesRef = useRef(ticketMessages); ticketMessagesRef.current = ticketMessages;
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -170,6 +189,7 @@ function AcrossApp() {
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
   const [editingProfile, setEditingProfile] = useState(false);
+  const editingProfileRef = useRef(editingProfile); editingProfileRef.current = editingProfile;
   const [profileName, setProfileName] = useState("");
   const [profilePhone, setProfilePhone] = useState("");
   const [profileRegion, setProfileRegion] = useState("");
@@ -254,6 +274,8 @@ function AcrossApp() {
     const platformFee = Math.round((amount + delivery) * 0.01 * 100) / 100;
     return { items, amount, delivery, platformFee, payablePreview: amount + delivery + platformFee };
   }, [cart]);
+  const xpPreview = xpEnabled && useXP && cart[0]?.product.currency === "NGN" ? Math.min(xpBalance, Math.floor(totals.platformFee)) : 0;
+  const displayedXPDiscount = quote ? quote.xp_discount || 0 : xpPreview;
 
   const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
     const current = product.flash_sale_price || product.price;
@@ -561,13 +583,16 @@ function AcrossApp() {
 
   async function loadNotifications(authToken: string | null = token) {
     if (!authToken) return;
+    const generation = ++notificationRequest.current;
     try {
       const [listR, countR] = await Promise.all([
         fetch(`${API_URL}/api/v1/notifications`, { headers: { Authorization: `Bearer ${authToken}` } }),
         fetch(`${API_URL}/api/v1/notifications/unread-count`, { headers: { Authorization: `Bearer ${authToken}` } })
       ]);
-      if (listR.ok) setNotifications((await listR.json()).notifications || []);
-      if (countR.ok) setUnreadCount((await countR.json()).unread_count || 0);
+      const [list, count] = await Promise.all([listR.ok ? listR.json() : null, countR.ok ? countR.json() : null]);
+      if (generation !== notificationRequest.current || authToken !== sessionTokenRef.current) return;
+      if (list) setNotifications(list.notifications || []);
+      if (count) setUnreadCount(count.unread_count || 0);
     } catch {}
   }
 
@@ -737,9 +762,9 @@ function AcrossApp() {
     setPaymentState("idle");
     setPaymentMessage("");
     setOrders([]);
-    setXpBalance(0);
+    setXpBalance(0); setXpReserved(0); setXpEnabled(false); setUseXP(false); supportTicketRequest.current++; supportMessageRequest.current++; setSupportError("");
     setXpClaimed(false);
-    setSupportTickets([]);
+    setSupportTickets([]); setTicketListCursor(""); setShowSupportForm(false);
     setSupportSubject("");
     setSupportMessage("");
     setSelectedTicket(null);
@@ -943,6 +968,27 @@ function AcrossApp() {
 		setFlashSaleSearch("");
 		setSelectedProduct(product);
 	}
+
+  useEffect(() => {
+    if (stage !== "app" || !token) return;
+    let inFlight = false;
+    const refreshPage = async () => {
+      if (inFlight || AppState.currentState !== "active") return;
+      inFlight = true;
+      try {
+        if (activeTab === "support") await Promise.all([loadSupportTickets(), ...(selectedTicket ? [loadTicketMessages(selectedTicket.id)] : [])]);
+        else if (activeTab === "account" || activeTab === "cart") await Promise.all([loadXPBalance(token), ...(editingProfile ? [] : [loadProfile(token)])]);
+        else if (activeTab === "track") await loadOrders(token);
+      } finally { inFlight = false; }
+    };
+    void refreshPage();
+    const timer = setInterval(() => { void refreshPage(); }, 12000);
+    const foreground = AppState.addEventListener("change", state => { if (state === "active") void refreshPage(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { clearInterval(timer); foreground.remove(); supportTicketRequest.current++; supportMessageRequest.current++; };
+    // Load on entry and foreground; refresh only the visible page without resetting drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, token, activeTab, selectedTicket?.id, editingProfile]);
 
   async function refreshAppData(includeSupport = false) {
     if (refreshing) return;
@@ -1179,7 +1225,7 @@ function AcrossApp() {
     }
     setBusy(true); try {
       const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items }) });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items, use_xp: useXP }) });
       if (r.status === 401) { await logout(); return; }
       if (!r.ok) {
         const errData = await r.json().catch(() => ({}));
@@ -1191,8 +1237,9 @@ function AcrossApp() {
       }
       const q = await r.json() as Quote;
       setQuote(q);
+      void loadXPBalance(token);
       await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
-      Alert.alert("Review your total and address", `Deliver to ${[q.delivery_address?.address, q.delivery_address?.city, q.delivery_address?.state, q.delivery_address?.country_code].filter(Boolean).join(", ")}.\n\nProduct ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee, q.currency)} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
+      Alert.alert("Review your total and address", `Deliver to ${[q.delivery_address?.address, q.delivery_address?.city, q.delivery_address?.state, q.delivery_address?.country_code].filter(Boolean).join(", ")}.\n\nProduct ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee_before_xp ?? q.platform_fee, q.currency)}${q.xp_discount ? ` - XP discount ${money(q.xp_discount,q.currency)}` : ""} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
 
@@ -1219,6 +1266,7 @@ function AcrossApp() {
           await sleep(500);
         }
       }
+      if (r?.status === 409 && String(d.message || "").includes("XP quote")) clearPendingPayment();
       if (!r?.ok) throw new Error(d.message || "Flutterwave checkout is temporarily unavailable. Please try again.");
       const checkoutLink = d.checkout_link || d.response?.data?.link;
       if (!checkoutLink) throw new Error("Payment link unavailable");
@@ -1412,15 +1460,17 @@ function AcrossApp() {
 
   async function loadXPBalance(authToken: string | null = token) {
     if (!authToken) return;
-    try { const r = await fetch(`${API_URL}/api/v1/xp/balance`, { headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); setXpBalance(d.xp || 0); } } catch {}
+    const generation = ++xpRequest.current;
+    try { const r = await fetch(`${API_URL}/api/v1/xp/balance`, { headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); if (generation !== xpRequest.current || sessionTokenRef.current !== authToken) return; setXpBalance(d.xp || 0); setXpReserved(d.reserved_xp || 0); setXpEnabled(d.redemption_enabled === true); } } catch {}
   }
 
   async function loadOrders(authToken: string | null = token) {
     if (!authToken) return [] as OrderSummary[];
+    const generation = ++ordersRequest.current;
     try {
       const r = await fetch(`${API_URL}/api/v1/orders`, { headers: { Authorization: `Bearer ${authToken}` } });
       if (r.ok) {
-        const data = await r.json();
+        const data = await r.json(); if (generation !== ordersRequest.current || authToken !== sessionTokenRef.current) return [];
         const ordersList = data.orders || [];
         setOrders(ordersList);
         // Check for orders at "Delivered" stage that need confirmation
@@ -1457,9 +1507,24 @@ function AcrossApp() {
     }
   }
 
-  async function loadSupportTickets() {
+  async function loadSupportTickets(cursor = "") {
     if (!token) return;
-    try { const r = await fetch(`${API_URL}/api/v1/support/tickets`, { headers: { Authorization: `Bearer ${token}` } }); if (r.ok) { const d = await r.json(); setSupportTickets(d.tickets || []); } } catch {}
+    const seq = ++supportTicketRequest.current;
+    if (!supportTicketsRef.current.length || cursor) setSupportLoading(true);
+    try {
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/support/tickets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json(); if (!r.ok) throw new Error(d.message || "Support history unavailable");
+      if (seq !== supportTicketRequest.current || token !== sessionTokenRef.current) return;
+      const hadHistory = supportTicketsRef.current.length > 0;
+      setSupportTickets(current => {
+        const merged = new Map<string, SupportTicket>(); [...current, ...(d.tickets || [])].forEach((ticket: SupportTicket) => merged.set(ticket.id,ticket));
+        return [...merged.values()].sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
+      });
+      if (cursor || !hadHistory) setTicketListCursor(d.next_cursor || "");
+      setSupportError("");
+      setSelectedTicket(current => current ? (d.tickets || []).find((ticket: SupportTicket) => ticket.id === current.id) || current : null);
+    } catch (error) { if (seq === supportTicketRequest.current && token === sessionTokenRef.current) setSupportError(error instanceof Error ? error.message : "Support history unavailable. Pull to retry."); }
+    finally { if (seq === supportTicketRequest.current) setSupportLoading(false); }
   }
 
   async function createSupportTicket() {
@@ -1475,31 +1540,47 @@ function AcrossApp() {
         const payload = await r.json().catch(() => ({}));
         throw new Error(payload?.error || "Failed to create ticket");
       }
-      setSupportSubject(""); setSupportMessage(""); Alert.alert("Ticket Created", "We'll get back to you soon."); await loadSupportTickets();
+      setSupportSubject(""); setSupportMessage(""); setShowSupportForm(false); Alert.alert("Ticket Created", "We'll get back to you soon."); await loadSupportTickets();
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
   }
 
-  async function loadTicketMessages(ticketId: string) {
+  async function loadTicketMessages(ticketId: string, cursor = "") {
     if (!token) return;
-    try { const r = await fetch(`${API_URL}/api/v1/support/tickets/${ticketId}/messages`, { headers: { Authorization: `Bearer ${token}` } }); if (r.ok) { const d = await r.json(); setTicketMessages(d.messages || []); } } catch {}
+    const seq = ++supportMessageRequest.current;
+    setMessageLoading(true);
+    try {
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/support/tickets/${ticketId}/messages?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json(); if (!r.ok) throw new Error(d.message || "Conversation unavailable");
+      if (seq !== supportMessageRequest.current || token !== sessionTokenRef.current) return;
+      if (d.ticket_status) setSelectedTicket(current => current?.id === ticketId ? {...current,status:d.ticket_status} : current);
+      setTicketMessages(current => {
+        const combined = new Map<string, SupportMessage>();
+        [...current, ...(d.messages || [])].forEach((message: SupportMessage) => combined.set(message.id || `${message.created_at}:${message.sender_id}:${message.message}`, message));
+        return [...combined.values()].sort((a,b) => a.created_at.localeCompare(b.created_at) || String(a.id).localeCompare(String(b.id)));
+      });
+      if (cursor) setSupportCursor(d.next_cursor || "");
+      else if (!ticketMessagesRef.current.length) setSupportCursor(d.next_cursor || "");
+      setSupportError("");
+    } catch (error) { if (seq === supportMessageRequest.current && token === sessionTokenRef.current) setSupportError(error instanceof Error ? error.message : "Conversation unavailable. Pull to retry."); }
+    finally { if (seq === supportMessageRequest.current) setMessageLoading(false); }
   }
 
-  async function replyToSupportTicket() {
-    if (!token || !selectedTicket || !supportReply.trim()) return;
+  async function replyToSupportTicket(text: string) {
+    if (!token || !selectedTicket || !text.trim()) return;
     setBusy(true);
     try {
       const response = await fetch(`${API_URL}/api/v1/support/tickets/${selectedTicket.id}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: supportReply.trim() })
+        body: JSON.stringify({ message: text.trim() })
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || payload?.message || "Failed to send reply");
-      setSupportReply("");
       setSelectedTicket(current => current ? { ...current, status: "open" } : current);
       await Promise.all([loadTicketMessages(selectedTicket.id), loadSupportTickets()]);
     } catch (error) {
       Alert.alert("Reply not sent", error instanceof Error ? error.message : "Please try again.");
+      throw error;
     } finally {
       setBusy(false);
     }
@@ -1508,11 +1589,14 @@ function AcrossApp() {
   // ---- Profile ----
   async function loadProfile(authToken: string | null = token) {
     if (!authToken) return;
+    const generation = ++profileRequest.current;
     try {
       const response = await fetch(`${API_URL}/api/v1/profile`, { headers: { Authorization: `Bearer ${authToken}` } });
       const data = await readResponseBody(response);
       if (!response.ok) throw new Error(formatHttpError(response, data, "Could not load profile"));
+      if (generation !== profileRequest.current || authToken !== sessionTokenRef.current) return;
       setProfile(data);
+      if (editingProfileRef.current) return;
       setProfileCountryCode(data.country_code || "NG");
       setProfileName(data.full_name || "");
       setProfilePhone(data.phone || "");
@@ -1750,8 +1834,10 @@ function AcrossApp() {
               <View style={s.panel}>
                 <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || cart[0]?.product.currency)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview, cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
+                {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: "#12805F"}]}>-{money(displayedXPDiscount, quote?.currency || cart[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
+                {xpEnabled && !quote && <Pressable accessibilityRole="checkbox" accessibilityState={{checked: useXP, disabled: busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1}} disabled={busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1} onPress={() => setUseXP(value => !value)} style={{flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12}}><Ionicons name={useXP ? "checkbox" : "square-outline"} size={22} color="#12805F" /><View style={{flex: 1}}><Text style={{fontWeight: "800", color: "#191919"}}>Use XP - {xpBalance} available</Text><Text style={s.muted}>Up to {Math.min(xpBalance, Math.floor(totals.platformFee))} XP off the service fee. Seller prices and gateway charges stay payable.</Text></View></Pressable>}
+                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, cart[0]?.product.currency)}</Text></View>
 				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
 				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: "#12805F", fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
@@ -1761,6 +1847,12 @@ function AcrossApp() {
                     <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Review total"}</Text>
                   </View>
                 </Pressable>
+                {quote?.xp_discount ? <Pressable style={[s.secondaryButton, {marginTop: 10}]} disabled={busy || paymentBusy} onPress={() => { void (async () => {
+                  if (!token) return; setBusy(true);
+                  try { const response = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quotes/${quote.order_id}/release-xp`, {method: "POST", headers: {Authorization: `Bearer ${token}`}}); const body = await response.json(); if (!response.ok) throw new Error(body.message || "Could not change rewards"); clearPendingPayment(); setUseXP(false); await loadXPBalance(token); }
+                  catch(error) { Alert.alert("Rewards unchanged", error instanceof Error ? error.message : "Please retry"); }
+                  finally {setBusy(false);}
+                })(); }}><Text style={s.secondaryButtonText}>Change XP choice before payment</Text></Pressable> : null}
                 {quote ? (
                   <Pressable style={[s.secondaryButton, { marginTop: 10 }, (busy || paymentBusy) && s.disabled]} onPress={checkPendingPayment} disabled={busy || paymentBusy}>
                     <Text style={s.secondaryButtonText}>Check payment status</Text>
@@ -1810,11 +1902,12 @@ function AcrossApp() {
               </View>
             )}
             <View style={s.panel}>
+              {xpReserved > 0 && <Text style={s.muted}>{xpReserved} XP reserved for pending checkout. Points are spent only after confirmed payment.</Text>}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: "#FF4747" }}>{xpBalance} XP</Text><Text style={{ color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>= ₦{xpBalance} discount</Text></View>
+                <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: "#FF4747" }}>{xpBalance} XP</Text><Text style={{ color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>Up to NGN {xpBalance} in eligible service-fee discounts</Text></View>
                 <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
-              <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>New accounts receive a one-time 650 XP welcome bonus. Purchase rewards: below ₦1,000 = 1 XP; ₦1,000–₦9,999 = 2 XP; ₦10,000–₦99,999 = 5 XP; ₦100,000–₦499,999 = 10 XP; ₦500,000+ = 25 XP.</Text>
+              <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1 off Atlantic Express service fee on eligible NGN product orders, capped at the order service fee. XP cannot pay for products, delivery or Flutterwave charges and cannot be withdrawn. Unused points stay in your balance. Claim 1 XP daily; your first product or completed-service review earns 10 XP. New accounts receive a one-time 650 XP welcome bonus. Purchase rewards: below ₦1,000 = 1 XP; ₦1,000–₦9,999 = 2 XP; ₦10,000–₦99,999 = 5 XP; ₦100,000–₦499,999 = 10 XP; ₦500,000+ = 25 XP.</Text>
             </View>
             <View style={s.panel}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
@@ -1905,7 +1998,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          selectedTicket ? <SupportConversation ticket={selectedTicket} messages={ticketMessages} error={supportError} busy={busy} loading={messageLoading} hasEarlier={!!supportCursor} onEarlier={() => { if (!messageLoading) void loadTicketMessages(selectedTicket.id, supportCursor); }} onClose={() => { supportMessageRequest.current++; setSelectedTicket(null); setTicketMessages([]); setSupportCursor(""); }} onSend={replyToSupportTicket} onRefresh={() => { void loadTicketMessages(selectedTicket.id); }} /> : <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView
             ref={supportScrollRef}
             alwaysBounceVertical
@@ -1915,31 +2008,22 @@ function AcrossApp() {
             contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(true); }} tintColor="#FF4747" />}
           >
-            {selectedTicket ? (
-              <View style={s.panel}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <Text style={s.panelTitle}>{selectedTicket.subject}</Text>
-                  <Pressable onPress={() => { setSelectedTicket(null); setTicketMessages([]); }}><Ionicons name="close" size={22} color="#8C8C8C" /></Pressable>
-                </View>
-                <Text style={s.kicker}>Status: {selectedTicket.status}</Text>
-                {ticketMessages.map((m, i) => (
-                  <View key={i} style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: m.sender_type === "admin" ? "#EAF8F2" : "#FFFFFF", borderWidth: 1, borderColor: "#EDEDED" }}>
-                    <Text style={{ fontWeight: "700", fontSize: 12, color: "#66736F" }}>{m.sender_type === "admin" ? "Admin" : "You"}</Text>
-                    <Text style={{ marginTop: 4, color: "#191919", fontSize: 14 }}>{m.message}</Text>
-                    <Text style={{ marginTop: 4, color: "#8C8C8C", fontSize: 11 }}>{new Date(m.created_at).toLocaleString()}</Text>
-                  </View>
-                ))}
-                {selectedTicket.status !== "closed" ? (
-                  <>
-                    <TextInput style={s.supportMessageInput} value={supportReply} onChangeText={setSupportReply} placeholder="Reply to Atlantic Express support" multiline maxLength={5000} textAlignVertical="top" />
-                    <Pressable style={[s.supportSubmitButton, (busy || !supportReply.trim()) && s.disabled]} onPress={() => void replyToSupportTicket()} disabled={busy || !supportReply.trim()}>
-                      <Text style={s.supportSubmitButtonText}>{busy ? "Sending reply..." : "Send reply"}</Text>
-                    </Pressable>
-                  </>
-                ) : <Text style={{ marginTop: 14, color: "#8C8C8C" }}>This support ticket is closed.</Text>}
-              </View>
-            ) : (
               <View>
+                <View style={s.panel}>
+                  <Text style={s.panelTitle}>Your conversations</Text>
+                  <Pressable style={[s.primaryButtonSmall, {marginVertical: 10}]} onPress={() => setShowSupportForm(true)}><Text style={s.primaryButtonText}>New conversation</Text></Pressable>
+                  {supportError ? <Text style={{color: "#B42318"}}>{supportError}</Text> : null}
+                  {supportLoading ? <ActivityIndicator color="#FF4747" /> : null}
+                  {supportTickets.length === 0 && !supportLoading && !supportError ? <Text style={{ color: "#8C8C8C", marginTop: 8 }}>No tickets yet.</Text>
+                  : supportTickets.map(ticket => (
+                    <Pressable key={ticket.id} style={s.quickLinkCard} onPress={async () => { setTicketMessages([]); setSupportCursor(""); setSupportError(""); setSelectedTicket(ticket); }}>
+                      <View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{ticket.subject}</Text><Text style={s.quickLinkMeta}>{ticket.status} · {new Date(ticket.created_at).toLocaleDateString()}</Text></View>
+                      <Ionicons name="chevron-forward" size={18} color="#BFBFBF" />
+                    </Pressable>
+                  ))}
+                  {!!ticketListCursor && <Pressable disabled={supportLoading} onPress={() => { void loadSupportTickets(ticketListCursor); }} style={s.secondaryButton}><Text style={s.secondaryButtonText}>Load earlier conversations</Text></Pressable>}
+                </View>
+                {(showSupportForm || !!supportSubject || !!supportMessage) && (
                 <View style={s.panel}>
                   <Text style={s.kicker}>Support</Text><Text style={s.panelTitle}>Create a Ticket</Text>
                   <TextInput ref={supportSubjectRef} style={s.input} value={supportSubject} onChangeText={setSupportSubject} onFocus={() => revealInput(supportScrollRef, supportSubjectRef, 88)} placeholder="Subject" />
@@ -1959,18 +2043,8 @@ function AcrossApp() {
                     <Text style={s.supportSubmitButtonText}>{busy ? "Submitting ticket..." : "Submit support ticket"}</Text>
                   </Pressable>
                 </View>
-                <View style={s.panel}>
-                  <Text style={s.panelTitle}>Your Tickets</Text>
-                  {supportTickets.length === 0 ? <Text style={{ color: "#8C8C8C", marginTop: 8 }}>No tickets yet.</Text>
-                  : supportTickets.map(ticket => (
-                    <Pressable key={ticket.id} style={s.quickLinkCard} onPress={async () => { setSelectedTicket(ticket); await loadTicketMessages(ticket.id); }}>
-                      <View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{ticket.subject}</Text><Text style={s.quickLinkMeta}>{ticket.status} · {new Date(ticket.created_at).toLocaleDateString()}</Text></View>
-                      <Ionicons name="chevron-forward" size={18} color="#BFBFBF" />
-                    </Pressable>
-                  ))}
-                </View>
+                )}
               </View>
-            )}
           </ScrollView>
           </KeyboardAvoidingView>
         )}
@@ -1996,7 +2070,7 @@ function AcrossApp() {
             </View>
             <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: "#191919" }}>Package Delivered?</Text>
             <Text style={{ marginTop: 8, fontSize: 14, color: "#595959", textAlign: "center", lineHeight: 20 }}>
-              Did you receive your package? Confirming unlocks your review reward. Leave a review to claim ₦10 off your next order.
+              Did you receive your package? Confirming unlocks your review reward. Leave a review to earn 10 XP for eligible Atlantic Express service-fee discounts.
             </Text>
             <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
               <Pressable

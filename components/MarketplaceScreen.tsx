@@ -1,3 +1,4 @@
+import { ReviewStars } from "./ReviewStars";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -516,7 +517,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       void loadListings(true);
       Alert.alert(
         "Thank you",
-        body.xp_awarded ? `Your review helps other customers. You earned ${body.xp_awarded} XP.` : "Your updated review has been saved."
+        body.xp_awarded ? `Your review helps other customers. You earned ${body.xp_awarded} XP. Use it to reduce only Atlantic Express service fees on eligible NGN product orders; seller prices, delivery and gateway charges remain payable.` : "Your updated review has been saved."
       );
     } catch (reviewError) {
       Alert.alert("Review unavailable", reviewError instanceof Error ? reviewError.message : "Please try again.");
@@ -583,7 +584,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             <Text style={styles.title}>{selected.title}</Text>
             <Text style={styles.price}>{money(selected.price, selected.currency_code)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
             <Text style={styles.meta}>{selected.provider_name} · {selected.city}, {selected.state}</Text>
-            <View style={styles.ratingRow}><Ionicons name="star" size={14} color="#E8A100" /><Text style={styles.rating}>{selected.review_count ? `${selected.average_rating?.toFixed(1)} · ${selected.review_count} customer reviews` : "No customer reviews yet"}</Text></View>
+            <View style={styles.ratingRow}><ReviewStars rating={selected.average_rating || 0} size={14} /><Text style={styles.rating}>{selected.review_count ? `${selected.average_rating?.toFixed(1)} · ${selected.review_count} customer reviews` : "No customer reviews yet"}</Text></View>
           </View>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>About this service</Text>
@@ -651,18 +652,13 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       </View>
       {mode === "explore" ? (
         <>
-          <View style={styles.search}>
-            <Ionicons name="search" size={20} color="#777" />
-            <TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" />
+          <View style={styles.searchTools}>
+            <View style={styles.search}><Ionicons name="search" size={18} color="#777" /><TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" /></View>
+            <Pressable hitSlop={4} accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>Near me</Text></Pressable>
           </View>
-          <View style={styles.nearbyActions}>
-            <Pressable accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>{nearby ? "Refresh location" : "Near me"}</Text></Pressable>
-            {!!nearby && <Pressable style={styles.showAllButton} onPress={() => setNearby(null)}><Text style={styles.showAllText}>Show all</Text></Pressable>}
-          </View>
-          {!!nearby && <View style={styles.locationStrip}><Ionicons name="navigate-circle" size={14} color="#C9353B" /><Text numberOfLines={1} style={styles.locationSummary}>{nearby.label || "Current location"} · 100 km{typeof nearby.accuracy === "number" ? ` · ±${Math.round(nearby.accuracy)} m` : ""}</Text></View>}
-          {!!cacheNotice && <View style={styles.cacheStrip}><Ionicons name="cloud-done-outline" size={14} color="#C9353B" /><Text numberOfLines={1} style={styles.cacheNotice}>{cacheNotice}</Text></View>}
+          {(nearby || cacheNotice) && <View style={styles.locationStrip}><Text numberOfLines={1} style={styles.locationSummary}>{nearby ? `${nearby.label || "Current location"} · 100 km` : "All locations"}{cacheNotice ? ` · ${cacheNotice}` : ""}</Text>{nearby && <Pressable hitSlop={8} onPress={() => setNearby(null)}><Text style={styles.showAllText}>Show all</Text></Pressable>}</View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
-            <Pressable accessibilityRole="button" accessibilityState={{ selected: highlyRated }} accessibilityLabel="Filter services rated four stars and above" onPress={() => setHighlyRated(value => !value)} style={[styles.chip, highlyRated && styles.chipActive]}><Ionicons name="star" size={12} color={highlyRated ? "#FFF" : "#A66A00"} /><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, highlyRated && styles.chipTextActive]}>4★ & up</Text></Pressable>
+            <Pressable accessibilityRole="button" accessibilityState={{ selected: highlyRated }} accessibilityLabel="Filter services rated four stars and above" onPress={() => setHighlyRated(value => !value)} style={[styles.chip, highlyRated && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, highlyRated && styles.chipTextActive]}>4+ stars</Text></Pressable>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
@@ -685,7 +681,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                     <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
                     {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
-                    <View style={styles.ratingRow}><Ionicons name="star" size={12} color="#E8A100" /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
+                    <View style={styles.ratingRow}><ReviewStars rating={item.average_rating || 0} size={10} /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
                   </View>
                 </Pressable>
               )}
@@ -712,13 +708,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               {item.status === "completed" && (
                 <View style={styles.reviewRow}>
                   <Text style={styles.reviewLabel}>{(reviewedRequests[item.id] || item.review_rating) ? "Your rating" : "Rate this provider - earn 10 XP"}</Text>
-                  <View style={styles.stars}>
-                    {[1, 2, 3, 4, 5].map(rating => (
-                      <Pressable key={rating} disabled={!!savingReview} style={styles.reviewStar} onPress={() => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], rating } }))} accessibilityRole="radio" accessibilityState={{ checked: rating === (reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0), disabled: !!savingReview }} accessibilityLabel={`Rate ${rating} stars`}>
-                        <Ionicons name={rating <= (reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0) ? "star" : "star-outline"} size={25} color="#E8A100" />
-                      </Pressable>
-                    ))}
-                  </View>
+                  <ReviewStars rating={reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0} size={28} disabled={!!savingReview} onChange={rating => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], rating } }))} />
+                  <Text style={styles.meta}>10 XP for your first review. Use XP against Atlantic Express service fees on eligible NGN product orders.</Text>
                   <TextInput accessibilityLabel="Your service review" editable={!savingReview} multiline maxLength={1000} placeholder="Tell other customers about your experience (optional)" value={reviewDrafts[item.id]?.text ?? item.review_text ?? ""} onChangeText={text => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], text } }))} style={[styles.input, styles.textarea]} />
                   <Pressable disabled={!!savingReview || !(reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating)} style={[styles.primary, (!!savingReview || !(reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating)) && styles.disabled]} onPress={() => void submitReview(item, reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0, reviewDrafts[item.id]?.text ?? item.review_text ?? "")}><Text style={styles.primaryText}>{savingReview === item.id ? "Saving review…" : item.review_rating ? "Update review" : "Submit review"}</Text></Pressable>
                 </View>
@@ -764,41 +755,36 @@ const styles = StyleSheet.create({
   loader: { marginTop: 50 },
   pageLoader: { marginVertical: 18 },
   modeBar: { flexShrink: 0, marginHorizontal: 10, marginTop: 4, padding: 2, borderRadius: 12, backgroundColor: "#EDEDED", flexDirection: "row" },
-  modeButton: { flex: 1, minHeight: 44, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", borderRadius: 10 },
+  modeButton: { flex: 1, minHeight: 36, paddingHorizontal: 3, alignItems: "center", justifyContent: "center", borderRadius: 10 },
   modeButtonActive: { backgroundColor: "#FFF" },
   modeText: { color: "#777", fontSize: 12, fontWeight: "800", textAlign: "center" },
   modeTextActive: { color: "#191919" },
-  search: { flexShrink: 0, minHeight: 40, marginHorizontal: 10, marginTop: 5, marginBottom: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#DEDEDE" },
+  searchTools: { flexShrink: 0, flexDirection: "row", gap: 6, marginHorizontal: 10, marginVertical: 4 },
+  search: { flex: 1, minHeight: 36, paddingHorizontal: 10, borderRadius: 12, backgroundColor: "#FFF", flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#DEDEDE" },
   reviewRow: { marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: "#EEE" },
   reviewLabel: { color: "#444", fontWeight: "800", fontSize: 12, marginBottom: 6 },
-  stars: { flexDirection: "row", gap: 8 },
-  reviewStar: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  cacheStrip: { flexShrink: 0, marginHorizontal: 12, marginBottom: 2, flexDirection: "row", alignItems: "center", gap: 5 },
-  cacheNotice: { flex: 1, color: "#C9353B", fontSize: 10, fontWeight: "700" },
   ratingRow: { marginTop: 4, flexDirection: "row", alignItems: "center", gap: 4 },
   rating: { color: "#A66A00", fontSize: 11, fontWeight: "900" },
-  nearbyActions: { flexShrink: 0, marginHorizontal: 10, marginBottom: 2, flexDirection: "row", gap: 7 },
-  nearbyButton: { flex: 1, minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: "#FFF" },
+  nearbyButton: { paddingHorizontal: 10, minHeight: 36, borderRadius: 12, borderWidth: 1, borderColor: "#FF4747", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, backgroundColor: "#FFF" },
   nearbyButtonActive: { backgroundColor: "#FF4747" },
   nearbyText: { color: "#FF4747", fontSize: 12, fontWeight: "900" },
   nearbyTextActive: { color: "#FFF" },
-  showAllButton: { minHeight: 44, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: "#D9D9D9", alignItems: "center", justifyContent: "center", backgroundColor: "#FFF" },
   showAllText: { color: "#333", fontSize: 12, fontWeight: "900" },
-  locationStrip: { flexShrink: 0, marginHorizontal: 12, marginBottom: 2, minHeight: 16, flexDirection: "row", alignItems: "center", gap: 5 },
+  locationStrip: { flexShrink: 0, marginHorizontal: 12, marginBottom: 2, minHeight: 20, flexDirection: "row", alignItems: "center", gap: 5 },
   locationSummary: { flex: 1, color: "#C9353B", fontSize: 10, fontWeight: "800" },
   distance: { marginTop: 4, color: "#12805F", fontSize: 11, fontWeight: "900" },
-  chipScroller: { height: 52, minHeight: 52, flexGrow: 0, flexShrink: 0 },
-  chips: { minHeight: 52, paddingHorizontal: 10, gap: 6, paddingVertical: 4, alignItems: "center" },
-  chip: { minHeight: 44, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
+  chipScroller: { height: 42, minHeight: 42, flexGrow: 0, flexShrink: 0 },
+  chips: { minHeight: 42, paddingHorizontal: 10, gap: 6, paddingVertical: 4, alignItems: "center" },
+  chip: { flexDirection: "row", gap: 4, minHeight: 34, paddingHorizontal: 11, paddingVertical: 6, borderRadius: 999, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E5E5E5", alignItems: "center", justifyContent: "center" },
   chipActive: { backgroundColor: "#FF4747", borderColor: "#FF4747" },
-  chipText: { fontSize: 13, lineHeight: 18, fontWeight: "800", color: "#555", includeFontPadding: false },
+  chipText: { fontSize: 12, lineHeight: 18, fontWeight: "800", color: "#555", includeFontPadding: false },
   chipTextActive: { color: "#FFF" },
   listHeading: { flexShrink: 0, paddingHorizontal: 12, paddingVertical: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },
   card: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", marginBottom: 8, maxWidth: "49%", borderWidth: 1, borderColor: "#ECECEC" },
   cardImage: { width: "100%", aspectRatio: 1.35, backgroundColor: "#EEE" },
   cardBody: { padding: 8 },
-  cardTitle: { fontSize: 13, lineHeight: 17, fontWeight: "800", color: "#191919", minHeight: 34 },
+  cardTitle: { fontSize: 13, lineHeight: 17, fontWeight: "800", color: "#191919" },
   cardPrice: { fontSize: 15, fontWeight: "900", color: "#FF4747", marginTop: 3 },
   meta: { color: "#777", fontSize: 12, marginTop: 3 },
   empty: { alignItems: "center", padding: 50, gap: 8 },

@@ -382,7 +382,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
       setHasExistingReview(true);
       Alert.alert(
         wasUpdating ? "Review updated" : "Review published",
-        d.review_reward_claimed ? "Thanks! You earned ₦10 off your next order!" : wasUpdating ? "Your changes are now live." : "Your verified review is now live."
+        d.review_reward_claimed ? "Thanks! You earned 10 XP. Use it against Atlantic Express service fees on eligible NGN product orders; seller prices, delivery and gateway charges remain payable." : wasUpdating ? "Your changes are now live." : "Your verified review is now live."
       );
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setReviewBusy(false); }
   }
@@ -475,7 +475,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             {canReview && (
               <View style={styles.reviewForm}>
                 <Text style={styles.detailSectionTitle}>{hasExistingReview ? "Update your review" : "Your review"}</Text>
-                <Text style={styles.muted}>{hasExistingReview ? "Revise your rating, comment, or photos whenever your experience changes." : "Earn ₦10 off your next order by leaving a verified review after delivery."}</Text>
+                <Text style={styles.muted}>{hasExistingReview ? "Revise your rating, comment, or photos whenever your experience changes." : "Earn 10 XP for your first verified review after delivery. Use XP only against Atlantic Express service fees on eligible NGN product orders."}</Text>
                 <View style={styles.starRow}><ReviewStars rating={reviewRating} size={32} onChange={setReviewRating} /></View>
                 <TextInput ref={reviewInputRef} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : hasExistingReview ? "Update review" : "Post review"}</Text></Pressable></View>

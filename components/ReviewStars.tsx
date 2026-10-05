@@ -10,9 +10,10 @@ type Props = {
   rating: number;
   size?: number;
   onChange?: (rating: number) => void;
+  disabled?: boolean;
 };
 
-export function ReviewStars({ rating, size = 16, onChange }: Props) {
+export function ReviewStars({ rating, size = 16, onChange, disabled = false }: Props) {
   const rounded = Math.max(0, Math.min(5, Math.round(rating)));
   return (
     <View style={styles.row} accessibilityLabel={`${rating} out of 5 stars`}>
@@ -32,12 +33,13 @@ export function ReviewStars({ rating, size = 16, onChange }: Props) {
         return onChange ? (
           <Pressable
             key={star}
+            disabled={disabled}
             style={styles.pressable}
             hitSlop={6}
             onPress={() => onChange(star)}
             accessibilityRole="button"
             accessibilityLabel={`${star} star rating`}
-            accessibilityState={{ selected }}
+            accessibilityState={{ selected, disabled }}
           >
             {glyph}
           </Pressable>
