@@ -44,6 +44,11 @@ export type Quote = {
   vat_fee: number;
   stamp_duty_fee?: number;
   platform_fee: number;
+  platform_fee_before_xp?: number;
+  xp_discount?: number;
+  xp_available?: number;
+  xp_eligible?: number;
+  xp_redemption_enabled?: boolean;
   grand_total: number;
   currency: string;
   customer_pays_gateway_fee?: boolean;
@@ -104,6 +109,7 @@ export type SupportTicket = {
 };
 
 export type SupportMessage = {
+  id?: string;
   sender_type: string;
   sender_id: string;
   message: string;

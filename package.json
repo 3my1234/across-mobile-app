@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:catalog": "node scripts/test-catalog.cjs",
+    "test:pages": "node scripts/test-page-refresh.cjs",
     "ios": "expo run:ios"
   },
   "dependencies": {

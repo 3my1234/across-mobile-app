@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { ReviewStars } from "./ReviewStars";
 import { API_URL } from "./config";
 import { fetchWithTimeout } from "./utils";
 import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
@@ -40,7 +40,7 @@ export function ServiceReviews({ listingId }: { listingId: string }) {
     <Text style={styles.title}>Customer reviews</Text>
     <Text style={styles.help}>Reviews from customers with completed service requests.</Text>
     {items.map(item => <View key={item.id} style={styles.review}>
-      <View style={styles.row}><Text style={styles.name}>{item.reviewer_name}</Text><Ionicons name="star" size={13} color="#A66A00" /><Text style={styles.score}>{item.rating}/5</Text></View>
+      <View style={styles.row}><Text style={styles.name}>{item.reviewer_name}</Text><ReviewStars rating={item.rating} size={13} /><Text style={styles.score}>{item.rating}/5</Text></View>
       {!!item.review_text && <Text style={styles.body}>{item.review_text}</Text>}
       <Text style={styles.date}>{new Date(item.created_at).toLocaleDateString()}</Text>
     </View>)}
