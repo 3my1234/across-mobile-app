@@ -12,6 +12,7 @@ export const s = StyleSheet.create({
   authSafe: { flex: 1 },
   authKeyboard: { flex: 1 },
   authScroll: { flexGrow: 1, width: "100%", maxWidth: 540, alignSelf: "center", paddingHorizontal: 20, paddingTop: 24, paddingBottom: 32 },
+  authWelcomeScroll: { justifyContent: "center", paddingTop: 32, paddingBottom: 32 },
   authBrand: { alignItems: "center", marginBottom: 18 },
   authLogo: { width: 96, height: 96, borderRadius: 24, backgroundColor: "#000000" },
   authLogoCompact: { width: 76, height: 76, borderRadius: 20 },
