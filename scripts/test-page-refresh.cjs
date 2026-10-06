@@ -15,7 +15,7 @@ async function main() {
   const appState = {currentState: "active", addEventListener: (_, cb) => {foreground=cb; return {remove: () => {foreground=null;}};}};
   const start = source.lastIndexOf("  useEffect(() => {",source.indexOf("    const refreshPage = async () => {"));
   const end = source.indexOf("\n  async function refreshAppData",start);
-  run(source.slice(start,end), {stage:"app", token:"buyer", activeTab:"support", selectedTicket:null, editingProfile:false, AppState:appState,
+  run(source.slice(start,end), {stage:"app", token:"buyer", activeTab:"support", selectedTicket:null, editingProfile:false,showPaymentHistory:false, AppState:appState,
     useEffect: callback => {cleanup=callback();}, setInterval: cb => {tick=cb; return 1;}, clearInterval: () => {tick=null;},
     loadSupportTickets: async () => {loads++;}, loadTicketMessages: async () => {},
     supportTicketRequest:{current:0}, supportMessageRequest:{current:0}});

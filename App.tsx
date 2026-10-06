@@ -1,4 +1,5 @@
 import { SupportConversation } from "./components/SupportConversation";
+import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
@@ -146,6 +147,7 @@ function AcrossApp() {
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
   const paymentConfirmationIssue = useRef("");
+  const [showPaymentHistory,setShowPaymentHistory]=useState(false);
   const cartHydrated = useRef(false);
   const restoredPendingPayment = useRef(false);
   const activityTokenRef = useRef("");
@@ -761,6 +763,7 @@ function AcrossApp() {
     setCart([]);
     setQuote(null);
     setPaymentState("idle");
+    setShowPaymentHistory(false);
     setPaymentMessage("");
     setOrders([]);
     setXpBalance(0); setXpReserved(0); setXpEnabled(false); setUseXP(false); supportTicketRequest.current++; supportMessageRequest.current++; setSupportError("");
@@ -974,6 +977,7 @@ function AcrossApp() {
     if (stage !== "app" || !token) return;
     let inFlight = false;
     const refreshPage = async () => {
+      if(activeTab === "account" && showPaymentHistory) return;
       if (inFlight || AppState.currentState !== "active") return;
       inFlight = true;
       try {
@@ -989,7 +993,7 @@ function AcrossApp() {
     return () => { clearInterval(timer); foreground.remove(); supportTicketRequest.current++; supportMessageRequest.current++; };
     // Load on entry and foreground; refresh only the visible page without resetting drafts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, token, activeTab, selectedTicket?.id, editingProfile]);
+  }, [stage, token, activeTab, selectedTicket?.id, editingProfile,showPaymentHistory]);
 
   async function refreshAppData(includeSupport = false) {
     if (refreshing) return;
@@ -1519,7 +1523,7 @@ function AcrossApp() {
       const data = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, data, "Confirmation failed"));
       setDeliveryConfirmOrder(null);
-      Alert.alert("Receipt confirmed", "Thank you. Your review reward is now available; leave a review to claim ₦10 off your next order.");
+      Alert.alert("Receipt confirmed", "Thank you. Leave your first review to earn 10 XP for eligible Atlantic Express service-fee discounts. Seller prices, delivery and gateway charges remain payable.");
       await loadOrders(token);
       await loadNotifications(token);
     } catch (e) {
@@ -1886,7 +1890,8 @@ function AcrossApp() {
           </ScrollView>
         )}
 
-        {activeTab === "account" && (
+        {activeTab === "account" && showPaymentHistory && token && <PaymentHistoryScreen key={token} token={token} bottomInset={bottomInset + BOTTOM_NAV_HEIGHT} onBack={()=>setShowPaymentHistory(false)} onViewOrders={()=>{setShowPaymentHistory(false);setActiveTab("track");void loadOrders(token);}} onConfirmed={async orderId=>{if(quote?.order_id===orderId) await completeSuccessfulPayment();else await Promise.all([loadOrders(token),loadXPBalance(token),loadNotifications(token)]);}}/>}
+        {activeTab === "account" && !showPaymentHistory && (
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView ref={accountScrollRef} alwaysBounceVertical keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
@@ -1938,6 +1943,7 @@ function AcrossApp() {
               </View>
             </View>
             <View style={s.quickLinks}>
+              <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color="#FF4747"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments, references and XP discounts</Text></View><Ionicons name="chevron-forward" size={18} color="#BFBFBF"/></Pressable>
               {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
                 { tab: "support" as Tab, label: "Support", icon: "chatbubble-ellipses-outline" as const, meta: "Contact us" }
               ].map(link => (
