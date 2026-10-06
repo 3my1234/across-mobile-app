@@ -145,6 +145,7 @@ function AcrossApp() {
   const orderOffsetsRef = useRef<Record<string, number>>({});
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
+  const paymentConfirmationIssue = useRef("");
   const cartHydrated = useRef(false);
   const restoredPendingPayment = useRef(false);
   const activityTokenRef = useRef("");
@@ -1369,18 +1370,29 @@ function AcrossApp() {
 
   async function verifyPaymentWithBackend(orderId: string, redirectURL = ""): Promise<boolean> {
     if (!token) return false;
+    const authToken = token;
+    const generation = paymentPollGeneration.current;
+    paymentConfirmationIssue.current = "";
     try {
       const parsed = redirectURL ? new URL(redirectURL) : null;
       const transactionId = parsed?.searchParams.get("transaction_id") || "";
       const txRef = parsed?.searchParams.get("tx_ref") || "";
-      const response = await fetch(`${API_URL}/api/v1/payments/flutterwave/verify`, {
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/payments/flutterwave/verify`, {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ order_id: orderId, transaction_id: transactionId, tx_ref: txRef })
       });
       const data = await readResponseBody(response);
+      if (generation !== paymentPollGeneration.current || sessionTokenRef.current !== authToken) return false;
       if (response.status === 401) {
         await logout();
+        return false;
+      }
+      if (response.status === 409 || response.status === 500 || response.status === 503) {
+        paymentConfirmationIssue.current = "We could not finish recording this payment. Your order is saved. Do not pay again; retry Check payment status or contact support.";
+        setPaymentState("waiting");
+        setPaymentMessage(paymentConfirmationIssue.current);
         return false;
       }
       return response.ok && data?.payment_state === "settled";
@@ -1390,8 +1402,11 @@ function AcrossApp() {
   }
 
   async function completeSuccessfulPayment() {
+    stopPaymentPolling();
+    paymentConfirmationIssue.current = "";
     setPaymentState("settled");
     setPaymentMessage("Payment confirmed!");
+    cartRef.current = [];
     setCart([]);
     setQuote(null);
     await SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
@@ -1407,16 +1422,23 @@ function AcrossApp() {
   async function pollPaymentStatus(orderId: string, attempts = 0, silent = false, generation = paymentPollGeneration.current): Promise<boolean> {
     if (!token) return false;
     if (generation !== paymentPollGeneration.current) return false;
+    if (paymentConfirmationIssue.current) {
+      setPaymentMessage(paymentConfirmationIssue.current);
+      return false;
+    }
+    const authToken = token;
     try {
       // Webhooks remain authoritative, but periodically re-run the idempotent
       // provider verification so a delayed/missed webhook does not strand checkout.
       if (attempts > 0 && attempts % 3 === 0) {
         const verified = await verifyPaymentWithBackend(orderId);
         if (verified) return true;
+        if (generation !== paymentPollGeneration.current || paymentConfirmationIssue.current) return false;
       }
-      const r = await fetch(`${API_URL}/api/v1/orders/${orderId}/payment-status`, { headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/orders/${orderId}/payment-status`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } });
       if (!r.ok) throw new Error("status unavailable");
       const d = await r.json();
+      if (generation !== paymentPollGeneration.current || sessionTokenRef.current !== authToken) return false;
       const state = String(d.payment_state || "pending");
       if (state === "settled" || state === "released") {
         setPaymentState("settled"); setPaymentMessage("Payment confirmed!");
