@@ -13,6 +13,7 @@
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:pages": "node scripts/test-page-refresh.cjs",
     "test:payments": "node scripts/test-payment-history.cjs",
+    "test:marketplace": "node scripts/test-provider-chat.cjs && node scripts/test-product-loading.cjs",
     "ios": "expo run:ios"
   },
   "dependencies": {
