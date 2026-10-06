@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:pages": "node scripts/test-page-refresh.cjs",
+    "test:payments": "node scripts/test-payment-history.cjs",
     "ios": "expo run:ios"
   },
   "dependencies": {
