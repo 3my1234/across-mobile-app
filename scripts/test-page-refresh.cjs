@@ -42,6 +42,38 @@ async function main() {
   const signedOut=loader.loadSupportTickets();state.sessionTokenRef.current="another-buyer";
   pending[3]({ok:true,json:async()=>({tickets:[{id:"old-private-data",created_at:"2026-10-05"}]})});await signedOut;
   assert.equal(tickets[0].id,"latest","previous session response must be ignored");
+
+  // Exercise the actual payment functions: backend recording errors must not
+  // become an endless "waiting for Flutterwave" message or clear paid goods.
+  let paymentMessage="", cart=[{sku:"WATCH"}], pendingDeleted=0, networkCalls=0;
+  let verification={status:409,ok:false,data:{message:"constraint failure"}};
+  const paymentState={token:"buyer",sessionTokenRef:{current:"buyer"},paymentPollGeneration:{current:0},paymentConfirmationIssue:{current:""},
+    API_URL:"https://example.test",URL,readResponseBody:async response=>response.data,
+    fetchWithTimeout:async (_url,options)=>{networkCalls++;assert.equal(options.cache,"no-store");return verification;},
+    logout:async()=>{},setPaymentState:()=>{},setPaymentMessage:value=>{paymentMessage=value;},
+    cartRef:{current:cart},setCart:value=>{cart=value;},setQuote:()=>{},PENDING_PAYMENT_KEY:"pending",
+    SecureStore:{deleteItemAsync:async()=>{pendingDeleted++;}},loadNotifications:async()=>{},loadXPBalance:async()=>{},loadOrders:async()=>{},
+    Alert:{alert:()=>{}},setActiveTab:()=>{},sleep:async()=>{}};
+  const paymentStart=source.indexOf("  async function verifyPaymentWithBackend(");
+  const paymentEnd=source.indexOf("\n  async function claimDailyXP",paymentStart);
+  const payment=run(source.slice(paymentStart,paymentEnd),paymentState);
+  assert.equal(await payment.verifyPaymentWithBackend("order"),false);
+  assert.match(paymentMessage,/Do not pay again/);
+  assert.equal(await payment.pollPaymentStatus("order"),false);
+  assert.equal(networkCalls,1,"recording failure must not trigger another misleading polling loop");
+  assert.equal(cart.length,1);assert.equal(pendingDeleted,0);
+  verification={status:200,ok:true,data:{payment_state:"settled"}};
+  assert.equal(await payment.verifyPaymentWithBackend("order"),true);
+  await payment.completeSuccessfulPayment();
+  assert.equal(cart.length,0);assert.equal(paymentState.cartRef.current.length,0);
+  assert.equal(pendingDeleted,1);assert.equal(paymentState.paymentConfirmationIssue.current,"");
+  assert.equal(await payment.pollPaymentStatus("order",0,false,0),false,"completed checkout must invalidate older pollers");
+  verification={status:202,ok:true,data:{payment_state:"pending"}};
+  assert.equal(await payment.verifyPaymentWithBackend("order"),false);
+  assert.equal(paymentState.paymentConfirmationIssue.current,"");
+  paymentState.fetchWithTimeout=async()=>{paymentState.sessionTokenRef.current="another-buyer";return {status:200,ok:true,data:{payment_state:"settled"}};};
+  assert.equal(await payment.verifyPaymentWithBackend("order"),false,"late verification must not confirm another buyer's cart");
   console.log("Page refresh regressions passed: entry, foreground, background pause, late response, retained history and session isolation.");
+  console.log("Payment regressions passed: recording error, retry recovery, cart clearing, pending response and stale session.");
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
