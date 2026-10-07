@@ -24,7 +24,7 @@ import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
 import { ResilientImage } from "./ResilientImage";
 import { ServiceReviews } from "./ServiceReviews";
-import { fetchWithTimeout } from "./utils";
+import { fetchWithTimeout, fetchJSONWithTimeout } from "./utils";
 import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 import { filterNearbySnapshot, readCachedContact, readNearbySnapshot, writeCachedContact, writeNearbySnapshot } from "./nearbyCache";
 
@@ -128,6 +128,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState("");
   const chatBusy = useRef(false);
+  const chatOpening = useRef(false);
+  const [openingChat, setOpeningChat] = useState(false);
   const threadRequest = useRef(0);
   const threadInFlight = useRef(false);
   const chatActor = useRef(token); chatActor.current = token;
@@ -387,19 +389,19 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }
 
   async function startConversation() {
-    if (!selected || loading) return;
+    if (!selected || chatOpening.current) return;
+    chatOpening.current = true;
     const listing = selected, actor = token;
-    setLoading(true);
+    setOpeningChat(true);
     try {
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations?listing_id=${encodeURIComponent(listing.id)}`, {headers:authHeaders});
-      const body = await response.json().catch(()=>({}));
+      const { response, body } = await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations?listing_id=${encodeURIComponent(listing.id)}`, {headers:authHeaders});
       if (!response.ok) throw new Error(apiMessage(body, "Could not open provider chat"));
       if (chatActor.current !== actor || selectedRef.current?.id !== listing.id) return;
       const existing = (body.items || []).find((item: Conversation)=>item.listing_id === listing.id);
       const conversation: Conversation = existing || {id:"",listing_id:listing.id,listing_title:listing.title,counterpart_name:listing.provider_name,status:"open",last_message:"",last_message_at:"",unread_count:0,subscription_active:listing.contact_available !== false};
       await openConversation(conversation);
-    } catch (messageError) { Alert.alert("Unable to open messages", messageError instanceof Error ? messageError.message : "Please try again."); }
-    finally { if(chatActor.current===actor)setLoading(false); }
+    } catch (messageError) { if(chatActor.current===actor && selectedRef.current?.id===listing.id) Alert.alert("Unable to open messages", messageError instanceof Error ? messageError.message : "Please try again."); }
+    finally { if(chatActor.current===actor){chatOpening.current=false;setOpeningChat(false);} }
   }
 
   async function loadConversationMessages(conversation: Conversation, cursor = "", quiet = false) {
@@ -409,8 +411,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     if(!quiet)setChatLoading(true);
     try {
       const query=new URLSearchParams({limit:"50"});if(cursor)query.set("cursor",cursor);
-      const response=await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
-      const body=await response.json().catch(()=>({}));
+      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
       if(!response.ok)throw new Error(apiMessage(body,"Messages could not be loaded"));
       if(request!==threadRequest.current || actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return;
       const incoming: ConversationMessage[]=Array.isArray(body.items)?body.items:[];
@@ -439,8 +440,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     chatBusy.current=true;setChatSending(true);setChatError("");
     try {
       const endpoint=conversation.id?`/marketplace/conversations/${conversation.id}/messages`:`/marketplace/listings/${conversation.listing_id}/conversations`;
-      const response=await fetchWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim()})});
-      const body=await response.json().catch(()=>({}));
+      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim()})});
       if(!response.ok)throw new Error(apiMessage(body,"Message could not be sent"));
       if(actor!==chatActor.current)return;
       if(conversationRef.current?.listing_id !== conversation.listing_id){void loadConversations(true);return;}
@@ -453,6 +453,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }
 
   useEffect(()=>{
+    chatOpening.current=false;setOpeningChat(false);
     threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);setChatError("");setChatSending(false);setChatLoading(false);
   },[token]);
   useEffect(()=>{
@@ -647,8 +648,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             <Pressable disabled={loading} style={[styles.primary, loading && styles.disabled]} onPress={submitRequest}>
               <Text style={styles.primaryText}>{loading ? "Sending…" : selected.direct_booking ? "Request booking" : "Send enquiry"}</Text>
             </Pressable>
-            <Pressable disabled={loading} style={[styles.secondary, loading && styles.disabled]} onPress={() => void startConversation()}>
-              <Text style={styles.secondaryText}>Message provider</Text>
+            <Pressable disabled={openingChat} style={[styles.secondary, openingChat && styles.disabled]} onPress={() => void startConversation()}>
+              <Text style={styles.secondaryText}>{openingChat ? "Opening chat..." : "Message provider"}</Text>
             </Pressable>
             <Pressable disabled={requiresSafetyAcknowledgement && !safetyAcknowledged} style={[styles.secondary, requiresSafetyAcknowledgement && !safetyAcknowledged && styles.disabled]} onPress={revealContact}>
               <Text style={styles.secondaryText}>View verified provider contact</Text>

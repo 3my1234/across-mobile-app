@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
 import { money, uploadReviewImage, mapProduct, fetchWithTimeout } from "./utils";
+import { saveProductReview } from "./productReview";
 import { s } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
 import { COLORS } from "./theme";
@@ -228,6 +229,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const sectionOffsets = useRef({ overview: 0, reviews: 0, recommended: 0 });
   const snapshotRequest = useRef(0);
   const reviewRequest = useRef(0);
+  const reviewSaving = useRef(false);
   const recommendationRequest = useRef(0);
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
@@ -295,6 +297,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   }
 
   async function loadDetail(force = true) {
+    if (reviewSaving.current) return;
     const request = ++reviewRequest.current;
     setLoading(true);
     setReviewLoadingMore(false);
@@ -383,15 +386,15 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   }
 
   async function saveReview() {
-    if (!token) return;
-    const request = reviewRequest.current;
+    if (!token || reviewSaving.current) return;
+    reviewSaving.current = true;
+    const request = ++reviewRequest.current;
     const wasUpdating = hasExistingReview;
+    setLoading(false);
     setReviewBusy(true);
     try {
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/products/${product.id}/reviews`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ rating: reviewRating, review_text: reviewText, media_urls: reviewImages }) });
-      const d = await r.json().catch(() => ({}));
+      const d = await saveProductReview(product.id, token, { rating: reviewRating, review_text: reviewText, media_urls: reviewImages });
       if (request !== reviewRequest.current) return;
-      if (!r.ok) throw new Error(d.message || "Could not save");
       if (d.review) {
         setReviews(current => [d.review, ...current.filter(item => item.id !== d.review.id)]);
       }
@@ -406,7 +409,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
         wasUpdating ? "Review updated" : "Review published",
         d.review_reward_claimed ? "Thanks! You earned 10 XP. Use it against Atlantic Express service fees on eligible NGN product orders; seller prices, delivery and gateway charges remain payable." : wasUpdating ? "Your changes are now live." : "Your verified review is now live."
       );
-    } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setReviewBusy(false); }
+    } catch (e) { if (request === reviewRequest.current) Alert.alert("Review confirmation", e instanceof Error ? e.message : ""); } finally { reviewSaving.current = false; if (request === reviewRequest.current) setReviewBusy(false); }
   }
 
   const images = product.image_urls?.length ? product.image_urls : [FALLBACK_IMAGES[0]];
@@ -492,8 +495,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               <View style={styles.reviewForm}>
                 <Text style={styles.detailSectionTitle}>{hasExistingReview ? "Update your review" : "Your review"}</Text>
                 <Text style={styles.muted}>{hasExistingReview ? "Revise your rating, comment, or photos whenever your experience changes." : "Earn 10 XP for your first verified review after delivery. Use XP only against Atlantic Express service fees on eligible NGN product orders."}</Text>
-                <View style={styles.starRow}><ReviewStars rating={reviewRating} size={32} onChange={setReviewRating} /></View>
-                <TextInput ref={reviewInputRef} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
+                <View style={styles.starRow}><ReviewStars rating={reviewRating} size={32} disabled={reviewBusy} onChange={setReviewRating} /></View>
+                <TextInput ref={reviewInputRef} editable={!reviewBusy} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : hasExistingReview ? "Update review" : "Post review"}</Text></Pressable></View>
               </View>
             )}

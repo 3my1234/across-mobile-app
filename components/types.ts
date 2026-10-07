@@ -19,6 +19,7 @@ export type Product = {
   sold_count: number;
   average_rating: number;
   provider_id?: string;
+  provider_name?: string;
   fulfillment_mode?: "merchant_local" | "merchant_cross_border";
   inventory_country_code?: string;
   inventory_city?: string;
@@ -35,6 +36,9 @@ export type Product = {
 export type CartItem = { product: Product; quantity: number };
 
 export type Quote = {
+  // Client-only snapshot: identifies the cart items belonging to this payment.
+  cart_items?: { product_id: string; quantity: number }[];
+  cart_group_key?: string;
   order_id: string;
   country_code?: string;
   delivery_address?: { address: string; city: string; state: string; postal_code: string; country_code: string };
