@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  ActivityIndicator, Alert, Animated, Dimensions, Image, ImageBackground,
+  ActivityIndicator, Alert, Image, ImageBackground,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
-  RefreshControl, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View
+  RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -15,6 +15,7 @@ import { s } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
 import { COLORS } from "./theme";
 import { ReviewStars } from "./ReviewStars";
+import { ProductCard } from "./ProductCard";
 import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 import { latestProductSnapshot } from "./catalogState";
 
@@ -190,19 +191,19 @@ interface DetailProps {
   onRemove: (product: Product) => void;
   onProductChange: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
+  getCartQuantity: (sku: string) => number;
 }
 
-export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct }: DetailProps) {
+export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity }: DetailProps) {
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
-  const windowWidth = Dimensions.get("window").width;
-  const windowHeight = Dimensions.get("window").height;
+  const {width: windowWidth, height: windowHeight} = useWindowDimensions();
   const [product, setProduct] = useState(initialProduct);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewCursor, setReviewCursor] = useState("");
   const [reviewHasMore, setReviewHasMore] = useState(false);
   const [reviewLoadingMore, setReviewLoadingMore] = useState(false);
-  const [summary, setSummary] = useState<ReviewSummary>({ count: 0, average_rating: 0 });
+  const [summary, setSummary] = useState<ReviewSummary>({ count: initialProduct.review_count, average_rating: initialProduct.average_rating });
   const [canReview, setCanReview] = useState(false);
   const [hasExistingReview, setHasExistingReview] = useState(false);
   const [reviewRating, setReviewRating] = useState(5);
@@ -212,16 +213,22 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const [loading, setLoading] = useState(true);
   const [reviewError, setReviewError] = useState("");
   const [recommendations, setRecommendations] = useState<Product[]>([]);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
+  const [recommendationsError, setRecommendationsError] = useState("");
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [galleryPhotos, setGalleryPhotos] = useState<string[] | null>(null);
+  const [showAllPhotos, setShowAllPhotos] = useState(false);
+  const [activeSection, setActiveSection] = useState<"overview" | "reviews" | "recommended">("overview");
   const [actionBarHeight, setActionBarHeight] = useState(120);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const detailScrollRef = useRef<ScrollView | null>(null);
   const reviewInputRef = useRef<TextInput | null>(null);
   const sectionOffsets = useRef({ overview: 0, reviews: 0, recommended: 0 });
   const snapshotRequest = useRef(0);
+  const reviewRequest = useRef(0);
   const recommendationRequest = useRef(0);
-  const pulse = useRef(new Animated.Value(0)).current;
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
   const isLocalMerchantProduct = product.fulfillment_mode === "merchant_local";
@@ -235,9 +242,14 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   useEffect(() => {
     setProduct(initialProduct);
     setGalleryIndex(0);
+    setHeroIndex(0);
     setGalleryOpen(false);
+    setGalleryPhotos(null);
+    setShowAllPhotos(false);
+    setActiveSection("overview");
+    detailScrollRef.current?.scrollTo({y:0,animated:false});
     void loadDetail(true);
-    return () => { snapshotRequest.current += 1; recommendationRequest.current += 1; };
+    return () => { snapshotRequest.current += 1; recommendationRequest.current += 1; reviewRequest.current += 1; };
     // The product id and session token are the intentional request keys.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProduct.id, token, destination.country_code, destination.state, destination.city]);
@@ -250,14 +262,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardVisible(false));
     return () => { show.remove(); hide.remove(); };
   }, []);
-  useEffect(() => {
-    if (cartQuantity > 0 || outOfStock) { pulse.stopAnimation(); pulse.setValue(0); return; }
-    const anim = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 900, useNativeDriver: true })
-    ]));
-    anim.start(); return () => anim.stop();
-  }, [outOfStock, pulse, cartQuantity]);
+
 
   async function loadProductSnapshot(force = true) {
     const request = ++snapshotRequest.current;
@@ -276,14 +281,23 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
 
   async function loadRecommendations() {
     const request = ++recommendationRequest.current;
+    setRecommendationsLoading(true);
+    setRecommendationsError("");
     const params = new URLSearchParams({ limit: "10", ...destination });
-    const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?${params}`), { headers: { "Cache-Control": "no-cache" } });
-    const data = response.ok ? await response.json() : null;
-    if (request === recommendationRequest.current) setRecommendations((data?.products ?? []).map(mapProduct));
+    try {
+      const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?${params}`), { headers: { "Cache-Control": "no-cache" } });
+      if (!response.ok) throw new Error("Related products could not be loaded. Tap to retry.");
+      const data = await response.json();
+      if (request === recommendationRequest.current) setRecommendations((data?.products ?? []).map(mapProduct));
+    } catch (error) {
+      if (request === recommendationRequest.current) setRecommendationsError(error instanceof Error ? error.message : "Related products could not be loaded. Tap to retry.");
+    } finally { if (request === recommendationRequest.current) setRecommendationsLoading(false); }
   }
 
   async function loadDetail(force = true) {
+    const request = ++reviewRequest.current;
     setLoading(true);
+    setReviewLoadingMore(false);
     setReviewError("");
     setCanReview(false);
     setHasExistingReview(false);
@@ -298,20 +312,23 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
       if (!rr.ok) throw new Error("Reviews are temporarily unavailable");
       if (rr.ok) {
         const d = await rr.json();
+        if (request !== reviewRequest.current) return;
         setReviews(d.reviews ?? []);
         setSummary(d.summary ?? { count: 0, average_rating: 0 });
         setReviewCursor(d.page?.next_cursor ?? "");
         setReviewHasMore(Boolean(d.page?.has_more));
       }
     })().catch(error => {
+      if (request !== reviewRequest.current) return;
       setReviewError(error instanceof Error ? error.message : "Reviews are temporarily unavailable");
-    }).finally(() => setLoading(false));
+    }).finally(() => { if (request === reviewRequest.current) setLoading(false); });
     const recommendationTask = loadRecommendations();
     const myReviewTask = (async () => {
       if (token) {
         const mr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine?fresh=${Date.now()}`, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } });
         if (mr.ok) {
           const d = await mr.json();
+          if (request !== reviewRequest.current) return;
           setCanReview(Boolean(d.can_review));
           setHasExistingReview(Boolean(d.review));
           if (d.review) {
@@ -327,6 +344,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
 
   async function loadMoreReviews() {
     if (!reviewHasMore || !reviewCursor || reviewLoadingMore) return;
+    const request = reviewRequest.current;
     setReviewLoadingMore(true);
     try {
       const params = new URLSearchParams({ limit: "25", cursor: reviewCursor });
@@ -334,6 +352,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
       const response = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews?${params.toString()}`, { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), "Cache-Control": "no-cache" } });
       if (!response.ok) throw new Error("Could not load more reviews");
       const data = await response.json();
+      if (request !== reviewRequest.current) return;
       const incoming: Review[] = data.reviews ?? [];
       setReviews(current => {
         const known = new Set(current.map(review => review.id));
@@ -342,9 +361,10 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
       setReviewCursor(data.page?.next_cursor ?? "");
       setReviewHasMore(Boolean(data.page?.has_more));
     } catch (error) {
+      if (request !== reviewRequest.current) return;
       Alert.alert("Reviews", error instanceof Error ? error.message : "Please try again");
     } finally {
-      setReviewLoadingMore(false);
+      if (request === reviewRequest.current) setReviewLoadingMore(false);
     }
   }
 
@@ -364,11 +384,13 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
 
   async function saveReview() {
     if (!token) return;
+    const request = reviewRequest.current;
     const wasUpdating = hasExistingReview;
     setReviewBusy(true);
     try {
       const r = await fetchWithTimeout(`${API_URL}/api/v1/products/${product.id}/reviews`, { method: "PUT", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ rating: reviewRating, review_text: reviewText, media_urls: reviewImages }) });
       const d = await r.json().catch(() => ({}));
+      if (request !== reviewRequest.current) return;
       if (!r.ok) throw new Error(d.message || "Could not save");
       if (d.review) {
         setReviews(current => [d.review, ...current.filter(item => item.id !== d.review.id)]);
@@ -397,42 +419,40 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   }
 
   function scrollToSection(section: keyof typeof sectionOffsets.current) {
-    detailScrollRef.current?.scrollTo({ y: Math.max(0, sectionOffsets.current[section] - 54), animated: true });
+    setActiveSection(section);
+    detailScrollRef.current?.scrollTo({ y: section === "overview" ? 0 : Math.max(0, sectionOffsets.current[section]), animated: true });
   }
 
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.detailHeader}>
-          <Pressable style={styles.detailBackButton} onPress={onClose}><Ionicons name="arrow-back" size={22} color="#101817" /></Pressable>
-          <Text style={styles.detailHeaderTitle}>Product details</Text>
-          <View style={styles.detailHeaderSpacer} />
+          <Pressable style={styles.detailBackButton} accessibilityLabel="Back to products" onPress={onClose}><Ionicons name="chevron-back" size={23} color="#191919" /></Pressable>
+          <View style={styles.sectionTabs}>
+            {(["overview", "reviews", "recommended"] as const).map(section=><Pressable key={section} accessibilityRole="tab" accessibilityState={{selected:activeSection===section}} style={styles.sectionTab} onPress={()=>scrollToSection(section)}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTabText,activeSection===section && styles.sectionTabActive]}>{section === "overview" ? "Overview" : section === "reviews" ? "Reviews" : "Recommended"}</Text>{activeSection===section && <View style={styles.sectionUnderline}/>}</Pressable>)}
+          </View>
+          <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.flash_sale_price || product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color="#191919" /></Pressable>
         </View>
-        <View style={styles.sectionTabs}>
-          <Pressable style={styles.sectionTab} onPress={() => scrollToSection("overview")}><Text style={styles.sectionTabText}>Overview</Text></Pressable>
-          <Pressable style={styles.sectionTab} onPress={() => scrollToSection("reviews")}><Text style={styles.sectionTabText}>Reviews</Text></Pressable>
-          <Pressable style={styles.sectionTab} onPress={() => scrollToSection("recommended")}><Text style={styles.sectionTabText}>Recommended</Text></Pressable>
-        </View>
-        <ScrollView ref={detailScrollRef} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
+        <ScrollView ref={detailScrollRef} scrollEventThrottle={100} onScroll={event=>{const y=event.nativeEvent.contentOffset.y+48;const section=y>=sectionOffsets.current.recommended && sectionOffsets.current.recommended>0 ? "recommended" : y>=sectionOffsets.current.reviews && sectionOffsets.current.reviews>0 ? "reviews" : "overview";setActiveSection(section);}} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
           <ScrollView
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            style={styles.detailGallery}
-            onMomentumScrollEnd={event => setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
+            style={[styles.detailGallery,{height:windowWidth}]}
+            onMomentumScrollEnd={event => setHeroIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
           >
             {images.map((uri, index) => (
-              <Pressable key={`${uri}-${index}`} onPress={() => { setGalleryIndex(index); setGalleryOpen(true); }} accessibilityLabel={`Open product image ${index + 1} of ${images.length}`}>
-                <ResilientImage uri={uri} style={[styles.detailImage, { width: windowWidth }]} resizeMode="cover" />
+              <Pressable key={`${uri}-${index}`} onPress={() => { setGalleryIndex(index); setGalleryPhotos(null); setGalleryOpen(true); }} accessibilityLabel={`Open product image ${index + 1} of ${images.length}`}>
+                <ResilientImage uri={uri} style={[styles.detailImage, { width: windowWidth, height:windowWidth }]} resizeMode="contain" />
               </Pressable>
             ))}
           </ScrollView>
-          <View style={styles.galleryCount}><Text style={styles.galleryCountText}>{galleryIndex + 1}/{images.length}</Text></View>
+          <View style={[styles.galleryCount,{top:windowWidth-40}]}><Text style={styles.galleryCountText}>{Math.min(heroIndex,images.length-1) + 1}/{images.length}</Text></View>
           <View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
             <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally from seller" : isCrossBorderMerchantProduct ? "International seller" : "Seller fulfilment unavailable"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
-            <Text style={styles.detailSku}>SKU {product.sku}</Text>
+            <View style={styles.productSocialRow}><Text style={styles.productSocialText}>{Number(product.sold_count || 0).toLocaleString()} sold</Text><Pressable accessibilityLabel="Read customer reviews" onPress={()=>scrollToSection("reviews")} style={styles.productRating}><Text style={styles.productSocialText}>{product.review_count>0 ? product.average_rating.toFixed(1) : "New"}</Text><ReviewStars rating={product.average_rating} size={13}/><Text style={styles.productSocialText}>({product.review_count})</Text></Pressable></View>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price, product.currency)}</Text>
               {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price, product.currency)}</Text>}
@@ -441,11 +461,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{originLabel}</Text></View>
             {deliveryAreaLabel ? <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivers to</Text><Text style={styles.detailMetaValue}>{deliveryAreaLabel}</Text></View> : null}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
-            <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Purchased</Text><Text style={styles.detailMetaValue}>{Number(product.sold_count || 0).toLocaleString()} sold</Text></View>
-            <View style={styles.detailMetaRow}>
-              <Text style={styles.detailMetaLabel}>Fulfilment</Text>
-              <Text style={styles.detailMetaValue}>{isLocalMerchantProduct ? "Seller-managed local delivery" : isCrossBorderMerchantProduct ? "Seller-managed international delivery" : "Unavailable"}</Text>
-            </View>
+
+
             {!!product.inventory_location && (
               <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Dispatch location</Text><Text style={styles.detailMetaValue}>{product.inventory_location}</Text></View>
             )}
@@ -455,20 +472,19 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
               <View style={styles.reviewSummaryRow}>
-                <Text style={styles.reviewSummaryScore}>{summary.count > 0 ? summary.average_rating.toFixed(1) : "—"}</Text>
-                <View style={styles.reviewSummaryCopy}>
-                  {summary.count > 0 && <ReviewStars rating={summary.average_rating} size={18} />}
-                  <Text style={styles.reviewSummaryText}>{summary.count > 0 ? `${summary.count} verified review${summary.count === 1 ? "" : "s"}` : "No reviews yet"}</Text>
-                </View>
+                <Text style={styles.reviewSummaryScore}>{summary.count>0 ? summary.average_rating.toFixed(1) : "—"}</Text>
+                <ReviewStars rating={summary.average_rating} size={18}/>
+                <Text style={styles.reviewSummaryText}>({summary.count.toLocaleString()})</Text>
               </View>
-              {loading ? <ActivityIndicator color="#FF4747" style={{ marginTop: 12 }} /> : reviews.map(r => (
-                <View key={r.id} style={styles.reviewCard}>
-                  <View style={styles.reviewCardHead}><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><ReviewStars rating={r.rating} size={15} /></View>
-                  <View style={styles.verifiedRow}><Ionicons name="shield-checkmark" size={14} color="#12805F" /><Text style={styles.verifiedText}>Verified purchase</Text></View>
-                  {!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}
-                  {!!r.media_urls?.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>{r.media_urls.map((uri, index) => <ResilientImage key={`${r.id}-${index}`} uri={uri} style={styles.reviewMedia} resizeMode="cover" />)}</ScrollView>}
-                </View>
-              ))}
+              {summary.count>0 && <View style={styles.verifiedBanner}><Ionicons name="shield-checkmark" size={17} color="#12805F"/><Text style={styles.verifiedBannerText}>Reviews from verified purchases</Text></View>}
+              {loading ? <ActivityIndicator color="#FF4747" style={{marginTop:12}}/> : reviews.map(r=><View key={r.id} style={styles.reviewCard}>
+                <View style={styles.reviewCardHead}><View style={styles.reviewAvatar}><Text style={styles.reviewAvatarText}>{(r.author || "Buyer").trim().charAt(0).toUpperCase()}</Text></View><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><Text style={styles.reviewDate}>{new Date(r.created_at).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}</Text></View>
+                <View style={styles.reviewRatingLine}><ReviewStars rating={r.rating} size={15}/><Text style={styles.verifiedText}>Verified purchase</Text></View>
+                {!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}
+                {!!r.media_urls?.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>{r.media_urls.map((uri,index)=><Pressable key={`${r.id}-${index}`} accessibilityLabel={`View review photo ${index+1}`} onPress={()=>{setGalleryPhotos(r.media_urls);setGalleryIndex(index);setGalleryOpen(true);}}><ResilientImage uri={uri} style={styles.reviewMedia} resizeMode="cover"/></Pressable>)}</ScrollView>}
+                <Pressable accessibilityLabel="Share this review" style={styles.reviewShare} onPress={()=>void Share.share({message:`${r.author} rated ${product.title} ${r.rating}/5 on Atlantic Express. ${r.review_text}\nhttps://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={15} color="#595959"/><Text style={styles.reviewShareText}>Share</Text></Pressable>
+              </View>)}
+              {!loading && !reviewError && reviews.length===0 && <Text style={styles.reviewText}>No reviews yet. Verified buyers can share their experience after delivery.</Text>}
               {!loading && !!reviewError && <Text style={styles.reviewError}>{reviewError}</Text>}
               {reviewHasMore && <Pressable style={[styles.reviewMoreButton, reviewLoadingMore && styles.disabled]} disabled={reviewLoadingMore} onPress={loadMoreReviews}><Text style={styles.secondaryButtonText}>{reviewLoadingMore ? "Loading..." : "Load more reviews"}</Text></Pressable>}
             </View>
@@ -481,24 +497,23 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : hasExistingReview ? "Update review" : "Post review"}</Text></Pressable></View>
               </View>
             )}
-            {!!product.description && (
-              <View style={styles.productDetailsSection}>
-                <Text style={styles.detailSectionTitle}>Product details</Text>
-                <Text style={styles.detailDescription}>{product.description}</Text>
-              </View>
-            )}
+            <View style={styles.productDetailsSection}>
+              <Text style={styles.detailSectionTitle}>Product details</Text>
+              {!!product.category_path?.length && <View style={styles.specRow}><Text style={styles.detailMetaLabel}>Category</Text><Text style={styles.specValue}>{product.category_path.join(" / ")}</Text></View>}
+              <View style={styles.specRow}><Text style={styles.detailMetaLabel}>Product code</Text><Text style={styles.specValue}>{product.sku}</Text></View>
+              {!!product.description && <Text style={styles.detailDescription}>{product.description}</Text>}
+            </View>
+            <View style={styles.productPhotoStack}>
+              {(showAllPhotos ? images : images.slice(0,3)).map((uri,index)=><Pressable key={`description-${uri}-${index}`} accessibilityLabel={`View product photo ${index+1}`} onPress={()=>{setGalleryPhotos(null);setGalleryIndex(index);setGalleryOpen(true);}}><ProductPhoto uri={uri}/></Pressable>)}
+              {images.length>3 && <Pressable style={styles.photoExpand} onPress={()=>setShowAllPhotos(value=>!value)}><Text style={styles.sectionTabText}>{showAllPhotos ? "Show fewer photos" : `See all ${images.length} photos`}</Text><Ionicons name={showAllPhotos ? "chevron-up" : "chevron-down"} size={16}/></Pressable>}
+            </View>
             <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
               <Text style={styles.detailSectionTitle}>Recommended for you</Text>
               <Text style={styles.recommendationHint}>Related products selected from the live catalogue.</Text>
-              {recommendations.length === 0 ? <Text style={styles.recommendationEmpty}>No related products available yet.</Text> : (
+              {!!recommendationsError && <Pressable onPress={()=>void loadRecommendations()}><Text style={styles.reviewError}>{recommendationsError}</Text></Pressable>}
+              {recommendations.length === 0 ? recommendationsLoading ? <ActivityIndicator color="#FF4747" style={{padding:20}}/> : !recommendationsError && <Text style={styles.recommendationEmpty}>No related products available yet.</Text> : (
                 <View style={styles.recommendationGrid}>
-                  {recommendations.map(item => (
-                    <Pressable key={item.id} style={styles.recommendationCard} onPress={() => onSelectProduct(item)}>
-                      <ResilientImage uris={item.image_urls} style={styles.recommendationImage} resizeMode="cover" />
-                      <Text style={styles.recommendationTitle} numberOfLines={2}>{item.title}</Text>
-                      <Text style={styles.recommendationPrice}>{money(item.flash_sale_price || item.price, item.currency)}</Text>
-                    </Pressable>
-                  ))}
+                  {recommendations.map(item=><View key={item.id} style={styles.recommendationCard}><ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={()=>onSelectProduct(item)} onAdd={()=>onAdd(item)}/></View>)}
                 </View>
               )}
             </View>
@@ -510,26 +525,14 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
             <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color="#101817" /></Pressable>
           </View>
-          <View style={styles.detailActionColumn}>
-            {cartQuantity === 0 && !outOfStock && (
-              <Animated.View style={[styles.detailHintBubble, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }), transform: [{ scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.03] }) }] }]}>
-                <Ionicons name="sparkles-outline" size={16} color="#FF4747" /><Text style={styles.detailHintText}>👆 Tap Add to cart</Text>
-              </Animated.View>
-            )}
-            {cartQuantity > 0 && <View style={styles.detailSuccessBubble}><Ionicons name="checkmark-circle" size={16} color="#12805F" /><Text style={styles.detailSuccessText}>✅ Added! Keep shopping or tap Cart to pay.</Text></View>}
-            <Pressable style={[styles.detailCartButton, outOfStock && styles.disabled]} onPress={() => { if (outOfStock) return; if (cartQuantity === 0) onAdd(product); else onClose(); }} disabled={outOfStock}>
-              <Animated.View style={{ transform: [{ scale: cartQuantity === 0 && !outOfStock ? pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.06] }) : 1 }] }}>
-                <Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity > 0 ? "Continue" : "Add to cart"}</Text>
-              </Animated.View>
-            </Pressable>
-          </View>
+          <Pressable style={[styles.detailCartButton,outOfStock && styles.disabled]} onPress={()=>{if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={outOfStock}><Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
         </View>}
       </KeyboardAvoidingView>
       <Modal visible={galleryOpen} animationType="fade" transparent={false} statusBarTranslucent onRequestClose={() => setGalleryOpen(false)}>
         <View style={[styles.galleryModal, { paddingTop: insets.top, paddingBottom: bottomInset }]}>
           <View style={styles.galleryModalHeader}>
             <Pressable style={styles.galleryClose} onPress={() => setGalleryOpen(false)} accessibilityLabel="Close image gallery"><Ionicons name="close" size={26} color="#FFFFFF" /></Pressable>
-            <Text style={styles.galleryModalCount}>{galleryIndex + 1}/{images.length}</Text>
+            <Text style={styles.galleryModalCount}>{galleryIndex + 1}/{(galleryPhotos || images).length}</Text>
             <View style={styles.galleryHeaderSpacer} />
           </View>
           <ScrollView
@@ -539,7 +542,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             contentOffset={{ x: galleryIndex * windowWidth, y: 0 }}
             onMomentumScrollEnd={event => setGalleryIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
           >
-            {images.map((uri, index) => <ResilientImage key={`full-${uri}-${index}`} uri={uri} style={{ width: windowWidth, height: Math.max(320, windowHeight - insets.top - bottomInset - 132) }} resizeMode="contain" />)}
+            {(galleryPhotos || images).map((uri, index) => <ResilientImage key={`full-${uri}-${index}`} uri={uri} style={{ width: windowWidth, height: Math.max(320, windowHeight - insets.top - bottomInset - 132) }} resizeMode="contain" />)}
           </ScrollView>
           <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if (cartQuantity === 0 && !outOfStock) onAdd(product); }} disabled={outOfStock}>
             <Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
@@ -550,56 +553,79 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   );
 }
 
+function ProductPhoto({uri}:{uri:string}) {
+  const [ratio,setRatio]=useState(1);
+  return <ResilientImage uri={uri} resizeMode="contain" style={{width:"100%",aspectRatio:ratio,backgroundColor:"#F7F7F7"}} onLoad={event=>{const {width,height}=event.nativeEvent.source;if(width>0 && height>0)setRatio(width/height);}}/>;
+}
+
 const styles = StyleSheet.create({
-  detailOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "#F5F5F5", zIndex: 20 },
+  sectionTabActive:{color:"#191919",fontWeight:"800"},
+  sectionUnderline:{position:"absolute",bottom:3,height:3,width:22,borderRadius:2,backgroundColor:"#191919"},
+  productSocialRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6,marginTop:8},
+  productSocialText:{fontSize:11,color:"#595959"},
+  productRating:{flexDirection:"row",alignItems:"center",gap:4,minHeight:28},
+  verifiedBanner:{marginTop:8,backgroundColor:"#F0F8F1",borderRadius:4,padding:8,flexDirection:"row",alignItems:"center",gap:6},
+  verifiedBannerText:{fontSize:12,color:"#315B3B"},
+  reviewAvatar:{width:28,height:28,borderRadius:14,backgroundColor:"#EAF1ED",alignItems:"center",justifyContent:"center"},
+  reviewAvatarText:{fontSize:12,fontWeight:"700",color:"#315B3B"},
+  reviewDate:{fontSize:11,color:"#888"},
+  reviewRatingLine:{flexDirection:"row",alignItems:"center",gap:8,marginTop:5},
+  reviewShare:{flexDirection:"row",alignItems:"center",gap:4,alignSelf:"flex-start",minHeight:32,marginTop:6},
+  reviewShareText:{fontSize:11,color:"#595959"},
+  specRow:{flexDirection:"row",alignItems:"flex-start",gap:12,marginTop:8},
+  specValue:{flex:1,fontSize:12,lineHeight:18,color:"#191919"},
+  productPhotoStack:{marginHorizontal:-12,gap:4},
+  photoExpand:{minHeight:44,flexDirection:"row",alignItems:"center",justifyContent:"center",gap:6},
+
+  detailOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "#FFFFFF", zIndex: 20 },
   detailSafe: { flex: 1 },
-  detailHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 12, paddingTop: 8, paddingBottom: 8 },
-  detailBackButton: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D9E0DD" },
+  detailHeader: {height:48,flexDirection:"row",alignItems:"center",backgroundColor:"#FFF",borderBottomWidth:1,borderColor:"#EEE"},
+  detailBackButton: {width:40,height:44,alignItems:"center",justifyContent:"center"},
   detailHeaderTitle: { color: "#101817", fontSize: 16, fontWeight: "900" },
   detailHeaderSpacer: { width: 42 },
-  sectionTabs: { height: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-around", backgroundColor: "#FFFFFF", borderBottomWidth: 1, borderColor: "#EDEDED" },
-  sectionTab: { flex: 1, height: 44, alignItems: "center", justifyContent: "center" },
-  sectionTabText: { color: "#30423D", fontSize: 13, fontWeight: "900" },
+  sectionTabs: {flex:1,flexDirection:"row",alignItems:"center"},
+  sectionTab: {flex:1,minWidth:0,height:44,alignItems:"center",justifyContent:"center"},
+  sectionTabText: {color:"#595959",fontSize:12,fontWeight:"600"},
   detailScroll: { paddingBottom: 140 },
   detailGallery: { height: 320, backgroundColor: "#E8EFEC" },
   detailImage: { width: 360, height: 320, backgroundColor: "#E8EFEC" },
   galleryCount: { position: "absolute", top: 280, right: 14, minWidth: 48, height: 28, paddingHorizontal: 10, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)" },
   galleryCountText: { color: "#FFFFFF", fontSize: 12, fontWeight: "900" },
-  detailBody: { padding: 18 },
-  detailTitle: { marginTop: 6, color: "#101817", fontSize: 24, fontWeight: "900", lineHeight: 30 },
+  detailBody: {paddingHorizontal:12,paddingTop:12,paddingBottom:0},
+  detailTitle: {color:"#191919",fontSize:15,fontWeight:"600",lineHeight:21,marginTop:4},
   detailSku: { marginTop: 6, color: "#66736F", fontSize: 12, fontWeight: "800" },
-  detailPriceRow: { marginTop: 14, flexDirection: "row", alignItems: "center", gap: 10 },
-  detailPrice: { color: "#101817", fontSize: 24, fontWeight: "900" },
-  detailComparePrice: { color: "#C62828", fontSize: 16, fontWeight: "900", textDecorationLine: "line-through", textDecorationColor: "#C62828" },
-  detailMetaRow: { marginTop: 12, flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  detailMetaLabel: { color: "#66736F", fontWeight: "700" },
-  detailMetaValue: { flexShrink: 1, textAlign: "right", color: "#101817", fontWeight: "900" },
-  detailDescriptionBlock: { marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDF1EF" },
-  productDetailsSection: { marginTop: 24, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDF1EF" },
-  detailSectionTitle: { color: "#101817", fontSize: 16, fontWeight: "900" },
-  detailDescription: { marginTop: 8, color: "#30423D", fontSize: 14, lineHeight: 22 },
-  reviewSummaryRow: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 12 },
-  reviewSummaryScore: { color: "#191919", fontSize: 30, fontWeight: "900" },
+  detailPriceRow: {marginTop:8,flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"},
+  detailPrice: {color:"#191919",fontSize:22,fontWeight:"800"},
+  detailComparePrice: {color:"#888",fontSize:13,fontWeight:"600",textDecorationLine:"line-through"},
+  detailMetaRow: {marginTop:8,flexDirection:"row",justifyContent:"space-between",gap:12},
+  detailMetaLabel: {color:"#66736F",fontSize:12,lineHeight:18,fontWeight:"500"},
+  detailMetaValue: {flex:1,textAlign:"right",color:"#191919",fontSize:12,lineHeight:18,fontWeight:"600"},
+  detailDescriptionBlock: {marginTop:14,paddingTop:14,borderTopWidth:6,borderColor:"#F5F5F5",marginHorizontal:-12,paddingHorizontal:12},
+  productDetailsSection: {marginTop:14,paddingTop:14,borderTopWidth:6,borderColor:"#F5F5F5",marginHorizontal:-12,paddingHorizontal:12,paddingBottom:14},
+  detailSectionTitle: {color:"#191919",fontSize:15,fontWeight:"700",lineHeight:21},
+  detailDescription: {marginTop:10,color:"#333",fontSize:13,lineHeight:20},
+  reviewSummaryRow: {marginTop:8,flexDirection:"row",alignItems:"center",gap:6},
+  reviewSummaryScore: {color:"#191919",fontSize:21,fontWeight:"700"},
   reviewSummaryCopy: { flex: 1, gap: 3 },
-  reviewSummaryText: { color: "#8C8C8C", fontSize: 13, fontWeight: "700" },
+  reviewSummaryText: {color:"#595959",fontSize:12},
   reviewError: { marginTop: 12, color: "#B42318", fontSize: 13, fontWeight: "700" },
-  reviewCard: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#EDEDED" },
-  reviewCardHead: { flexDirection: "row", justifyContent: "space-between", gap: 12 },
-  reviewAuthor: { color: "#191919", fontSize: 14, fontWeight: "900" },
+  reviewCard: {paddingVertical:12,borderBottomWidth:1,borderColor:"#EEE",backgroundColor:"#FFF"},
+  reviewCardHead: {flexDirection:"row",alignItems:"center",gap:6,flexWrap:"wrap"},
+  reviewAuthor: {color:"#191919",fontSize:13,fontWeight:"600",flexShrink:1},
   ratingStars: { flexDirection: "row", alignItems: "center", gap: 2 },
   verifiedRow: { marginTop: 5, flexDirection: "row", alignItems: "center", gap: 4 },
   verifiedText: { color: "#12805F", fontSize: 11, fontWeight: "800" },
-  reviewText: { marginTop: 8, color: "#595959", fontSize: 13, lineHeight: 20 },
+  reviewText: {marginTop:8,color:"#333",fontSize:13,lineHeight:20},
   reviewMediaRow: { gap: 8, paddingTop: 10, paddingRight: 4 },
   reviewMedia: { width: 88, height: 88, borderRadius: 8, backgroundColor: "#F0F0F0" },
-  reviewForm: { marginTop: 18, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDEDED" },
+  reviewForm: {marginTop:12,paddingTop:12,borderTopWidth:1,borderColor:"#EEE"},
   starRow: { flexDirection: "row", gap: 8, marginTop: 12 },
   starPressable: { minWidth: 40, minHeight: 44, alignItems: "center", justifyContent: "center" },
   reviewInput: { minHeight: 96, marginTop: 12, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 10, padding: 12, backgroundColor: "#FFFFFF", color: "#191919", textAlignVertical: "top" },
   reviewActionRow: { marginTop: 12, flexDirection: "row", gap: 10 },
   reviewSecondaryButton: { minHeight: 46, minWidth: 110, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1", paddingHorizontal: 14 },
   reviewMoreButton: { alignSelf: "center", minHeight: 44, marginTop: 12, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1", paddingHorizontal: 18 },
-  detailActions: { position: "absolute", left: 0, right: 0, bottom: 0, paddingHorizontal: 18, paddingTop: 12, paddingBottom: 18, borderTopWidth: 1, borderColor: "#D9E0DD", backgroundColor: "#F8FBFA", flexDirection: "row", alignItems: "center", gap: 12 },
+  detailActions: {position:"absolute",left:0,right:0,bottom:0,paddingHorizontal:12,paddingTop:8,borderTopWidth:1,borderColor:"#EEE",backgroundColor:"#FFF",flexDirection:"row",alignItems:"center",gap:10},
   detailActionColumn: { flex: 1, gap: 10 },
   detailHintBubble: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12, backgroundColor: "#FFF1F1", borderWidth: 1, borderColor: "#FFD0D0" },
   detailHintText: { flex: 1, color: "#FF4747", fontSize: 12, fontWeight: "800", lineHeight: 17 },
@@ -608,19 +634,19 @@ const styles = StyleSheet.create({
   flashTag: { backgroundColor: "#FF4747", alignSelf: "flex-start", paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4, marginBottom: 6 },
   flashTagText: { color: "#FFFFFF", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   productHub: { color: "#8C8C8C", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
-  muted: { marginTop: 8, color: "#8C8C8C", fontSize: 14, lineHeight: 20 },
+  muted: {marginTop:6,color:"#66736F",fontSize:12,lineHeight:18},
   primaryButtonText: { color: "#FFFFFF", fontWeight: "900" },
   secondaryButtonText: { color: "#FF4747", fontWeight: "900" },
   disabled: { opacity: 0.5 },
-  quantityRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  quantityButton: { width: 42, height: 42, borderRadius: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#D9E0DD" },
-  quantityValue: { minWidth: 28, textAlign: "center", color: "#101817", fontSize: 18, fontWeight: "900" },
-  detailCartButton: { flex: 1, height: 48, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: "#FF4747" },
-  recommendationSection: { marginTop: 24, paddingTop: 18, borderTopWidth: 1, borderColor: "#EDEDED" },
+  quantityRow: {flexDirection:"row",alignItems:"center",gap:4,borderWidth:1,borderColor:"#DDD",borderRadius:8},
+  quantityButton: {width:34,height:40,alignItems:"center",justifyContent:"center"},
+  quantityValue: {minWidth:18,textAlign:"center",fontSize:14,fontWeight:"700"},
+  detailCartButton: {flex:1,minHeight:46,borderRadius:24,paddingHorizontal:12,alignItems:"center",justifyContent:"center",backgroundColor:"#FF4747"},
+  recommendationSection: {marginTop:12,paddingTop:12,borderTopWidth:6,borderColor:"#F5F5F5",marginHorizontal:-12,paddingHorizontal:4},
   recommendationHint: { marginTop: 5, color: "#8C8C8C", fontSize: 12, lineHeight: 18 },
   recommendationEmpty: { marginTop: 14, color: "#8C8C8C", fontSize: 13 },
-  recommendationGrid: { marginTop: 12, flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  recommendationCard: { width: "48%", overflow: "hidden", borderRadius: 10, paddingBottom: 10, backgroundColor: "#FFFFFF" },
+  recommendationGrid: {marginTop:10,flexDirection:"row",flexWrap:"wrap",gap:4},
+  recommendationCard: {width:"49%",overflow:"hidden",backgroundColor:"#FFF"},
   recommendationImage: { width: "100%", aspectRatio: 1, backgroundColor: "#F0F0F0" },
   recommendationTitle: { minHeight: 38, marginTop: 8, paddingHorizontal: 9, color: "#191919", fontSize: 12, fontWeight: "800", lineHeight: 17 },
   recommendationPrice: { marginTop: 5, paddingHorizontal: 9, color: "#FF4747", fontSize: 14, fontWeight: "900" },

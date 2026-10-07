@@ -1851,7 +1851,7 @@ function AcrossApp() {
               </View>
 			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
             ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalLoading ? "Loading products..." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{stockView !== "international" && productFeed.status === "error" && <Pressable onPress={() => void loadProducts(true)}><Text style={{color: "#FF4747", padding: 12}}>Try again</Text></Pressable>}</View>}
-            renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
+            renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
         {activeTab === "services" && <MarketplaceScreen token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} />}
@@ -2141,7 +2141,7 @@ function AcrossApp() {
         </View>
       </Modal>
 
-      {selectedProduct && <ProductDetailScreen product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
+      {selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
     </View>
   );
 }
