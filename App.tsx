@@ -3,6 +3,7 @@ import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
 import * as ImagePicker from "expo-image-picker";
@@ -19,7 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
 import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, INTERNATIONAL_TRACKING_STAGES, LOCAL_TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
-import { money, fetchWithTimeout, sleep, mapProduct } from "./components/utils";
+import { money, fetchWithTimeout, fetchJSONWithTimeout, sleep, mapProduct } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
 import { ResilientImage } from "./components/ResilientImage";
@@ -29,6 +30,7 @@ import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, Prod
 import { readNotificationSoundEnabled, writeNearbySnapshot, writeNotificationSoundEnabled } from "./components/nearbyCache";
 import { freshCatalogURL, useCatalogFreshness } from "./components/catalogFreshness";
 import { cartOfferFingerprint, latestProductSnapshot, reconcileCart } from "./components/catalogState";
+import { cartGroupKey, groupCart, removePurchasedItems } from "./components/cartGroups";
 
 import { s } from "./components/Styles";
 
@@ -124,6 +126,7 @@ function AcrossApp() {
   const [internationalLoading, setInternationalLoading] = useState(false);
   const [internationalRefreshVersion, setInternationalRefreshVersion] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [selectedCartGroup, setSelectedCartGroup] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [serviceInitialMode, setServiceInitialMode] = useState<"explore" | "requests" | "messages">("explore");
@@ -150,6 +153,7 @@ function AcrossApp() {
   const paymentConfirmationIssue = useRef("");
   const [showPaymentHistory,setShowPaymentHistory]=useState(false);
   const cartHydrated = useRef(false);
+  const cartStorageWrites = useRef(Promise.resolve());
   const restoredPendingPayment = useRef(false);
   const activityTokenRef = useRef("");
   const pushTokenRef = useRef("");
@@ -230,6 +234,9 @@ function AcrossApp() {
   const productReloadQueued = useRef<{ key: string; promise: Promise<void> } | null>(null);
   const cartRef = useRef(cart);
   cartRef.current = cart;
+  const quoteRef = useRef(quote); quoteRef.current = quote;
+  const completedPayments = useRef(new Set<string>());
+  const checkoutInFlight = useRef(false);
   const paymentProtectedRef = useRef(false);
   paymentProtectedRef.current = paymentBusy || paymentState === "waiting";
   const selectedProductRef = useRef(selectedProduct);
@@ -271,14 +278,17 @@ function AcrossApp() {
     return filtered;
   }, [products, internationalProducts, stockView, catalogCountry, selectedCategory, searchQuery]);
 
+  const cartGroups = useMemo(() => groupCart(cart), [cart]);
+  const activeCartGroup = quote?.cart_group_key || (cartGroups.some(group => group.key === selectedCartGroup) ? selectedCartGroup : cartGroups[0]?.key || "");
+  const checkoutItems = useMemo(() => cartGroups.find(group => group.key === activeCartGroup)?.items || [], [cartGroups, activeCartGroup]);
   const totals = useMemo(() => {
     const items = cart.reduce((sum, i) => sum + i.quantity, 0);
-    const amount = cart.reduce((sum, i) => sum + (i.product.price - (i.product.delivery_fee || 0)) * i.quantity, 0);
-    const delivery = cart.reduce((sum, i) => sum + (i.product.delivery_fee || 0) * i.quantity, 0);
+    const amount = checkoutItems.reduce((sum, i) => sum + (i.product.price - (i.product.delivery_fee || 0)) * i.quantity, 0);
+    const delivery = checkoutItems.reduce((sum, i) => sum + (i.product.delivery_fee || 0) * i.quantity, 0);
     const platformFee = Math.round((amount + delivery) * 0.01 * 100) / 100;
     return { items, amount, delivery, platformFee, payablePreview: amount + delivery + platformFee };
-  }, [cart]);
-  const xpPreview = xpEnabled && useXP && cart[0]?.product.currency === "NGN" ? Math.min(xpBalance, Math.floor(totals.platformFee)) : 0;
+  }, [cart, checkoutItems]);
+  const xpPreview = xpEnabled && useXP && checkoutItems[0]?.product.currency === "NGN" ? Math.min(xpBalance, Math.floor(totals.platformFee)) : 0;
   const displayedXPDiscount = quote ? quote.xp_discount || 0 : xpPreview;
 
   const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
@@ -528,8 +538,8 @@ function AcrossApp() {
 
   useEffect(() => {
     if (!cartStorageReady) return;
-    const compactCart = cart.map(item => ({ sku: item.product.sku, quantity: item.quantity }));
-    void SecureStore.setItemAsync(CART_KEY, JSON.stringify(compactCart));
+    const compactCart = cart.map(item => ({ product: item.product, sku: item.product.sku, quantity: item.quantity }));
+    cartStorageWrites.current = cartStorageWrites.current.catch(() => {}).then(() => AsyncStorage.setItem(CART_KEY, JSON.stringify(compactCart)));
   }, [cart, cartStorageReady]);
 
   useEffect(() => {
@@ -756,6 +766,7 @@ function AcrossApp() {
     await Promise.all([
       SecureStore.deleteItemAsync(TOKEN_KEY),
       SecureStore.deleteItemAsync(EXPIRY_KEY),
+      cartStorageWrites.current.catch(() => {}).then(() => AsyncStorage.removeItem(CART_KEY)),
       SecureStore.deleteItemAsync(CART_KEY),
       SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY)
     ]);
@@ -831,24 +842,32 @@ function AcrossApp() {
   async function hydrateCart(catalog: Product[]) {
     if (cartHydrated.current) return;
     cartHydrated.current = true;
+    const actor = sessionTokenRef.current;
+    const destination = `${catalogCountry}|${catalogState}|${catalogCity}`;
+    const stillCurrent = () => actor === sessionTokenRef.current && destination === catalogRequestKeyRef.current;
     try {
       const [stored, pendingRaw] = await Promise.all([
-        SecureStore.getItemAsync(CART_KEY),
+        AsyncStorage.getItem(CART_KEY).then(value => value || SecureStore.getItemAsync(CART_KEY)),
         SecureStore.getItemAsync(PENDING_PAYMENT_KEY)
       ]);
+      if (!stillCurrent()) return;
       const entries = stored ? JSON.parse(stored) : [];
       if (Array.isArray(entries)) {
         const restored = entries.flatMap((entry: any) => {
-          const product = catalog.find(item => item.sku === String(entry?.sku || ""));
+          const product = catalog.find(item => item.sku === String(entry?.sku || "")) || (entry?.product?.id && entry.product.sku === entry.sku ? entry.product as Product : undefined);
           const quantity = Math.min(Math.max(Number(entry?.quantity) || 0, 0), product?.inventory_count || 0);
           return product && quantity > 0 ? [{ product, quantity }] : [];
         });
         cartRef.current = restored;
         setCart(restored);
         if (pendingRaw) {
-          const pending = JSON.parse(pendingRaw);
-          if (pending?.quote?.order_id && pending?.quote?.country_code === catalogCountry && pending?.cart_fingerprint === cartFingerprint(restored)) {
-            setQuote(pending.quote as Quote);
+          let pending: any = null;
+          try { pending = JSON.parse(pendingRaw); } catch {}
+          if (pending?.quote?.order_id && pending?.quote?.country_code === catalogCountry && (pending.quote.cart_items || pending?.cart_fingerprint === cartFingerprint(restored))) {
+            const restoredQuote = pending.quote as Quote;
+            if (!restoredQuote.cart_items) restoredQuote.cart_items = restored.map(item => ({ product_id: item.product.id, quantity: item.quantity }));
+            if (!restoredQuote.cart_group_key && restored[0]) restoredQuote.cart_group_key = cartGroupKey(restored[0].product);
+            setQuote(restoredQuote);
             restoredPendingPayment.current = true;
           } else {
             await SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
@@ -856,9 +875,11 @@ function AcrossApp() {
         }
       }
     } catch {
+      if (!stillCurrent()) return;
+      await AsyncStorage.removeItem(CART_KEY).catch(() => {});
       await SecureStore.deleteItemAsync(CART_KEY).catch(() => {});
     } finally {
-      setCartStorageReady(true);
+      if (stillCurrent()) setCartStorageReady(true);
     }
   }
 
@@ -1158,47 +1179,38 @@ function AcrossApp() {
       Alert.alert("Product unavailable", "This product is not linked to a verified seller-managed fulfilment route.");
       return;
     }
-    const source = `${p.fulfillment_mode}:${p.provider_id}`;
-    const existingSource = cart[0] ? `${cart[0].product.fulfillment_mode}:${cart[0].product.provider_id}` : source;
-    if (cart.length && (source !== existingSource || p.currency !== cart[0].product.currency)) {
-      Alert.alert(
-        "Start a separate seller cart?",
-        "Products from different sellers, routes or currencies are checked out separately. You can keep your current cart or replace it with this product.",
-        [
-          { text: "Keep current cart", style: "cancel" },
-          {
-            text: "Start new cart",
-            style: "destructive",
-            onPress: () => {
-              clearPendingPayment();
-              setCart([{ product: p, quantity: Math.min(1, p.inventory_count) }]);
-              Alert.alert("New cart started", `${p.title} is ready for checkout.`);
-            }
-          }
-        ]
-      );
+    if (p.inventory_count < 1) return;
+    if (quote?.cart_group_key === cartGroupKey(p) || (busy && activeTab === "cart")) {
+      Alert.alert("Checkout in progress", "Finish or check this payment before changing its items. You can still add products to other checkout groups.");
       return;
     }
-    clearPendingPayment();
-    const q = getCartQuantity(p.sku);
-    const capped = Math.min(q + 1, p.inventory_count);
-    setCart(items => { const e = items.find(i => i.product.sku === p.sku); if (!e) return [...items, { product: p, quantity: capped }]; return items.map(i => i.product.sku === p.sku ? { ...i, quantity: capped } : i); });
+    setCart(items => { const e = items.find(i => i.product.id === p.id); if (!e) return [...items, { product: p, quantity: 1 }]; return items.map(i => i.product.id === p.id ? { ...i, quantity: Math.min(i.quantity + 1, p.inventory_count) } : i); });
   }
   function removeFromCart(p: Product) {
-    clearPendingPayment();
+    if (quote?.cart_group_key === cartGroupKey(p) || (busy && activeTab === "cart")) {
+      Alert.alert("Checkout in progress", "Finish or check this payment before changing its items.");
+      return;
+    }
     const q = getCartQuantity(p.sku);
     if (q <= 1) { setCart(items => items.filter(i => i.product.sku !== p.sku)); return; }
     setCart(items => items.map(i => i.product.sku === p.sku ? { ...i, quantity: i.quantity - 1 } : i));
   }
 
   async function checkout() {
-    if (!token || cart.length === 0) return;
+    if (checkoutInFlight.current) return;
+    checkoutInFlight.current = true;
+    try { await checkoutSelectedGroup(); }
+    finally { checkoutInFlight.current = false; }
+  }
+
+  async function checkoutSelectedGroup() {
+    if (!token || (!quote && checkoutItems.length === 0)) return;
     if (!profile) {
       Alert.alert("Delivery address unavailable", "Reload your account details before paying.");
       return;
     }
     const market = buyerMarkets.find(item => item.country_code === catalogCountry);
-    if (!market || cart.some(item => item.product.currency !== market.currency_code)) {
+    if (!market || checkoutItems.some(item => item.product.currency !== market.currency_code)) {
       clearPendingPayment();
       Alert.alert("Delivery market changed", "Refresh your cart to see the delivered prices for your country before paying.");
       void loadProducts(true);
@@ -1234,23 +1246,44 @@ function AcrossApp() {
       return;
     }
     setBusy(true); try {
-      const items = cart.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items, use_xp: useXP }) });
+      const actor = token;
+      const selectedItems = checkoutItems;
+      const items = selectedItems.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
+      const {response:r,body:quotePayload} = await fetchJSONWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items, use_xp: useXP }) });
+      if (actor !== sessionTokenRef.current) return;
       if (r.status === 401) { await logout(); return; }
       if (!r.ok) {
-        const errData = await r.json().catch(() => ({}));
+        const errData = quotePayload;
         if (errData.code === "PROFILE_INCOMPLETE") {
           setActiveTab("account");
           setEditingProfile(true);
         }
         throw new Error(errData.message || "Checkout failed");
       }
-      const q = await r.json() as Quote;
+      const q = quotePayload as Quote;
+      if (actor !== sessionTokenRef.current) return;
+      q.cart_items = selectedItems.map(item => ({ product_id: item.product.id, quantity: item.quantity }));
+      q.cart_group_key = cartGroupKey(selectedItems[0].product);
       setQuote(q);
       void loadXPBalance(token);
-      await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(cart) }));
+      await SecureStore.setItemAsync(PENDING_PAYMENT_KEY, JSON.stringify({ quote: q, cart_fingerprint: cartFingerprint(selectedItems) }));
       Alert.alert("Review your total and address", `Deliver to ${[q.delivery_address?.address, q.delivery_address?.city, q.delivery_address?.state, q.delivery_address?.country_code].filter(Boolean).join(", ")}.\n\nProduct ${money(q.items_total, q.currency)} + delivery ${money(q.shipping_fee, q.currency)} + service fee ${money(q.platform_fee_before_xp ?? q.platform_fee, q.currency)}${q.xp_discount ? ` - XP discount ${money(q.xp_discount,q.currency)}` : ""} = ${money(q.grand_total, q.currency)}. Review the breakdown, then tap Continue payment.`);
     } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
+  }
+
+  async function changeCheckoutGroup() {
+    if (!quote || !token || busy || paymentBusy) return;
+    const pendingOrder = quote.order_id;
+    setBusy(true);
+    try {
+      const {response,body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/checkout/quotes/${pendingOrder}/release-xp`, {method:"POST",headers:{Authorization:`Bearer ${token}`}});
+      if (!response.ok) throw new Error(body.message || "Could not change checkout");
+      if (quoteRef.current?.order_id !== pendingOrder || token !== sessionTokenRef.current) return;
+      clearPendingPayment();
+      setPaymentState("idle");setPaymentMessage("");
+      void loadXPBalance(token);
+    } catch(error) { Alert.alert("Checkout unchanged", error instanceof Error ? error.message : "Please try again"); }
+    finally {setBusy(false);}
   }
 
   async function payWithFlutterwave(quoteData?: Quote) {
@@ -1342,7 +1375,9 @@ function AcrossApp() {
     setSelectedProduct(item => item ? unavailable.includes(item.id) ? null : snapshots.get(item.id) || item : null);
     const previous = cartRef.current;
     const next = reconcileCart(previous, snapshots, new Set(unavailable));
-    if (cartOfferFingerprint(previous) !== cartOfferFingerprint(next) && !paymentProtectedRef.current && !restoredPendingPayment.current) clearPendingPayment();
+    // A quote is an immutable payment snapshot. Catalogue updates must not
+    // discard its recovery handle or invalidate unrelated checkout groups.
+    if (!quoteRef.current && cartOfferFingerprint(previous) !== cartOfferFingerprint(next) && !paymentProtectedRef.current && !restoredPendingPayment.current) clearPendingPayment();
     cartRef.current = next;
     setCart(next);
   }
@@ -1369,12 +1404,12 @@ function AcrossApp() {
   async function finishPaymentWhenSettled(q: Quote, silent: boolean, redirectURL = "") {
     const verified = await verifyPaymentWithBackend(q.order_id, redirectURL);
     if (verified) {
-      await completeSuccessfulPayment();
+      await completeSuccessfulPayment(q);
       return;
     }
     const success = await pollPaymentStatus(q.order_id, 0, silent, paymentPollGeneration.current);
     if (!success) return;
-    await completeSuccessfulPayment();
+    await completeSuccessfulPayment(q);
   }
 
   async function verifyPaymentWithBackend(orderId: string, redirectURL = ""): Promise<boolean> {
@@ -1410,17 +1445,26 @@ function AcrossApp() {
     }
   }
 
-  async function completeSuccessfulPayment() {
+  async function completeSuccessfulPayment(paidQuote: Quote | null = quote) {
+    if (!paidQuote || !token || token !== sessionTokenRef.current) return;
+    const confirmationKey = `${token}:${paidQuote.order_id}`;
+    if (completedPayments.current.has(confirmationKey)) return;
+    completedPayments.current.add(confirmationKey);
     stopPaymentPolling();
     paymentConfirmationIssue.current = "";
     setPaymentState("settled");
     setPaymentMessage("Payment confirmed!");
-    cartRef.current = [];
-    setCart([]);
-    setQuote(null);
-    await SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
+    const purchased = paidQuote.cart_items || [];
+    cartRef.current = removePurchasedItems(cartRef.current, purchased);
+    setCart(items => removePurchasedItems(items, purchased));
+    if (quoteRef.current?.order_id === paidQuote.order_id) {
+      await SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY).catch(() => {});
+      if (token !== sessionTokenRef.current) return;
+      setQuote(null);
+      quoteRef.current = null;
+    }
     if (token) await Promise.all([loadNotifications(token), loadXPBalance(token), loadOrders(token)]);
-    Alert.alert("Payment Successful!", "Your order has been placed. Check Track tab for updates.");
+    Alert.alert("Payment Successful!", "Your order has been placed. Check Track for updates. Any other checkout groups are still saved in your cart.");
     setActiveTab("track");
   }
 
@@ -1858,17 +1902,24 @@ function AcrossApp() {
 
         {activeTab === "cart" && (
           <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
-            {cart.length === 0 ? (
+            {cart.length === 0 && !quote ? (
               <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
-              <>{cart.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}
+              <>
+              <Text style={[s.muted, {marginBottom:12}]}>All your items are saved here. Items from the same seller and delivery route are paid for together. Other groups have separate payments and tracking.</Text>
+              {cartGroups.map((group,index) => (<View key={group.key}>
+                <Pressable accessibilityRole="radio" accessibilityState={{selected:group.key===activeCartGroup,disabled:!!quote || busy || paymentBusy}} disabled={!!quote || busy || paymentBusy} onPress={()=>setSelectedCartGroup(group.key)} style={[s.panel,{borderWidth:1,borderColor:group.key===activeCartGroup?"#12805F":"#E5E7EB",marginBottom:8}]}>
+                  <Text style={s.panelTitle}>{group.key===activeCartGroup?"✓ ":""}{group.items[0].product.provider_name || `Checkout group ${index+1}`} · {group.items[0].product.fulfillment_mode==="merchant_local"?"Local delivery":"Imported delivery"}</Text>
+                  <Text style={s.muted}>{group.items.length} {group.items.length===1?"product":"products"} · {group.items[0].product.currency}. {group.key===activeCartGroup?"Total below is for this group.":quote?"Saved for after the current payment.":"Tap to review and pay for this group."}</Text>
+                </Pressable>
+                {group.items.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}</View>))}
               <View style={s.panel}>
-                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || cart[0]?.product.currency)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || cart[0]?.product.currency)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || cart[0]?.product.currency)}</Text></View>
-                {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: "#12805F"}]}>-{money(displayedXPDiscount, quote?.currency || cart[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
+                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
+                {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: "#12805F"}]}>-{money(displayedXPDiscount, quote?.currency || checkoutItems[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
                 {xpEnabled && !quote && <Pressable accessibilityRole="checkbox" accessibilityState={{checked: useXP, disabled: busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1}} disabled={busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1} onPress={() => setUseXP(value => !value)} style={{flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12}}><Ionicons name={useXP ? "checkbox" : "square-outline"} size={22} color="#12805F" /><View style={{flex: 1}}><Text style={{fontWeight: "800", color: "#191919"}}>Use XP - {xpBalance} available</Text><Text style={s.muted}>Up to {Math.min(xpBalance, Math.floor(totals.platformFee))} XP off the service fee. Seller prices and gateway charges stay payable.</Text></View></Pressable>}
-                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, cart[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, checkoutItems[0]?.product.currency)}</Text></View>
 				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
 				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: "#12805F", fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
@@ -1878,12 +1929,7 @@ function AcrossApp() {
                     <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Review total"}</Text>
                   </View>
                 </Pressable>
-                {quote?.xp_discount ? <Pressable style={[s.secondaryButton, {marginTop: 10}]} disabled={busy || paymentBusy} onPress={() => { void (async () => {
-                  if (!token) return; setBusy(true);
-                  try { const response = await fetchWithTimeout(`${API_URL}/api/v1/checkout/quotes/${quote.order_id}/release-xp`, {method: "POST", headers: {Authorization: `Bearer ${token}`}}); const body = await response.json(); if (!response.ok) throw new Error(body.message || "Could not change rewards"); clearPendingPayment(); setUseXP(false); await loadXPBalance(token); }
-                  catch(error) { Alert.alert("Rewards unchanged", error instanceof Error ? error.message : "Please retry"); }
-                  finally {setBusy(false);}
-                })(); }}><Text style={s.secondaryButtonText}>Change XP choice before payment</Text></Pressable> : null}
+                {quote && <Pressable style={[s.secondaryButton, {marginTop:10}]} disabled={busy || paymentBusy} onPress={()=>void changeCheckoutGroup()}><Text style={s.secondaryButtonText}>Change items or checkout group</Text></Pressable>}
                 {quote ? (
                   <Pressable style={[s.secondaryButton, { marginTop: 10 }, (busy || paymentBusy) && s.disabled]} onPress={checkPendingPayment} disabled={busy || paymentBusy}>
                     <Text style={s.secondaryButtonText}>Check payment status</Text>

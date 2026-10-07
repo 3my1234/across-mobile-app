@@ -52,6 +52,22 @@ export async function fetchWithTimeout(url: string, init?: RequestInit) {
   finally { clearTimeout(t); }
 }
 
+// Keep the deadline active until the response body is read, not just headers.
+export async function fetchJSONWithTimeout(url: string, init?: RequestInit, timeoutMs = 12000): Promise<{ response: Response; body: any }> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => { controller.abort(); reject(new Error("The server took too long to respond")); }, timeoutMs);
+  });
+  try {
+    return await Promise.race([deadline, (async () => {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      const body = await response.json();
+      return { response, body };
+    })()]);
+  } finally { clearTimeout(timer!); }
+}
+
 export async function uploadReviewImage(token: string, uri: string, mimeType: string, filename: string) {
   const pr = await fetch(`${API_URL}/api/v1/uploads/presign`, {
     method: "POST",
@@ -79,7 +95,7 @@ export function mapProduct(raw: any): import("./types").Product {
     origin_hub: raw.origin_hub ?? { id: "", name: "", city: "" },
     is_flash_sale: raw.is_flash_sale, flash_sale_price: raw.flash_sale_price,
     review_count: Number(raw.review_count || 0), sold_count: Number(raw.sold_count || 0), average_rating: Number(raw.average_rating || 0),
-    provider_id: raw.provider_id || "", fulfillment_mode: raw.fulfillment_mode,
+    provider_id: raw.provider_id || "", provider_name: raw.provider_name || raw.factory_details?.provider_name || "", fulfillment_mode: raw.fulfillment_mode,
     inventory_country_code: raw.inventory_country_code || raw.factory_details?.inventory_country_code || "",
     inventory_city: raw.inventory_city || raw.factory_details?.inventory_city || "",
     inventory_location: raw.inventory_location || raw.factory_details?.inventory_location || "",

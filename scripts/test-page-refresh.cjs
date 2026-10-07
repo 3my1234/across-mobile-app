@@ -45,13 +45,15 @@ async function main() {
 
   // Exercise the actual payment functions: backend recording errors must not
   // become an endless "waiting for Flutterwave" message or clear paid goods.
-  let paymentMessage="", cart=[{sku:"WATCH"}], pendingDeleted=0, networkCalls=0;
+  let paymentMessage="", cart=[{product:{id:"watch",sku:"WATCH"},quantity:1}], pendingDeleted=0, networkCalls=0;
+  const paidQuote={order_id:"order",cart_items:[{product_id:"watch",quantity:1}]};
   let verification={status:409,ok:false,data:{message:"constraint failure"}};
   const paymentState={token:"buyer",sessionTokenRef:{current:"buyer"},paymentPollGeneration:{current:0},paymentConfirmationIssue:{current:""},
     API_URL:"https://example.test",URL,readResponseBody:async response=>response.data,
     fetchWithTimeout:async (_url,options)=>{networkCalls++;assert.equal(options.cache,"no-store");return verification;},
     logout:async()=>{},setPaymentState:()=>{},setPaymentMessage:value=>{paymentMessage=value;},
-    cartRef:{current:cart},setCart:value=>{cart=value;},setQuote:()=>{},PENDING_PAYMENT_KEY:"pending",
+    quote:paidQuote,quoteRef:{current:paidQuote},completedPayments:{current:new Set()},removePurchasedItems:(items,purchased)=>items.filter(item=>!purchased.some(p=>p.product_id===item.product.id)),
+    cartRef:{current:cart},setCart:value=>{cart=typeof value==='function'?value(cart):value;},setQuote:()=>{},PENDING_PAYMENT_KEY:"pending",
     SecureStore:{deleteItemAsync:async()=>{pendingDeleted++;}},loadNotifications:async()=>{},loadXPBalance:async()=>{},loadOrders:async()=>{},
     Alert:{alert:()=>{}},setActiveTab:()=>{},sleep:async()=>{}};
   const paymentStart=source.indexOf("  async function verifyPaymentWithBackend(");
