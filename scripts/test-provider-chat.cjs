@@ -10,6 +10,7 @@ async function main(){
  const listing={id:'service',title:'Repairs',provider_name:'Provider'};
  const g={selected:listing,selectedRef:{current:listing},loading:false,token:'buyer',chatActor:{current:'buyer'},authHeaders:{Authorization:'Bearer buyer'},API_URL:'https://example.test',URLSearchParams,encodeURIComponent,Date,Map,Array,
   conversationRef:{current:null},chatBusy:{current:false},chatOpening:{current:false},setOpeningChat:()=>{},threadInFlight:{current:false},threadRequest:{current:0},
+  fetchHistoryJSON:async(url,options)=>{const response=await g.fetchWithTimeout(url,options);return {response,body:await response.json()};},
   fetchJSONWithTimeout:async(url,options)=>{const response=await g.fetchWithTimeout(url,options);return {response,body:await response.json()};},
   fetchWithTimeout:(url,options)=>new Promise(resolve=>pending.push({url,options,resolve})),apiMessage:(_,fallback)=>fallback,
   setLoading:()=>{},setChatSending:()=>{},setChatLoading:()=>{},setChatError:()=>{},setConversationCursor:()=>{},setConversations:()=>{},
