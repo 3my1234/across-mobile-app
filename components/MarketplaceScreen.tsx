@@ -1,7 +1,10 @@
+import { ProviderConversation } from "./ProviderConversation";
+import { servicePriceLabel } from "./servicePricing";
 import { ReviewStars } from "./ReviewStars";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   FlatList,
   KeyboardAvoidingView,
@@ -39,6 +42,8 @@ type Listing = {
   pricing_unit: string;
   provider_name: string;
   media_urls: string[];
+  contact_available?: boolean;
+  attributes?: { price_mode?: string; price_notes?: string };
   direct_booking: boolean;
   safety_warning?: string;
   distance_km?: number;
@@ -99,9 +104,6 @@ const LISTING_TYPES = [
   { key: "land", label: "Land" }
 ];
 
-const money = (value: number | null, currency = "NGN") => value == null
-  ? "Enquire for price"
-  : new Intl.NumberFormat("en-NG", { style: "currency", currency, maximumFractionDigits: 0 }).format(value);
 
 function apiMessage(body: any, fallback: string) {
   return String(body?.message || body?.error || fallback);
@@ -121,7 +123,18 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
-  const [conversationDraft, setConversationDraft] = useState("");
+  const [conversationCursor, setConversationCursor] = useState("");
+  const [chatSending, setChatSending] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const chatBusy = useRef(false);
+  const threadRequest = useRef(0);
+  const threadInFlight = useRef(false);
+  const chatActor = useRef(token); chatActor.current = token;
+  const threadLoader = useRef(loadConversationMessages); threadLoader.current = loadConversationMessages;
+  const requestsGeneration = useRef(0);
+  const conversationsGeneration = useRef(0);
+  const conversationRef = useRef(selectedConversation); conversationRef.current = selectedConversation;
   const [selected, setSelected] = useState<Listing | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [type, setType] = useState("");
@@ -298,6 +311,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }, []);
 
   const loadRequests = useCallback(async (refresh = false, cursor = "") => {
+    const generation = ++requestsGeneration.current, actor = token;
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
@@ -306,33 +320,42 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/requests?${query.toString()}`, { headers: authHeaders });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiMessage(body, "Your requests could not be loaded"));
+      if (generation !== requestsGeneration.current || actor !== chatActor.current) return;
       const incoming: BuyerRequest[] = Array.isArray(body.items) ? body.items : [];
       setRequests(current => cursor ? [...current, ...incoming.filter(item => !current.some(existing => existing.id === item.id))] : incoming);
       setRequestCursor(String(body.next_cursor || ""));
     } catch (loadError) {
+      if (generation !== requestsGeneration.current || actor !== chatActor.current) return;
       setError(loadError instanceof Error ? loadError.message : "Your requests could not be loaded");
     } finally {
+      if (generation === requestsGeneration.current && actor === chatActor.current) {
       setLoading(false);
       setLoadingMore(false);
       setRefreshing(false);
+      }
     }
-  }, [authHeaders]);
+  }, [authHeaders, token]);
 
   const loadConversations = useCallback(async (refresh = false) => {
+    const generation = ++conversationsGeneration.current, actor = token;
     if (refresh) setRefreshing(true); else setLoading(true);
     setError("");
     try {
       const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations`, { headers: authHeaders });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(apiMessage(body, "Your messages could not be loaded"));
+      if (generation !== conversationsGeneration.current || actor !== chatActor.current) return;
       setConversations(Array.isArray(body.items) ? body.items : []);
     } catch (loadError) {
+      if (generation !== conversationsGeneration.current || actor !== chatActor.current) return;
       setError(loadError instanceof Error ? loadError.message : "Your messages could not be loaded");
     } finally {
+      if (generation === conversationsGeneration.current && actor === chatActor.current) {
       setLoading(false);
       setRefreshing(false);
+      }
     }
-  }, [authHeaders]);
+  }, [authHeaders, token]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -364,66 +387,86 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }
 
   async function startConversation() {
-    if (!selected || !requestMessage.trim()) {
-      Alert.alert("Write a message", "Tell the provider what you need before starting a conversation.");
-      return;
-    }
+    if (!selected || loading) return;
+    const listing = selected, actor = token;
     setLoading(true);
     try {
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${selected.id}/conversations`, {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: requestMessage.trim() })
+      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations?listing_id=${encodeURIComponent(listing.id)}`, {headers:authHeaders});
+      const body = await response.json().catch(()=>({}));
+      if (!response.ok) throw new Error(apiMessage(body, "Could not open provider chat"));
+      if (chatActor.current !== actor || selectedRef.current?.id !== listing.id) return;
+      const existing = (body.items || []).find((item: Conversation)=>item.listing_id === listing.id);
+      const conversation: Conversation = existing || {id:"",listing_id:listing.id,listing_title:listing.title,counterpart_name:listing.provider_name,status:"open",last_message:"",last_message_at:"",unread_count:0,subscription_active:listing.contact_available !== false};
+      await openConversation(conversation);
+    } catch (messageError) { Alert.alert("Unable to open messages", messageError instanceof Error ? messageError.message : "Please try again."); }
+    finally { if(chatActor.current===actor)setLoading(false); }
+  }
+
+  async function loadConversationMessages(conversation: Conversation, cursor = "", quiet = false) {
+    if(!conversation.id)return;
+    const request = ++threadRequest.current, actor=token;
+    threadInFlight.current=true;
+    if(!quiet)setChatLoading(true);
+    try {
+      const query=new URLSearchParams({limit:"50"});if(cursor)query.set("cursor",cursor);
+      const response=await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
+      const body=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(apiMessage(body,"Messages could not be loaded"));
+      if(request!==threadRequest.current || actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return;
+      const incoming: ConversationMessage[]=Array.isArray(body.items)?body.items:[];
+      setConversationMessages(current=>{
+        const merged=cursor?[...incoming,...current]:[...current,...incoming];
+        return Array.from(new Map(merged.map(message=>[message.id,message])).values()).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at)||(a.id<b.id ? -1 : a.id>b.id ? 1 : 0));
       });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(apiMessage(body, "Message could not be sent"));
-      setRequestMessage("");
-      setSelected(null);
-      setMode("messages");
-      await loadConversations();
-    } catch (messageError) {
-      Alert.alert("Unable to message provider", messageError instanceof Error ? messageError.message : "Please try again.");
-    } finally {
-      setLoading(false);
-    }
+      if(!quiet || cursor)setConversationCursor(body.next_cursor || "");
+      setChatError("");
+    } catch(messageError){if(request===threadRequest.current&&actor===chatActor.current)setChatError(messageError instanceof Error?messageError.message:"Messages could not be loaded");}
+    finally{if(request===threadRequest.current){threadInFlight.current=false;setChatLoading(false);}}
   }
 
   async function openConversation(conversation: Conversation) {
-    setLoading(true);
-    try {
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages`, { headers: authHeaders });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(apiMessage(body, "Conversation could not be loaded"));
-      setConversationMessages(Array.isArray(body.items) ? body.items : []);
-      setSelectedConversation({ ...conversation, unread_count: 0 });
-      setConversations(current => current.map(item => item.id === conversation.id ? { ...item, unread_count: 0 } : item));
-    } catch (messageError) {
-      Alert.alert("Unable to open messages", messageError instanceof Error ? messageError.message : "Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    threadRequest.current++;
+    setConversationMessages([]);setConversationCursor("");setChatError("");
+    conversationRef.current=conversation;
+    setSelectedConversation({...conversation,unread_count:0});
+    setConversations(current=>current.map(item=>item.id===conversation.id?{...item,unread_count:0}:item));
+    if(conversation.id)await loadConversationMessages(conversation);
   }
 
-  async function sendConversationMessage() {
-    if (!selectedConversation || !conversationDraft.trim()) return;
-    setLoading(true);
+  async function sendConversationMessage(text: string) {
+    const conversation=conversationRef.current, actor=token;
+    if(!conversation || !text.trim() || chatBusy.current)return;
+    chatBusy.current=true;setChatSending(true);setChatError("");
     try {
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${selectedConversation.id}/messages`, {
-        method: "POST",
-        headers: { ...authHeaders, "Content-Type": "application/json" },
-        body: JSON.stringify({ message: conversationDraft.trim() })
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(apiMessage(body, "Message could not be sent"));
-      setConversationDraft("");
-      await openConversation(selectedConversation);
-      void loadConversations();
-    } catch (messageError) {
-      Alert.alert("Unable to send message", messageError instanceof Error ? messageError.message : "Please try again.");
-    } finally {
-      setLoading(false);
-    }
+      const endpoint=conversation.id?`/marketplace/conversations/${conversation.id}/messages`:`/marketplace/listings/${conversation.listing_id}/conversations`;
+      const response=await fetchWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim()})});
+      const body=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(apiMessage(body,"Message could not be sent"));
+      if(actor!==chatActor.current)return;
+      if(conversationRef.current?.listing_id !== conversation.listing_id){void loadConversations(true);return;}
+      const active={...conversation,id:conversation.id || body.id};
+      conversationRef.current=active;setSelectedConversation(active);
+      await loadConversationMessages(active);
+      void loadConversations(true);
+    } catch(messageError){if(actor===chatActor.current)setChatError(messageError instanceof Error?messageError.message:"Message could not be sent");throw messageError;}
+    finally{if(actor===chatActor.current){chatBusy.current=false;setChatSending(false);}}
   }
+
+  useEffect(()=>{
+    threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);setChatError("");setChatSending(false);setChatLoading(false);
+  },[token]);
+  useEffect(()=>{
+    let stopped=false, busy=false;
+    const refresh=async()=>{
+      if(stopped||busy||!token||AppState.currentState!=="active"||chatBusy.current||threadInFlight.current)return;
+      busy=true;
+      try{if(conversationRef.current?.id)await threadLoader.current(conversationRef.current,"",true);else if(mode==="messages")await loadConversations(true);else if(mode==="requests")await loadRequests(true);}
+      finally{busy=false;}
+    };
+    const timer=setInterval(()=>void refresh(),5000);
+    const foreground=AppState.addEventListener("change",state=>{if(state==="active")void refresh();});
+    return()=>{stopped=true;clearInterval(timer);foreground.remove();};
+  },[token,mode,selectedConversation?.id,authHeaders,loadConversations,loadRequests]);
 
   async function openListing(item: Listing) {
     setSelected(item);
@@ -531,31 +574,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
   if (selectedConversation) {
-    return (
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.fill}>
-        <View style={styles.detailHeader}>
-          <Pressable onPress={() => { setSelectedConversation(null); void loadConversations(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Back to messages">
-            <Ionicons name="arrow-back" size={25} />
-          </Pressable>
-          <View style={styles.grow}><Text style={styles.detailHeaderTitle} numberOfLines={1}>{selectedConversation.listing_title}</Text><Text style={styles.meta}>{selectedConversation.counterpart_name}</Text></View>
-        </View>
-        <ScrollView style={styles.grow} contentContainerStyle={styles.messageThread}>
-          {conversationMessages.map(message => (
-            <View key={message.id} style={[styles.messageBubble, message.sender_type === "buyer" ? styles.messageMine : styles.messageTheirs]}>
-              <Text style={message.sender_type === "buyer" ? styles.messageMineText : styles.body}>{message.body}</Text>
-              <Text style={[styles.messageTime, message.sender_type === "buyer" && styles.messageMineTime]}>{new Date(message.created_at).toLocaleString()}</Text>
-            </View>
-          ))}
-        </ScrollView>
-        <View style={[styles.messageComposer, { paddingBottom: bottomInset + 8 }]}>
-          {!selectedConversation.subscription_active && <Text style={styles.subscriptionPaused}>The provider subscription is inactive, so messaging is temporarily paused.</Text>}
-          <TextInput value={conversationDraft} onChangeText={setConversationDraft} editable={selectedConversation.subscription_active && !loading} placeholder="Write a message" multiline maxLength={2000} style={[styles.input, styles.messageInput]} />
-          <Pressable disabled={!selectedConversation.subscription_active || loading || !conversationDraft.trim()} style={[styles.primary, (!selectedConversation.subscription_active || loading || !conversationDraft.trim()) && styles.disabled]} onPress={() => void sendConversationMessage()}>
-            <Text style={styles.primaryText}>{loading ? "Sending…" : "Send message"}</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    );
+    return <ProviderConversation key={`${token}:${selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active} error={chatError} hasEarlier={!!conversationCursor} bottomInset={bottomInset}
+      onClose={()=>{threadRequest.current++;threadInFlight.current=false;conversationRef.current=null;setSelectedConversation(null);void loadConversations(true);}}
+      onSend={sendConversationMessage} onEarlier={()=>{if(conversationCursor&&!threadInFlight.current)void loadConversationMessages(selectedConversation,conversationCursor);}} onRefresh={()=>void loadConversationMessages(selectedConversation)}/>;
   }
 
   if (selected) {
@@ -576,13 +597,15 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           </View>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
             {(selected.media_urls?.length ? selected.media_urls : [""]).map((uri, index) => (
-              <ResilientImage key={`${uri}-${index}`} uri={uri} style={[styles.hero, { width: viewportWidth }]} resizeMode="cover" />
+              <ResilientImage key={`${uri}-${index}`} uri={uri} style={[styles.hero, { width: viewportWidth }]} resizeMode="contain" />
             ))}
           </ScrollView>
+          {(selected.media_urls?.length || 0) > 1 && <Text style={styles.meta}>Swipe to view all {selected.media_urls.length} photos</Text>}
           <View style={styles.section}>
             <Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
             <Text style={styles.title}>{selected.title}</Text>
-            <Text style={styles.price}>{money(selected.price, selected.currency_code)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
+            <Text style={styles.price}>{servicePriceLabel(selected)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
+            {!!selected.attributes?.price_notes && <Text style={styles.meta}>{selected.attributes.price_notes}</Text>}
             <Text style={styles.meta}>{selected.provider_name} · {selected.city}, {selected.state}</Text>
             <View style={styles.ratingRow}><ReviewStars rating={selected.average_rating || 0} size={14} /><Text style={styles.rating}>{selected.review_count ? `${selected.average_rating?.toFixed(1)} · ${selected.review_count} customer reviews` : "No customer reviews yet"}</Text></View>
           </View>
@@ -624,7 +647,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             <Pressable disabled={loading} style={[styles.primary, loading && styles.disabled]} onPress={submitRequest}>
               <Text style={styles.primaryText}>{loading ? "Sending…" : selected.direct_booking ? "Request booking" : "Send enquiry"}</Text>
             </Pressable>
-            <Pressable disabled={loading || !requestMessage.trim()} style={[styles.secondary, (loading || !requestMessage.trim()) && styles.disabled]} onPress={() => void startConversation()}>
+            <Pressable disabled={loading} style={[styles.secondary, loading && styles.disabled]} onPress={() => void startConversation()}>
               <Text style={styles.secondaryText}>Message provider</Text>
             </Pressable>
             <Pressable disabled={requiresSafetyAcknowledgement && !safetyAcknowledged} style={[styles.secondary, requiresSafetyAcknowledgement && !safetyAcknowledged && styles.disabled]} onPress={revealContact}>
@@ -675,10 +698,13 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               columnWrapperStyle={styles.columns}
               renderItem={({ item }) => (
                 <Pressable style={styles.card} onPress={() => void openListing(item)}>
-                  <ResilientImage uri={item.media_urls?.[0]} uris={item.media_urls} style={styles.cardImage} resizeMode="cover" />
+                  <View style={styles.cardGallery}>
+                    {(item.media_urls?.length ? item.media_urls.slice(0,4) : [""]).map((uri,index)=><ResilientImage key={`${uri}:${index}`} uri={uri} style={item.media_urls?.length>1 ? [styles.cardGalleryTile,item.media_urls.length===2 && {height:160},item.media_urls.length===3 && index===2 && {width:"100%"}] : styles.cardGallerySingle} resizeMode="cover"/>)}
+                    {item.media_urls?.length>4 && <Text style={styles.morePhotos}>+{item.media_urls.length-4} photos</Text>}
+                  </View>
                   <View style={styles.cardBody}>
                     <Text numberOfLines={2} style={styles.cardTitle}>{item.title}</Text>
-                    <Text style={styles.cardPrice}>{money(item.price, item.currency_code)}</Text>
+                    <Text style={styles.cardPrice}>{servicePriceLabel(item)}</Text>
                     <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
                     {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
                     <View style={styles.ratingRow}><ReviewStars rating={item.average_rating || 0} size={10} /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
@@ -782,6 +808,10 @@ const styles = StyleSheet.create({
   listHeading: { flexShrink: 0, paddingHorizontal: 12, paddingVertical: 4, flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   columns: { gap: 8 },
   card: { flex: 1, backgroundColor: "#FFF", borderRadius: 16, overflow: "hidden", marginBottom: 8, maxWidth: "49%", borderWidth: 1, borderColor: "#ECECEC" },
+  cardGallery: {height:160,flexDirection:"row",flexWrap:"wrap",overflow:"hidden",backgroundColor:"#EEE"},
+  cardGalleryTile: {width:"50%",height:80},
+  cardGallerySingle: {width:"100%",height:160},
+  morePhotos: {position:"absolute",right:4,bottom:4,backgroundColor:"#102C25",color:"#FFF",padding:4,borderRadius:4,fontSize:10},
   cardImage: { width: "100%", aspectRatio: 1.35, backgroundColor: "#EEE" },
   cardBody: { padding: 8 },
   cardTitle: { fontSize: 13, lineHeight: 17, fontWeight: "800", color: "#191919" },

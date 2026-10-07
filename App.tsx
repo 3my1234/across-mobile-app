@@ -118,6 +118,7 @@ function AcrossApp() {
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
   const [token, setToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productFeed, setProductFeed] = useState<{key: string; status: "loading" | "ready" | "error"}>({key: "", status: "loading"});
   const [stockView, setStockView] = useState<"all" | "local" | "international">("all");
   const [internationalProducts, setInternationalProducts] = useState<Product[]>([]);
   const [internationalLoading, setInternationalLoading] = useState(false);
@@ -760,6 +761,7 @@ function AcrossApp() {
     ]);
     setToken(null);
     setProducts([]);
+    setProductFeed({key: "", status: "loading"});
     setCart([]);
     setQuote(null);
     setPaymentState("idle");
@@ -878,6 +880,7 @@ function AcrossApp() {
       return;
     }
     productLoadContext.current = { key, fresh: force };
+    setProductFeed(current => current.key === key && current.status === "ready" ? current : {key, status: "loading"});
     const task = (async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const controller = new AbortController();
@@ -897,6 +900,7 @@ function AcrossApp() {
           const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
           if (catalogRequestKeyRef.current && catalogRequestKeyRef.current !== key) return;
           setProducts(catalog.map(item => latestProductSnapshot(productSnapshots.current.get(item.id), item)));
+          setProductFeed({key, status: "ready"});
           await hydrateCart(catalog);
           applyProductSnapshots(catalog);
           // A bounded feed may omit a cart/detail item. Revalidate those by ID
@@ -921,6 +925,7 @@ function AcrossApp() {
           clearTimeout(timeout);
         }
       }
+      if (catalogRequestKeyRef.current === key) setProductFeed(current => current.key === key && current.status === "ready" ? current : {key, status: "error"});
     })();
     productLoadInFlight.current = task;
     try {
@@ -1845,8 +1850,8 @@ function AcrossApp() {
                 <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
 			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
-            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{internationalLoading && stockView === "international" ? "Loading products..." : "No products available for this delivery area"}</Text></View>}
-            renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />} />
+            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalLoading ? "Loading products..." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{stockView !== "international" && productFeed.status === "error" && <Pressable onPress={() => void loadProducts(true)}><Text style={{color: "#FF4747", padding: 12}}>Try again</Text></Pressable>}</View>}
+            renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
         {activeTab === "services" && <MarketplaceScreen token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} />}
@@ -2136,7 +2141,7 @@ function AcrossApp() {
         </View>
       </Modal>
 
-      {selectedProduct && <ProductDetailScreen product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
+      {selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
     </View>
   );
 }
