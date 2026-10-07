@@ -24,7 +24,7 @@ import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
 import { ResilientImage } from "./ResilientImage";
 import { ServiceReviews } from "./ServiceReviews";
-import { fetchWithTimeout, fetchJSONWithTimeout } from "./utils";
+import { fetchWithTimeout, fetchJSONWithTimeout, fetchHistoryJSON } from "./utils";
 import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 import { filterNearbySnapshot, readCachedContact, readNearbySnapshot, writeCachedContact, writeNearbySnapshot } from "./nearbyCache";
 
@@ -121,6 +121,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const [items, setItems] = useState<Listing[]>([]);
   const [requests, setRequests] = useState<BuyerRequest[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsRef = useRef(conversations); conversationsRef.current = conversations;
+  const [conversationListCursor, setConversationListCursor] = useState("");
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
   const [conversationCursor, setConversationCursor] = useState("");
@@ -136,6 +138,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const threadLoader = useRef(loadConversationMessages); threadLoader.current = loadConversationMessages;
   const requestsGeneration = useRef(0);
   const conversationsGeneration = useRef(0);
+  const conversationsRead = useRef<{actor: string | null; generation: number} | null>(null);
   const conversationRef = useRef(selectedConversation); conversationRef.current = selectedConversation;
   const [selected, setSelected] = useState<Listing | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
@@ -338,20 +341,27 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     }
   }, [authHeaders, token]);
 
-  const loadConversations = useCallback(async (refresh = false) => {
+  const loadConversations = useCallback(async (refresh = false, cursor = "") => {
+    if (conversationsRead.current?.actor === token && conversationsRead.current.generation === conversationsGeneration.current) return;
     const generation = ++conversationsGeneration.current, actor = token;
+    conversationsRead.current = {actor, generation};
     if (refresh) setRefreshing(true); else setLoading(true);
     setError("");
     try {
-      const response = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/conversations`, { headers: authHeaders });
-      const body = await response.json().catch(() => ({}));
+      const {response,body} = await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { headers: authHeaders });
       if (!response.ok) throw new Error(apiMessage(body, "Your messages could not be loaded"));
       if (generation !== conversationsGeneration.current || actor !== chatActor.current) return;
-      setConversations(Array.isArray(body.items) ? body.items : []);
+      const hadHistory = conversationsRef.current.length > 0;
+      setConversations(current => {
+        const merged = new Map<string, Conversation>(); [...current, ...(Array.isArray(body.items) ? body.items : [])].forEach(item => merged.set(item.id, item));
+        return [...merged.values()].sort((a,b) => b.last_message_at.localeCompare(a.last_message_at) || b.id.localeCompare(a.id));
+      });
+      if (cursor || !hadHistory) setConversationListCursor(body.next_cursor || "");
     } catch (loadError) {
       if (generation !== conversationsGeneration.current || actor !== chatActor.current) return;
       setError(loadError instanceof Error ? loadError.message : "Your messages could not be loaded");
     } finally {
+      if (conversationsRead.current?.generation === generation) conversationsRead.current = null;
       if (generation === conversationsGeneration.current && actor === chatActor.current) {
       setLoading(false);
       setRefreshing(false);
@@ -394,7 +404,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     const listing = selected, actor = token;
     setOpeningChat(true);
     try {
-      const { response, body } = await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations?listing_id=${encodeURIComponent(listing.id)}`, {headers:authHeaders});
+      const { response, body } = await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?listing_id=${encodeURIComponent(listing.id)}`, {headers:authHeaders});
       if (!response.ok) throw new Error(apiMessage(body, "Could not open provider chat"));
       if (chatActor.current !== actor || selectedRef.current?.id !== listing.id) return;
       const existing = (body.items || []).find((item: Conversation)=>item.listing_id === listing.id);
@@ -411,7 +421,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     if(!quiet)setChatLoading(true);
     try {
       const query=new URLSearchParams({limit:"50"});if(cursor)query.set("cursor",cursor);
-      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
+      const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
       if(!response.ok)throw new Error(apiMessage(body,"Messages could not be loaded"));
       if(request!==threadRequest.current || actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return;
       const incoming: ConversationMessage[]=Array.isArray(body.items)?body.items:[];
@@ -454,7 +464,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
 
   useEffect(()=>{
     chatOpening.current=false;setOpeningChat(false);
-    threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);setChatError("");setChatSending(false);setChatLoading(false);
+    threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);conversationsRef.current=[];setConversationListCursor("");setChatError("");setChatSending(false);setChatLoading(false);
   },[token]);
   useEffect(()=>{
     let stopped=false, busy=false;
@@ -750,6 +760,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
         <FlatList
           data={conversations}
           keyExtractor={item => item.id}
+          ListHeaderComponent={error && conversations.length ? <Text accessibilityRole="alert" style={styles.fieldHelp}>{error}</Text> : null}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadConversations(true)} tintColor="#FF4747" />}
           contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 24 }}
           renderItem={({ item }) => (
@@ -763,7 +774,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               {!item.subscription_active && <Text style={styles.subscriptionPaused}>Provider subscription inactive — messaging paused</Text>}
             </Pressable>
           )}
-          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title="No provider chats yet" message={error || "This area is for conversations with service providers. For Atlantic Express help, open Support from the main menu."} />}
+          ListFooterComponent={<View>{!!error && <Pressable disabled={loading || refreshing} onPress={() => void loadConversations(true)} style={styles.secondary}><Text style={styles.secondaryText}>Try again</Text></Pressable>}{!!conversationListCursor && <Pressable disabled={loading || refreshing} onPress={() => void loadConversations(true, conversationListCursor)} style={styles.secondary}><Text style={styles.secondaryText}>Load earlier conversations</Text></Pressable>}</View>}
+          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title={error ? "Conversations could not be loaded" : "No provider chats yet"} message={error || "Your bookings, enquiries and messages appear here. Open a service and tap Message provider to start chatting. For Atlantic Express help, open Support."} />}
         />
       )}
     </View>

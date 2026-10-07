@@ -68,6 +68,22 @@ export async function fetchJSONWithTimeout(url: string, init?: RequestInit, time
   } finally { clearTimeout(timer!); }
 }
 
+// Only history reads are retried. Never replay a message or booking mutation.
+export async function fetchHistoryJSON(url: string, init?: RequestInit): Promise<{ response: Response; body: any }> {
+  if (init?.method && init.method !== "GET") throw new Error("History requests must use GET");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await fetchJSONWithTimeout(url, { ...init, cache: "no-store" }, 10000);
+      if (attempt === 0 && [502, 503, 504].includes(result.response.status)) { await sleep(300); continue; }
+      return result;
+    } catch {
+      if (attempt === 0) { await sleep(300); continue; }
+      throw new Error("Unable to connect. Your conversations have not been removed. Pull down to try again.");
+    }
+  }
+  throw new Error("Conversation history unavailable");
+}
+
 export async function uploadReviewImage(token: string, uri: string, mimeType: string, filename: string) {
   const pr = await fetch(`${API_URL}/api/v1/uploads/presign`, {
     method: "POST",

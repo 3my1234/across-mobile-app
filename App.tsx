@@ -20,7 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
 import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, INTERNATIONAL_TRACKING_STAGES, LOCAL_TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
-import { money, fetchWithTimeout, fetchJSONWithTimeout, sleep, mapProduct } from "./components/utils";
+import { money, fetchWithTimeout, fetchJSONWithTimeout, fetchHistoryJSON, sleep, mapProduct } from "./components/utils";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
 import { ResilientImage } from "./components/ResilientImage";
@@ -171,6 +171,7 @@ function AcrossApp() {
   const [supportLoading, setSupportLoading] = useState(false);
   const supportTicketRequest = useRef(0);
   const supportMessageRequest = useRef(0);
+  const supportReads = useRef(new Map<string, number>());
   const xpRequest = useRef(0);
   const ordersRequest = useRef(0);
   const profileRequest = useRef(0);
@@ -1584,11 +1585,14 @@ function AcrossApp() {
 
   async function loadSupportTickets(cursor = "") {
     if (!token) return;
+    const key = `${token}:tickets:${cursor}`;
+    if (supportReads.current.get(key) === supportTicketRequest.current) return;
     const seq = ++supportTicketRequest.current;
+    supportReads.current.set(key, seq);
     if (!supportTicketsRef.current.length || cursor) setSupportLoading(true);
     try {
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/support/tickets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); if (!r.ok) throw new Error(d.message || "Support history unavailable");
+      const {response:r,body:d} = await fetchHistoryJSON(`${API_URL}/api/v1/support/tickets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(d.message || "Support history unavailable");
       if (seq !== supportTicketRequest.current || token !== sessionTokenRef.current) return;
       const hadHistory = supportTicketsRef.current.length > 0;
       setSupportTickets(current => {
@@ -1599,7 +1603,7 @@ function AcrossApp() {
       setSupportError("");
       setSelectedTicket(current => current ? (d.tickets || []).find((ticket: SupportTicket) => ticket.id === current.id) || current : null);
     } catch (error) { if (seq === supportTicketRequest.current && token === sessionTokenRef.current) setSupportError(error instanceof Error ? error.message : "Support history unavailable. Pull to retry."); }
-    finally { if (seq === supportTicketRequest.current) setSupportLoading(false); }
+    finally { if (supportReads.current.get(key) === seq) supportReads.current.delete(key); if (seq === supportTicketRequest.current) setSupportLoading(false); }
   }
 
   async function createSupportTicket() {
@@ -1621,11 +1625,14 @@ function AcrossApp() {
 
   async function loadTicketMessages(ticketId: string, cursor = "") {
     if (!token) return;
+    const key = `${token}:messages:${ticketId}:${cursor}`;
+    if (supportReads.current.get(key) === supportMessageRequest.current) return;
     const seq = ++supportMessageRequest.current;
+    supportReads.current.set(key, seq);
     setMessageLoading(true);
     try {
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/support/tickets/${ticketId}/messages?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
-      const d = await r.json(); if (!r.ok) throw new Error(d.message || "Conversation unavailable");
+      const {response:r,body:d} = await fetchHistoryJSON(`${API_URL}/api/v1/support/tickets/${ticketId}/messages?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
+      if (!r.ok) throw new Error(d.message || "Conversation unavailable");
       if (seq !== supportMessageRequest.current || token !== sessionTokenRef.current) return;
       if (d.ticket_status) setSelectedTicket(current => current?.id === ticketId ? {...current,status:d.ticket_status} : current);
       setTicketMessages(current => {
@@ -1637,7 +1644,7 @@ function AcrossApp() {
       else if (!ticketMessagesRef.current.length) setSupportCursor(d.next_cursor || "");
       setSupportError("");
     } catch (error) { if (seq === supportMessageRequest.current && token === sessionTokenRef.current) setSupportError(error instanceof Error ? error.message : "Conversation unavailable. Pull to retry."); }
-    finally { if (seq === supportMessageRequest.current) setMessageLoading(false); }
+    finally { if (supportReads.current.get(key) === seq) supportReads.current.delete(key); if (seq === supportMessageRequest.current) setMessageLoading(false); }
   }
 
   async function replyToSupportTicket(text: string) {

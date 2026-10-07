@@ -26,14 +26,17 @@ async function main() {
   cleanup(); assert.equal(tick,null); assert.equal(foreground,null);
 
   const pending=[]; let tickets=[], error="", loading=false;
-  const state = {token:"buyer", sessionTokenRef:{current:"buyer"}, supportTicketRequest:{current:0}, supportTickets:[], supportTicketsRef:{current:[]}, setTicketListCursor:()=>{},
-    fetchWithTimeout: () => new Promise(resolve => pending.push(resolve)),
+  const state = {token:"buyer", sessionTokenRef:{current:"buyer"}, supportTicketRequest:{current:0}, supportReads:{current:new Map()}, supportTickets:[], supportTicketsRef:{current:[]}, setTicketListCursor:()=>{},
+    fetchHistoryJSON: async () => {const response=await new Promise(resolve => pending.push(resolve));return {response,body:await response.json()};},
     setSupportTickets: value => {tickets=typeof value === "function" ? value(tickets) : value;},setSelectedTicket: update => update(null),
     setSupportLoading: value => {loading=value;}, setSupportError:value=>{error=value;}, API_URL:"https://example.test"};
   const loaderStart=source.indexOf("  async function loadSupportTickets(");
   const loaderEnd=source.indexOf("\n  async function createSupportTicket",loaderStart);
   const loader=run(source.slice(loaderStart,loaderEnd),state);
-  const old=loader.loadSupportTickets();const recent=loader.loadSupportTickets();
+  const old=loader.loadSupportTickets();const overlapping=loader.loadSupportTickets();await overlapping;
+  assert.equal(pending.length,1,"overlapping refreshes must share the active history request");
+  state.supportTicketRequest.current++; // Leaving/reopening Support supersedes the old load.
+  const recent=loader.loadSupportTickets();
   pending[1]({ok:true,json:async()=>({tickets:[{id:"latest",created_at:"2026-10-05"}]})});await recent;
   pending[0]({ok:true,json:async()=>({tickets:[]})});await old;
   assert.equal(tickets[0].id,"latest","late empty history must not erase loaded interactions");assert.equal(loading,false);
