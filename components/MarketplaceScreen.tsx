@@ -1,3 +1,4 @@
+import {mergeChatMessages} from "./chatImages";
 import { ProviderConversation } from "./ProviderConversation";
 import { servicePriceLabel } from "./servicePricing";
 import { ReviewStars } from "./ReviewStars";
@@ -72,6 +73,7 @@ type BuyerRequest = {
 type Conversation = {
   id: string;
   listing_id: string;
+  product_id?: string;
   listing_title: string;
   counterpart_name: string;
   status: string;
@@ -84,6 +86,7 @@ type ConversationMessage = {
   id: string;
   sender_type: "buyer" | "provider";
   body: string;
+  media_urls?:string[];
   created_at: string;
 };
 
@@ -425,10 +428,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       if(!response.ok)throw new Error(apiMessage(body,"Messages could not be loaded"));
       if(request!==threadRequest.current || actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return;
       const incoming: ConversationMessage[]=Array.isArray(body.items)?body.items:[];
-      setConversationMessages(current=>{
-        const merged=cursor?[...incoming,...current]:[...current,...incoming];
-        return Array.from(new Map(merged.map(message=>[message.id,message])).values()).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at)||(a.id<b.id ? -1 : a.id>b.id ? 1 : 0));
-      });
+      setConversationMessages(current=>mergeChatMessages(current,incoming));
       if(!quiet || cursor)setConversationCursor(body.next_cursor || "");
       setChatError("");
     } catch(messageError){if(request===threadRequest.current&&actor===chatActor.current)setChatError(messageError instanceof Error?messageError.message:"Messages could not be loaded");}
@@ -444,19 +444,23 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     if(conversation.id)await loadConversationMessages(conversation);
   }
 
-  async function sendConversationMessage(text: string) {
+  async function sendConversationMessage(text: string,mediaKeys:string[]=[],clientID?:string) {
     const conversation=conversationRef.current, actor=token;
-    if(!conversation || !text.trim() || chatBusy.current)return;
+    if(!conversation || (!text.trim() && !mediaKeys.length) || chatBusy.current)return;
     chatBusy.current=true;setChatSending(true);setChatError("");
     try {
       const endpoint=conversation.id?`/marketplace/conversations/${conversation.id}/messages`:`/marketplace/listings/${conversation.listing_id}/conversations`;
-      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim()})});
+      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim(),media_keys:mediaKeys,client_message_id:clientID})});
       if(!response.ok)throw new Error(apiMessage(body,"Message could not be sent"));
       if(actor!==chatActor.current)return;
-      if(conversationRef.current?.listing_id !== conversation.listing_id){void loadConversations(true);return;}
+      if((conversationRef.current?.id || conversationRef.current?.listing_id) !== (conversation.id || conversation.listing_id)){void loadConversations(true);return;}
       const active={...conversation,id:conversation.id || body.id};
       conversationRef.current=active;setSelectedConversation(active);
-      await loadConversationMessages(active);
+      if(body.created_at && (conversation.id ? body.id : body.message_id)) {
+        const saved:ConversationMessage={id:conversation.id?body.id:body.message_id,sender_type:"buyer",body:body.body || text,created_at:body.created_at,media_urls:body.media_urls || []};
+        setConversationMessages(current=>mergeChatMessages(current,[saved]));
+        void loadConversationMessages(active,"",true);
+      } else await loadConversationMessages(active);
       void loadConversations(true);
     } catch(messageError){if(actor===chatActor.current)setChatError(messageError instanceof Error?messageError.message:"Message could not be sent");throw messageError;}
     finally{if(actor===chatActor.current){chatBusy.current=false;setChatSending(false);}}
@@ -585,7 +589,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
   if (selectedConversation) {
-    return <ProviderConversation key={`${token}:${selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active} error={chatError} hasEarlier={!!conversationCursor} bottomInset={bottomInset}
+    return <ProviderConversation token={token || ""} key={`${token}:${selectedConversation.id || selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active || selectedConversation.status!=="open"} error={chatError} hasEarlier={!!conversationCursor} bottomInset={bottomInset}
       onClose={()=>{threadRequest.current++;threadInFlight.current=false;conversationRef.current=null;setSelectedConversation(null);void loadConversations(true);}}
       onSend={sendConversationMessage} onEarlier={()=>{if(conversationCursor&&!threadInFlight.current)void loadConversationMessages(selectedConversation,conversationCursor);}} onRefresh={()=>void loadConversationMessages(selectedConversation)}/>;
   }
@@ -775,7 +779,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             </Pressable>
           )}
           ListFooterComponent={<View>{!!error && <Pressable disabled={loading || refreshing} onPress={() => void loadConversations(true)} style={styles.secondary}><Text style={styles.secondaryText}>Try again</Text></Pressable>}{!!conversationListCursor && <Pressable disabled={loading || refreshing} onPress={() => void loadConversations(true, conversationListCursor)} style={styles.secondary}><Text style={styles.secondaryText}>Load earlier conversations</Text></Pressable>}</View>}
-          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title={error ? "Conversations could not be loaded" : "No provider chats yet"} message={error || "Your bookings, enquiries and messages appear here. Open a service and tap Message provider to start chatting. For Atlantic Express help, open Support."} />}
+          ListEmptyComponent={<EmptyState icon="chatbubbles-outline" title={error ? "Conversations could not be loaded" : "No provider chats yet"} message={error || "Your seller messages, bookings and enquiries appear here. Open a service and tap Message provider to start chatting. For Atlantic Express help, open Support."} />}
         />
       )}
     </View>

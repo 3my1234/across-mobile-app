@@ -1,3 +1,4 @@
+import {ProductSellerChat} from "./ProductSellerChat";
 import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator, Alert, Image, ImageBackground,
@@ -196,6 +197,8 @@ interface DetailProps {
 }
 
 export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity }: DetailProps) {
+  const [sellerChat,setSellerChat]=useState(false);
+  const contactSeller=()=>{if(!token){Alert.alert("Sign in required","Sign in to message this seller.");return;}setSellerChat(true);};
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
   const {width: windowWidth, height: windowHeight} = useWindowDimensions();
@@ -431,6 +434,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     detailScrollRef.current?.scrollTo({ y: section === "overview" ? 0 : Math.max(0, sectionOffsets.current.overview + sectionOffsets.current[section]), animated: false });
   }
 
+  if(sellerChat && token)return <View style={[styles.detailOverlay,{paddingTop:insets.top}]}><ProductSellerChat key={`${token}:${product.id}`} product={product} token={token} onClose={()=>setSellerChat(false)}/></View>;
+  const allowsCheckout=product.payment_mode!=="contact",allowsContact=product.payment_mode==="contact" || product.payment_mode==="both";
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -477,6 +482,11 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             {!!product.delivery_max_days && (
               <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivery estimate</Text><Text style={styles.detailMetaValue}>{product.delivery_min_days || 0}-{product.delivery_max_days} days after processing</Text></View>
             )}
+            <View style={styles.detailDescriptionBlock}>
+              <Text style={styles.detailSectionTitle}>How to buy</Text>
+              {allowsCheckout && <Text style={styles.detailDescription}>Pay securely through Flutterwave. Choose card or bank transfer at checkout where available. Your payment is confirmed first; the seller&apos;s bank payout usually takes one business day for local payments or five business days for international payments, and can take longer. This payout timing is separate from delivery.</Text>}
+              {allowsContact && <><Text style={styles.detailDescription}>Message the seller to agree payment and delivery. Payments arranged directly are outside Atlantic Express checkout and will not appear as paid orders in Track.</Text><Pressable style={styles.photoExpand} onPress={contactSeller}><Text style={styles.secondaryButtonText}>Message seller</Text></Pressable></>}
+            </View>
             <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
               <View style={styles.reviewSummaryRow}>
@@ -528,12 +538,13 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           </View>
         </ScrollView>
         {!keyboardVisible && <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
-          <View style={styles.quantityRow}>
+          {allowsCheckout && <View style={styles.quantityRow}>
             <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={() => onRemove(product)} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color="#101817" /></Pressable>
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
             <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color="#101817" /></Pressable>
-          </View>
-          <Pressable style={[styles.detailCartButton,outOfStock && styles.disabled]} onPress={()=>{if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={outOfStock}><Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
+          </View>}
+          {product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color="#191919"/></Pressable>}
+          <Pressable style={[styles.detailCartButton,allowsCheckout && outOfStock && styles.disabled]} onPress={()=>{if(!allowsCheckout){contactSeller();return;}if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={allowsCheckout && outOfStock}><Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
         </View>}
       </KeyboardAvoidingView>
       <Modal visible={galleryOpen} animationType="fade" transparent={false} statusBarTranslucent onRequestClose={() => setGalleryOpen(false)}>
@@ -552,8 +563,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           >
             {(galleryPhotos || images).map((uri, index) => <ResilientImage key={`full-${uri}-${index}`} uri={uri} style={{ width: windowWidth, height: Math.max(320, windowHeight - insets.top - bottomInset - 132) }} resizeMode="contain" />)}
           </ScrollView>
-          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if (cartQuantity === 0 && !outOfStock) onAdd(product); }} disabled={outOfStock}>
-            <Text style={styles.primaryButtonText}>{outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
+          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if(!allowsCheckout){contactSeller();return;} if (cartQuantity === 0 && !outOfStock) onAdd(product); }} disabled={allowsCheckout && outOfStock}>
+            <Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
           </Pressable>
         </View>
       </Modal>

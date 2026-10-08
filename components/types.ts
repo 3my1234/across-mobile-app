@@ -18,6 +18,7 @@ export type Product = {
   review_count: number;
   sold_count: number;
   average_rating: number;
+  payment_mode?: "flutterwave" | "contact" | "both";
   provider_id?: string;
   provider_name?: string;
   fulfillment_mode?: "merchant_local" | "merchant_cross_border";
