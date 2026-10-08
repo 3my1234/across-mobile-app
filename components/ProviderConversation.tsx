@@ -8,6 +8,7 @@ import { Ionicons } from "@expo/vector-icons";
 export type ProviderMessage = { id: string; sender_type: "buyer" | "provider"; body: string; media_urls?:string[]; created_at: string };
 type Props = { token:string; title: string; provider: string; messages: ProviderMessage[]; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
 export function ProviderConversation(props: Props) {
+  const {onClose}=props;
   const [draft, setDraft] = useState("");
   const [photos,setPhotos]=useState<{key:string;uri:string}[]>([]);
   const [uploading,setUploading]=useState(false);
@@ -31,7 +32,7 @@ export function ProviderConversation(props: Props) {
     }catch(error){if(mounted.current)Alert.alert("Photo not attached",error instanceof Error?error.message:"Please try again.");}
     finally{uploadFlight.current=false;if(mounted.current)setUploading(false);}
   }
-  useEffect(()=>{const back=BackHandler.addEventListener("hardwareBackPress",()=>{props.onClose();return true;});return()=>back.remove();},[props.onClose]);
+  useEffect(()=>{const back=BackHandler.addEventListener("hardwareBackPress",()=>{onClose();return true;});return()=>back.remove();},[onClose]);
   const list = useRef<FlatList<ProviderMessage>>(null);
   const nearBottom = useRef(true);
   const sending = useRef(false);
