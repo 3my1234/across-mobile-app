@@ -20,7 +20,7 @@ async function main() {
   const navigation=vm.createContext({sectionJump:{current:false},sectionOffsets:{current:{overview:600,reviews:250,recommended:1200}},
     setActiveSection:value=>{selected=value;},detailScrollRef:{current:{scrollTo:value=>jumps.push(value)}}});
   const start=screens.indexOf('  function scrollToSection(');
-  vm.runInContext(transpile(screens.slice(start,screens.indexOf('\n  return (',start))),navigation);
+  vm.runInContext(transpile(screens.slice(start,screens.indexOf('\n  }',start)+4)),navigation);
   navigation.scrollToSection('recommended');
   assert.equal(selected,'recommended');
   assert.equal(jumps[0].y,1800);

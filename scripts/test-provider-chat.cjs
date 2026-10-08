@@ -8,7 +8,7 @@ async function main(){
  assert.equal(labels.servicePriceLabel({price:null,currency_code:'NGN'}),'Ask for a quote');
  const pending=[];let conversation=null,messages=[];
  const listing={id:'service',title:'Repairs',provider_name:'Provider'};
- const g={selected:listing,selectedRef:{current:listing},loading:false,token:'buyer',chatActor:{current:'buyer'},authHeaders:{Authorization:'Bearer buyer'},API_URL:'https://example.test',URLSearchParams,encodeURIComponent,Date,Map,Array,
+ const g={mergeChatMessages:(current,incoming)=>Array.from(new Map([...current,...incoming].map(item=>[item.id,item])).values()),selected:listing,selectedRef:{current:listing},loading:false,token:'buyer',chatActor:{current:'buyer'},authHeaders:{Authorization:'Bearer buyer'},API_URL:'https://example.test',URLSearchParams,encodeURIComponent,Date,Map,Array,
   conversationRef:{current:null},chatBusy:{current:false},chatOpening:{current:false},setOpeningChat:()=>{},threadInFlight:{current:false},threadRequest:{current:0},
   fetchHistoryJSON:async(url,options)=>{const response=await g.fetchWithTimeout(url,options);return {response,body:await response.json()};},
   fetchJSONWithTimeout:async(url,options)=>{const response=await g.fetchWithTimeout(url,options);return {response,body:await response.json()};},

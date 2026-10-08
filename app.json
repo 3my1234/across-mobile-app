@@ -55,7 +55,7 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Atlantic Express to access your photos for product reviews."
+          "photosPermission": "Allow Atlantic Express to access your photos to attach images to reviews and seller messages."
         }
       ],
       [

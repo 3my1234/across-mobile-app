@@ -111,6 +111,7 @@ export function mapProduct(raw: any): import("./types").Product {
     origin_hub: raw.origin_hub ?? { id: "", name: "", city: "" },
     is_flash_sale: raw.is_flash_sale, flash_sale_price: raw.flash_sale_price,
     review_count: Number(raw.review_count || 0), sold_count: Number(raw.sold_count || 0), average_rating: Number(raw.average_rating || 0),
+    payment_mode: raw.payment_mode || raw.factory_details?.payment_mode || "flutterwave",
     provider_id: raw.provider_id || "", provider_name: raw.provider_name || raw.factory_details?.provider_name || "", fulfillment_mode: raw.fulfillment_mode,
     inventory_country_code: raw.inventory_country_code || raw.factory_details?.inventory_country_code || "",
     inventory_city: raw.inventory_city || raw.factory_details?.inventory_city || "",

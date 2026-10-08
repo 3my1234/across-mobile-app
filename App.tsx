@@ -1202,6 +1202,7 @@ function AcrossApp() {
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }
   function addToCart(p: Product) {
+    if(p.payment_mode==="contact"){setSelectedProduct(p);return;}
     if (!p.provider_id || !p.fulfillment_mode) {
       Alert.alert("Product unavailable", "This product is not linked to a verified seller-managed fulfilment route.");
       return;
