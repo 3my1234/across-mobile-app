@@ -227,6 +227,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const detailScrollRef = useRef<ScrollView | null>(null);
   const reviewInputRef = useRef<TextInput | null>(null);
   const sectionOffsets = useRef({ overview: 0, reviews: 0, recommended: 0 });
+  const sectionJump = useRef(false);
   const snapshotRequest = useRef(0);
   const reviewRequest = useRef(0);
   const reviewSaving = useRef(false);
@@ -249,6 +250,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     setGalleryPhotos(null);
     setShowAllPhotos(false);
     setActiveSection("overview");
+    sectionJump.current = false;
+    sectionOffsets.current = { overview: 0, reviews: 0, recommended: 0 };
     detailScrollRef.current?.scrollTo({y:0,animated:false});
     void loadDetail(true);
     return () => { snapshotRequest.current += 1; recommendationRequest.current += 1; reviewRequest.current += 1; };
@@ -415,6 +418,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const images = product.image_urls?.length ? product.image_urls : [FALLBACK_IMAGES[0]];
 
   function revealReviewEditor() {
+    sectionJump.current = false;
     setTimeout(() => {
       const node = findNodeHandle(reviewInputRef.current);
       if (node) detailScrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(node, 120, true);
@@ -422,8 +426,9 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   }
 
   function scrollToSection(section: keyof typeof sectionOffsets.current) {
+    sectionJump.current = true;
     setActiveSection(section);
-    detailScrollRef.current?.scrollTo({ y: section === "overview" ? 0 : Math.max(0, sectionOffsets.current[section]), animated: true });
+    detailScrollRef.current?.scrollTo({ y: section === "overview" ? 0 : Math.max(0, sectionOffsets.current.overview + sectionOffsets.current[section]), animated: false });
   }
 
   return (
@@ -436,7 +441,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           </View>
           <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.flash_sale_price || product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color="#191919" /></Pressable>
         </View>
-        <ScrollView ref={detailScrollRef} scrollEventThrottle={100} onScroll={event=>{const y=event.nativeEvent.contentOffset.y+48;const section=y>=sectionOffsets.current.recommended && sectionOffsets.current.recommended>0 ? "recommended" : y>=sectionOffsets.current.reviews && sectionOffsets.current.reviews>0 ? "reviews" : "overview";setActiveSection(section);}} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
+        <ScrollView ref={detailScrollRef} scrollEventThrottle={100} onScrollBeginDrag={()=>{sectionJump.current=false;}} onScroll={event=>{if(sectionJump.current)return;const y=event.nativeEvent.contentOffset.y+48-sectionOffsets.current.overview;const section=y>=sectionOffsets.current.recommended && sectionOffsets.current.recommended>0 ? "recommended" : y>=sectionOffsets.current.reviews && sectionOffsets.current.reviews>0 ? "reviews" : "overview";setActiveSection(section);}} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
           <ScrollView
             horizontal
             pagingEnabled
@@ -472,7 +477,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             {!!product.delivery_max_days && (
               <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivery estimate</Text><Text style={styles.detailMetaValue}>{product.delivery_min_days || 0}-{product.delivery_max_days} days after processing</Text></View>
             )}
-            <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
+            <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
               <View style={styles.reviewSummaryRow}>
                 <Text style={styles.reviewSummaryScore}>{summary.count>0 ? summary.average_rating.toFixed(1) : "—"}</Text>
@@ -510,7 +515,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               {(showAllPhotos ? images : images.slice(0,3)).map((uri,index)=><Pressable key={`description-${uri}-${index}`} accessibilityLabel={`View product photo ${index+1}`} onPress={()=>{setGalleryPhotos(null);setGalleryIndex(index);setGalleryOpen(true);}}><ProductPhoto uri={uri}/></Pressable>)}
               {images.length>3 && <Pressable style={styles.photoExpand} onPress={()=>setShowAllPhotos(value=>!value)}><Text style={styles.sectionTabText}>{showAllPhotos ? "Show fewer photos" : `See all ${images.length} photos`}</Text><Ionicons name={showAllPhotos ? "chevron-up" : "chevron-down"} size={16}/></Pressable>}
             </View>
-            <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y + sectionOffsets.current.overview; }}>
+            <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y; }}>
               <Text style={styles.detailSectionTitle}>Recommended for you</Text>
               <Text style={styles.recommendationHint}>Related products selected from the live catalogue.</Text>
               {!!recommendationsError && <Pressable onPress={()=>void loadRecommendations()}><Text style={styles.reviewError}>{recommendationsError}</Text></Pressable>}

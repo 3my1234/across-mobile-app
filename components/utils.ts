@@ -3,10 +3,10 @@ import { API_URL } from "./config";
 export function money(value: number, currency = "NGN") {
   try {
     return new Intl.NumberFormat(undefined, {
-      style: "currency", currency, maximumFractionDigits: 2
+      style: "currency", currency, minimumFractionDigits: 0, maximumFractionDigits: 2
     }).format(value);
   } catch {
-    return `${currency} ${Number(value || 0).toFixed(2)}`;
+    return `${currency} ${Number(value || 0).toFixed(2).replace(/\.?0+$/, "")}`;
   }
 }
 
