@@ -42,15 +42,13 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
           <View style={styles.priceCopy}>
             <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{money(currentPrice, product.currency)}</Text>
             {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
-            {comparePrice > currentPrice && (
-              <View style={styles.discountRow}>
-                <Text style={styles.compare}>{money(comparePrice, product.currency)}</Text>
-                <Text style={styles.discountBadge}>-{discountPercent}%</Text>
-              </View>
-            )}
           </View>
           <Pressable hitSlop={6} accessibilityLabel={onAdd ? `Add ${product.title} to cart` : `View ${product.title}`} disabled={onAdd ? product.inventory_count <= 0 || cartQuantity >= product.inventory_count : false} onPress={event=>{event.stopPropagation();(onAdd || onPress)();}} style={[styles.cartButton,onAdd && (product.inventory_count<=0 || cartQuantity>=product.inventory_count) && {opacity:0.45}]}><Ionicons name="cart-outline" size={19} color="#191919"/>{cartQuantity>0 && <Text style={styles.cartCount}>{cartQuantity}</Text>}</Pressable>
         </View>
+        {comparePrice > currentPrice && <View style={styles.discountRow}>
+          <Text style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{money(comparePrice, product.currency)}</Text>
+          <Text style={styles.discountBadge} numberOfLines={1}>-{discountPercent}%</Text>
+        </View>}
         <View style={styles.metaRow}>
           {soldCount > 0 && <Text style={styles.metaText}>{soldCount.toLocaleString()} sold</Text>}
           {product.inventory_count <= 5 && <Text style={styles.metaText}>{product.inventory_count > 0 ? `${product.inventory_count} left` : "Out of stock"}</Text>}
@@ -76,8 +74,8 @@ const styles = StyleSheet.create({
   cartCount:{fontSize:10,color:"#191919",fontWeight:"700"},
   price: { color: "#FF4747", fontSize: 15, fontWeight: "900" },
   discountRow: { marginTop: 3, flexDirection: "row", alignItems: "center", gap: 6 },
-  compare: { color: "#C62828", fontSize: 11, fontWeight: "900", textDecorationLine: "line-through", textDecorationColor: "#C62828" },
-  discountBadge: { borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2, overflow: "hidden", color: "#FFFFFF", backgroundColor: "#D71920", fontSize: 9, fontWeight: "900" },
+  compare: { flex: 1, minWidth: 0, color: "#C62828", fontSize: 11, fontWeight: "900", textDecorationLine: "line-through", textDecorationColor: "#C62828" },
+  discountBadge: { flexShrink: 0, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2, overflow: "hidden", color: "#FFFFFF", backgroundColor: "#D71920", fontSize: 9, fontWeight: "900" },
   badge: { marginTop: 6, color: "#FF4747", fontSize: 11, fontWeight: "900" },
   metaRow: { marginTop: 3, flexDirection: "row", justifyContent: "space-between", gap: 6 },
   metaText: { color: "#8C8C8C", fontSize: 11, fontWeight: "700" },

@@ -157,6 +157,9 @@ function AcrossApp() {
   const restoredPendingPayment = useRef(false);
   const activityTokenRef = useRef("");
   const pushTokenRef = useRef("");
+  const pushSetupFlight = useRef<Promise<boolean> | null>(null);
+  const pushSetupLastSuccess = useRef<{key:string;at:number} | null>(null);
+  const soundPreferenceVersion = useRef(0);
   const logoutInProgress = useRef(false);
   const buyerCoordinatesRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const lastNotificationResponseId = useRef("");
@@ -194,6 +197,8 @@ function AcrossApp() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationStatus, setNotificationStatus] = useState("");
+  const [notificationTestBusy, setNotificationTestBusy] = useState(false);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
@@ -501,7 +506,9 @@ function AcrossApp() {
   }, [stage, token]);
 
   useEffect(() => {
+    const version = soundPreferenceVersion.current;
     void readNotificationSoundEnabled().then(enabled => {
+      if (version !== soundPreferenceVersion.current) return;
       notificationSoundEnabled = enabled;
       setSoundEnabled(enabled);
     });
@@ -516,7 +523,8 @@ function AcrossApp() {
     void loadProfile(token);
     void registerPushNotifications(token);
     void pollBuyerActivity(token, true);
-    const interval = setInterval(() => { void pollBuyerActivity(token); }, 60000);
+    const interval = setInterval(() => { if (AppState.currentState === "active") { void pollBuyerActivity(token); void registerPushNotifications(token); } }, 60000);
+    const pushForeground = AppState.addEventListener("change", next => { if (next === "active") void registerPushNotifications(token, undefined, true); });
     const received = Notifications.addNotificationReceivedListener(() => {
       void Promise.all([loadNotifications(token), loadOrders(token)]);
     });
@@ -532,6 +540,7 @@ function AcrossApp() {
     }).catch(() => {});
     return () => {
       clearInterval(interval);
+      pushForeground.remove();
       received.remove();
       responded.remove();
     };
@@ -623,38 +632,49 @@ function AcrossApp() {
     } catch {}
   }
 
-  async function registerPushNotifications(authToken: string, soundPreference?: boolean) {
+  async function registerPushNotifications(authToken: string, soundPreference?: boolean, force = false): Promise<boolean> {
+    if (Platform.OS !== "android" && Platform.OS !== "ios") return false;
+    const version = soundPreferenceVersion.current;
     const effectiveSound = soundPreference ?? await readNotificationSoundEnabled();
-    if (Platform.OS !== "android" && Platform.OS !== "ios") return;
-    try {
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("orders", {
-          name: "Order updates",
-          importance: Notifications.AndroidImportance.MAX,
-          sound: "default",
-          vibrationPattern: [0, 250, 180, 250]
+    // Serialize preference changes so an older POST cannot undo a newer choice.
+    while (pushSetupFlight.current) await pushSetupFlight.current;
+    if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
+    const key = `${authToken}:${effectiveSound}`;
+    if (!force && pushSetupLastSuccess.current?.key === key && Date.now()-pushSetupLastSuccess.current.at < 300000) return true;
+    const setup = (async () => {
+      try {
+        if (Platform.OS === "android") {
+          await Notifications.setNotificationChannelAsync("orders", {name:"Order updates",importance:Notifications.AndroidImportance.MAX,sound:"default",vibrationPattern:[0,250,180,250]});
+          await Notifications.setNotificationChannelAsync("orders-silent", {name:"Order updates (silent)",importance:Notifications.AndroidImportance.DEFAULT,sound:null});
+        }
+        const current = await Notifications.getPermissionsAsync();
+        const permission = current.status === "granted" ? current : current.canAskAgain ? await Notifications.requestPermissionsAsync() : current;
+        if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
+        if (permission.status !== "granted") { setNotificationStatus("Phone notifications are disabled. Open phone settings to allow them."); return false; }
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+        if (!projectId) { setNotificationStatus("Notification setup is missing from this build."); return false; }
+        const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+        if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
+        const {response,body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/push-token`, {
+          method:"POST",headers:{Authorization:`Bearer ${authToken}`,"Content-Type":"application/json"},
+          body:JSON.stringify({token:pushToken,platform:Platform.OS,sound_enabled:effectiveSound})
         });
-        await Notifications.setNotificationChannelAsync("orders-silent", {
-          name: "Order updates (silent)",
-          importance: Notifications.AndroidImportance.DEFAULT,
-          sound: null
-        });
+        if (!response.ok) throw new Error(body?.message || "Push registration failed");
+        if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
+        pushTokenRef.current = pushToken;
+        const channel = Platform.OS === "android" ? await Notifications.getNotificationChannelAsync("orders") : null;
+        if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
+        pushSetupLastSuccess.current = {key,at:Date.now()};
+        const phoneMuted = channel ? channel.sound === null || channel.importance < Notifications.AndroidImportance.DEFAULT : permission.ios?.allowsSound === false;
+        setNotificationStatus(!effectiveSound ? "Notification sounds are off." : phoneMuted ? "Phone settings silence notification sound. Open phone settings to turn sound on." : "Notifications are connected. Use Test sound to check your phone.");
+        return true;
+      } catch {
+        if (authToken === sessionTokenRef.current && version === soundPreferenceVersion.current) setNotificationStatus("Notifications could not connect. We'll retry automatically when the app is active.");
+        return false;
       }
-      const current = await Notifications.getPermissionsAsync();
-      const permission = current.status === "granted" ? current : await Notifications.requestPermissionsAsync();
-      if (permission.status !== "granted") return;
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-      if (!projectId) return;
-      const pushToken = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      pushTokenRef.current = pushToken;
-      await fetch(`${API_URL}/api/v1/notifications/push-token`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${authToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ token: pushToken, platform: Platform.OS, sound_enabled: effectiveSound })
-      });
-    } catch {
-      // Registration retries on the next authenticated app session.
-    }
+    })();
+    pushSetupFlight.current = setup;
+    try { return await setup; } finally { if (pushSetupFlight.current === setup) pushSetupFlight.current = null; }
   }
 
   async function markNotificationRead(id: string, reload = true) {
@@ -666,14 +686,19 @@ function AcrossApp() {
   }
 
   async function toggleNotificationSound() {
-    const next = !soundEnabled;
+    const previous = notificationSoundEnabled;
+    const next = !previous;
+    const version = ++soundPreferenceVersion.current;
     notificationSoundEnabled = next;
     setSoundEnabled(next);
-    await writeNotificationSoundEnabled(next);
+    try { await writeNotificationSoundEnabled(next); } catch { if (version === soundPreferenceVersion.current) { notificationSoundEnabled = previous; setSoundEnabled(previous); setNotificationStatus("Sound preference could not be saved. Please try again."); } return; }
+    if (version !== soundPreferenceVersion.current) return;
     if (token) await registerPushNotifications(token, next);
   }
 
   async function testNotificationSound() {
+    if (notificationTestBusy) return;
+    setNotificationTestBusy(true);
     try {
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("orders", {
@@ -689,10 +714,11 @@ function AcrossApp() {
         Alert.alert("Notifications disabled", "Allow notifications for Atl in your phone settings, then try again.");
         return;
       }
+      soundPreferenceVersion.current++;
       notificationSoundEnabled = true;
       setSoundEnabled(true);
       await writeNotificationSoundEnabled(true);
-      if (token) await registerPushNotifications(token, true);
+      if (token) await registerPushNotifications(token, true, true);
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Atl notifications are ready",
@@ -707,7 +733,7 @@ function AcrossApp() {
       Alert.alert("Test scheduled", "Keep Atl open or move it to the background. The test notification should arrive in about two seconds.");
     } catch {
       Alert.alert("Unable to test notifications", "Open your phone settings and make sure notifications and sound are enabled for Atl.");
-    }
+    } finally { setNotificationTestBusy(false); }
   }
 
   async function openNotification(notification: any) {
@@ -1999,6 +2025,12 @@ function AcrossApp() {
                 <View style={{ flex: 1 }}><Text style={s.panelTitle}>Notification sound</Text><Text style={{ color: "#66736F", fontSize: 12, lineHeight: 18 }}>Play a sound for orders, messages, services and account updates.</Text></View>
                 <Pressable style={[s.primaryButtonSmall, !soundEnabled && s.secondaryButton]} onPress={() => void toggleNotificationSound()}><Text style={soundEnabled ? s.primaryButtonText : s.secondaryButtonText}>{soundEnabled ? "On" : "Off"}</Text></Pressable>
               </View>
+              {!!notificationStatus && <Text accessibilityRole="alert" style={{color:"#66736F",fontSize:12,lineHeight:18,marginTop:10}}>{notificationStatus}</Text>}
+              <View style={{flexDirection:"row",gap:10,marginTop:10}}>
+                <Pressable disabled={notificationTestBusy} style={[s.secondaryButton,{flex:1},notificationTestBusy && s.disabled]} onPress={()=>void testNotificationSound()}><Text style={s.secondaryButtonText}>{notificationTestBusy ? "Testing..." : "Test sound"}</Text></Pressable>
+                <Pressable style={[s.secondaryButton,{flex:1}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert("Phone settings", "Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Order updates."))}><Text style={s.secondaryButtonText}>Phone settings</Text></Pressable>
+              </View>
+              <Text style={{color:"#66736F",fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Order updates, and check your notification volume and Do Not Disturb setting.</Text>
             </View>
             <View style={s.quickLinks}>
               <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color="#FF4747"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments, references and XP discounts</Text></View><Ionicons name="chevron-forward" size={18} color="#BFBFBF"/></Pressable>

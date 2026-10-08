@@ -15,6 +15,7 @@
     "test:payments": "node scripts/test-payment-history.cjs",
     "test:marketplace": "node scripts/test-provider-chat.cjs && node scripts/test-product-loading.cjs",
     "test:checkout": "node scripts/test-cart-review.cjs",
+    "test:notifications": "node scripts/test-notification-setup.cjs",
     "ios": "expo run:ios"
   },
   "dependencies": {
