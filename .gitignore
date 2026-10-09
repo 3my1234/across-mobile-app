@@ -23,3 +23,7 @@ Thumbs.db
 # Firebase Admin / service-account private keys must never be committed.
 *firebase-adminsdk*.json
 *service-account*.json
+
+# Local EAS signing credentials and keystore backups.
+credentials.json
+credentials/

@@ -148,6 +148,7 @@ function AcrossApp() {
   const [searchQuery, setSearchQuery] = useState("");
   const scrollY = useRef(new Animated.Value(0)).current;
   const trackScrollRef = useRef<ScrollView | null>(null);
+  const [expandedOrderSummaries, setExpandedOrderSummaries] = useState<Record<string, boolean>>({});
   const accountScrollRef = useRef<ScrollView | null>(null);
   const supportScrollRef = useRef<ScrollView | null>(null);
   const supportSubjectRef = useRef<NativeTextInput | null>(null);
@@ -723,7 +724,19 @@ function AcrossApp() {
       notificationSoundEnabled = true;
       setSoundEnabled(true);
       await writeNotificationSoundEnabled(true);
-      if (token) await registerPushNotifications(token, true, true);
+      if (token) {
+        if (!await registerPushNotifications(token, true, true)) {
+          Alert.alert("Test could not connect", "Your phone has not connected to the notification service. Please try again when you have internet access.");
+          return;
+        }
+        const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/test-push`, {
+          method: "POST", headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
+          body: JSON.stringify({token: pushTokenRef.current})
+        });
+        if (!response.ok) throw new Error(body?.message || "Server notification test failed");
+        Alert.alert("Test sent from server", "Move Atl to the background and listen for the notification. This tests the same delivery service as your order updates; delivery may take a few seconds.");
+        return;
+      }
       await Notifications.scheduleNotificationAsync({
         content: {
           title: "Atl notifications are ready",
@@ -737,7 +750,7 @@ function AcrossApp() {
       });
       Alert.alert("Test scheduled", "Keep Atl open or move it to the background. The test notification should arrive in about two seconds.");
     } catch {
-      Alert.alert("Unable to test notifications", "Open your phone settings and make sure notifications and sound are enabled for Atl.");
+      Alert.alert("Unable to test notifications", "The notification service could not complete the test. Check your connection and try again. If it keeps failing, contact support.");
     } finally { setNotificationTestBusy(false); }
   }
 
@@ -1497,8 +1510,13 @@ function AcrossApp() {
       quoteRef.current = null;
     }
     if (token) await Promise.all([loadNotifications(token), loadXPBalance(token), loadOrders(token)]);
-    Alert.alert("Payment Successful!", "Your order has been placed. Check Track for updates. Any other checkout groups are still saved in your cart.");
     setActiveTab("track");
+    const remainingGroups = groupCart(cartRef.current).length;
+    Alert.alert("Payment successful", remainingGroups
+      ? `This order is paid. You still have ${remainingGroups} unpaid ${remainingGroups === 1 ? "group" : "groups"} in your cart. Would you like to pay for the next group?`
+      : "Your order is paid. You can follow its delivery in Track.", remainingGroups
+      ? [{text: "View this order", onPress: () => setActiveTab("track")}, {text: "Pay for remaining items", onPress: () => setActiveTab("cart")}]
+      : [{text: "View order", onPress: () => setActiveTab("track")}]);
   }
 
   function stopPaymentPolling() {
@@ -1958,7 +1976,7 @@ function AcrossApp() {
                 <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
                 {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: theme.color("#12805F", "color")}]}>-{money(displayedXPDiscount, quote?.currency || checkoutItems[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
                 {xpEnabled && !quote && <Pressable accessibilityRole="checkbox" accessibilityState={{checked: useXP, disabled: busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1}} disabled={busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1} onPress={() => setUseXP(value => !value)} style={{flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12}}><Ionicons name={useXP ? "checkbox" : "square-outline"} size={22} color={theme.color("#12805F")} /><View style={{flex: 1}}><Text style={{fontWeight: "800", color: theme.color("#191919", "color")}}>Use XP - {xpBalance} available</Text><Text style={s.muted}>Up to {Math.min(xpBalance, Math.floor(totals.platformFee))} XP off the service fee. Seller prices and gateway charges stay payable.</Text></View></Pressable>}
-                <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, checkoutItems[0]?.product.currency)}</Text></View>
+                <View style={s.metric}><Text style={s.metricLabel}>Total for this group</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, checkoutItems[0]?.product.currency)}</Text></View>
 				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
 				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: theme.color("#12805F", "color"), fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
@@ -2072,7 +2090,8 @@ function AcrossApp() {
                 <View key={order.id} onLayout={event => { orderOffsetsRef.current[order.id] = event.nativeEvent.layout.y; }} style={[s.panel, focusedOrderId === order.id && { borderWidth: 2, borderColor: theme.color("#FF4747", "borderColor") }]}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
                     <View style={{ flex: 1 }}>
-                      <Text style={s.panelTitle}>{order.items_summary || `${order.item_count} item(s)`}</Text>
+                      <Text style={[s.panelTitle, {fontSize: 13, lineHeight: 18}]} numberOfLines={expandedOrderSummaries[order.id] ? undefined : 2}>{order.items_summary || `${order.item_count} item(s)`}</Text>
+                      {order.item_count > 1 && <Pressable accessibilityRole="button" accessibilityState={{expanded: !!expandedOrderSummaries[order.id]}} onPress={() => setExpandedOrderSummaries(items => ({...items, [order.id]: !items[order.id]}))} style={{minHeight: 36, justifyContent: "center"}}><Text style={{fontSize: 12, color: theme.color("#FF4747", "color"), fontWeight: "700"}}>{expandedOrderSummaries[order.id] ? "Show less" : `View all ${order.item_count} items`}</Text></Pressable>}
                       <Text style={{ marginTop: 4, color: theme.color("#8C8C8C", "color"), fontSize: 12 }}>{new Date(order.created_at).toLocaleString()}</Text>
                     </View>
                     <Text style={{ color: theme.color(order.order_status === "Paid" ? "#12805F" : "#B54708", "color"), fontWeight: "900" }}>{order.order_status}</Text>

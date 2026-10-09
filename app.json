@@ -1,6 +1,6 @@
 {
   "expo": {
-    "owner": "atlantic-express",
+    "owner": "athlantic-express",
     "name": "Atl",
     "slug": "across",
     "scheme": "across",
@@ -67,7 +67,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "99011f08-ee05-4d96-b3fd-0088e26d4f76"
+        "projectId": "1f1853ee-4359-4a4c-a95f-55f94e90b102"
       }
     }
   }
