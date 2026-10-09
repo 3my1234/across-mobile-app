@@ -1,3 +1,4 @@
+/* global __dirname */
 const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm"),ts=require("typescript");
 const code=ts.transpileModule(fs.readFileSync(path.join(__dirname,"../components/theme.ts"),"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText;
 const g={exports:{},Map,Object};vm.runInNewContext(code,g);const {themeColor,themeStyles}=g.exports;
@@ -12,3 +13,4 @@ assert.equal(themeStyles(base,false),base);const dark=themeStyles(base,true);ass
 console.log("Theme contrast passed: text, muted copy, input surfaces, status messages, yellow stars, brand, badges and photo overlays.");
 
 const config=JSON.parse(fs.readFileSync(path.join(__dirname,"../app.json"),"utf8"));assert.equal(config.expo.userInterfaceStyle,"automatic","Android must receive system appearance changes");
+const deps=JSON.parse(fs.readFileSync(path.join(__dirname,"../package.json"),"utf8")).dependencies;assert.ok(deps["expo-system-ui"],"Android system-theme module must be included in the new build");
