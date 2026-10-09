@@ -1,3 +1,4 @@
+import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput, ThemeProvider } from "./components/ThemeProvider";
 import { SupportConversation } from "./components/SupportConversation";
 import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -11,11 +12,9 @@ import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  ActivityIndicator, Alert, Animated, AppState, Dimensions, Image,
+import {ActivityIndicator, Alert, Animated, AppState, Dimensions, Image,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
-  Text, TextInput, View
-} from "react-native";
+   type TextInput as NativeTextInput, View} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
@@ -32,7 +31,7 @@ import { freshCatalogURL, useCatalogFreshness } from "./components/catalogFreshn
 import { cartOfferFingerprint, latestProductSnapshot, reconcileCart } from "./components/catalogState";
 import { cartGroupKey, groupCart, removePurchasedItems } from "./components/cartGroups";
 
-import { s } from "./components/Styles";
+import { s as sharedStyles } from "./components/Styles";
 
 WebBrowser.maybeCompleteAuthSession();
 let notificationSoundEnabled = true;
@@ -93,6 +92,10 @@ function trackingProgress(order: OrderSummary) {
 }
 
 export default function App() {
+  return <ThemeProvider><AppContent /></ThemeProvider>;
+}
+
+function AppContent() {
   if (!PRIVY_APP_ID || !PRIVY_CLIENT_ID) return <SafeAreaProvider><MissingConfigScreen /></SafeAreaProvider>;
   return (
     <SafeAreaProvider>
@@ -110,6 +113,8 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: strin
 }
 
 function AcrossApp() {
+  const theme = useTheme();
+  const s = useThemedStyles(sharedStyles);
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
   const winWidth = Dimensions.get("window").width;
@@ -145,8 +150,8 @@ function AcrossApp() {
   const trackScrollRef = useRef<ScrollView | null>(null);
   const accountScrollRef = useRef<ScrollView | null>(null);
   const supportScrollRef = useRef<ScrollView | null>(null);
-  const supportSubjectRef = useRef<TextInput | null>(null);
-  const supportMessageRef = useRef<TextInput | null>(null);
+  const supportSubjectRef = useRef<NativeTextInput | null>(null);
+  const supportMessageRef = useRef<NativeTextInput | null>(null);
   const orderOffsetsRef = useRef<Record<string, number>>({});
   const bootTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollGeneration = useRef(0);
@@ -259,7 +264,7 @@ function AcrossApp() {
     return Array.from(names);
   }, [products, internationalProducts, stockView]);
 
-  function revealInput(scrollRef: { current: ScrollView | null }, inputRef: { current: TextInput | null }, extraOffset = 96) {
+  function revealInput(scrollRef: { current: ScrollView | null }, inputRef: { current: NativeTextInput | null }, extraOffset = 96) {
     setTimeout(() => {
       const node = findNodeHandle(inputRef.current);
       if (node) scrollRef.current?.scrollResponderScrollNativeHandleToKeyboard(node, extraOffset, true);
@@ -1813,36 +1818,36 @@ function AcrossApp() {
 
   return (
     <View style={[s.safe, { paddingTop: insets.top }]}>
-      <StatusBar style="dark" />
+      <StatusBar style={theme.dark ? "light" : "dark"} />
 
       {/* Notification Bell */}
       <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100 }}>
         <Pressable onPress={() => setShowNotifications(v => !v)} style={{ padding: 6 }}>
-          <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color="#191919" />
+          <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color={theme.color("#191919")} />
           {unreadCount > 0 && (
-            <View style={{ position: "absolute", top: 2, right: 2, backgroundColor: "#FF4747", borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "900" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
+            <View style={{ position: "absolute", top: 2, right: 2, backgroundColor: theme.color("#FF4747", "backgroundColor"), borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: theme.color("#FFF", "color"), fontSize: 10, fontWeight: "900" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
             </View>
           )}
         </Pressable>
       </View>
 
       {showNotifications && (
-        <View style={{ position: "absolute", top: insets.top + 48, right: 8, left: 8, backgroundColor: "#FFFFFF", borderRadius: 12, zIndex: 99, maxHeight: 400, borderWidth: 1, borderColor: "#EDEDED", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 10 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
+        <View style={{ position: "absolute", top: insets.top + 48, right: 8, left: 8, backgroundColor: theme.color("#FFFFFF", "backgroundColor"), borderRadius: 12, zIndex: 99, maxHeight: 400, borderWidth: 1, borderColor: theme.color("#EDEDED", "borderColor"), shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 10 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottomWidth: 1, borderColor: theme.color("#EDEDED", "borderColor") }}>
             <View style={{ flex: 1 }} />
             <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-              {unreadCount > 0 && <Pressable onPress={markAllRead}><Text style={{ color: "#FF4747", fontSize: 12, fontWeight: "700" }}>Mark all read</Text></Pressable>}
-              <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color="#8C8C8C" /></Pressable>
+              {unreadCount > 0 && <Pressable onPress={markAllRead}><Text style={{ color: theme.color("#FF4747", "color"), fontSize: 12, fontWeight: "700" }}>Mark all read</Text></Pressable>}
+              <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color={theme.color("#8C8C8C")} /></Pressable>
             </View>
           </View>
           <ScrollView style={{ maxHeight: 320 }}>
-            {notifications.length === 0 ? <Text style={{ padding: 20, textAlign: "center", color: "#8C8C8C" }}>No notifications yet</Text>
+            {notifications.length === 0 ? <Text style={{ padding: 20, textAlign: "center", color: theme.color("#8C8C8C", "color") }}>No notifications yet</Text>
             : notifications.slice(0, 30).map(n => (
-              <Pressable key={n.id} style={{ padding: 12, borderBottomWidth: 1, borderColor: "#F0F0F0", backgroundColor: n.is_read ? "#FFFFFF" : "#FFF5F5" }} onPress={() => { void openNotification(n); }}>
+              <Pressable key={n.id} style={{ padding: 12, borderBottomWidth: 1, borderColor: theme.color("#F0F0F0", "borderColor"), backgroundColor: theme.color(n.is_read ? "#FFFFFF" : "#FFF5F5", "backgroundColor") }} onPress={() => { void openNotification(n); }}>
                 <Text style={{ fontWeight: "800", fontSize: 13 }}>{n.title}</Text>
-                <Text style={{ marginTop: 2, fontSize: 12, color: "#595959" }}>{n.body}</Text>
-                <Text style={{ marginTop: 2, fontSize: 10, color: "#BFBFBF" }}>{new Date(n.created_at).toLocaleString()}</Text>
+                <Text style={{ marginTop: 2, fontSize: 12, color: theme.color("#595959", "color") }}>{n.body}</Text>
+                <Text style={{ marginTop: 2, fontSize: 10, color: theme.color("#BFBFBF", "color") }}>{new Date(n.created_at).toLocaleString()}</Text>
               </Pressable>
             ))}
           </ScrollView>
@@ -1851,46 +1856,46 @@ function AcrossApp() {
 
       {/* Home header */}
       {activeTab !== "home" && !showFlashSale && (
-        <View style={{ height: 40, paddingHorizontal: 14, justifyContent: "center", backgroundColor: "#FFFFFF" }}>
+        <View style={{ height: 40, paddingHorizontal: 14, justifyContent: "center", backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
           <Image source={LOGO} style={{ width: 28, height: 28 }} resizeMode="contain" />
         </View>
       )}
       {activeTab === "home" && (
-        <View style={{ backgroundColor: "#FFFFFF", zIndex: 10 }}>
+        <View style={{ backgroundColor: theme.color("#FFFFFF", "backgroundColor"), zIndex: 10 }}>
           <Animated.View style={{ height: logoHeight, opacity: logoOpacity, overflow: "hidden", paddingHorizontal: 14, justifyContent: "center" }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Image source={LOGO} style={{ width: 32, height: 32 }} resizeMode="contain" />
               <View>
-                <Text style={{ color: "#191919", fontSize: 17, fontWeight: "900" }}>Atlantic Express</Text>
+                <Text style={{ color: theme.color("#191919", "color"), fontSize: 17, fontWeight: "900" }}>Atlantic Express</Text>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 1 }}>
-                  <Ionicons name="location-outline" size={12} color="#8C8C8C" />
-                  <Text style={{ color: "#8C8C8C", fontSize: 11, fontWeight: "700" }}>Deliver to {catalogCountry}</Text>
+                  <Ionicons name="location-outline" size={12} color={theme.color("#8C8C8C")} />
+                  <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 11, fontWeight: "700" }}>Deliver to {catalogCountry}</Text>
                 </View>
               </View>
             </View>
           </Animated.View>
-          <Animated.View style={{ transform: [{ translateY: searchTranslate }], backgroundColor: "#FFFFFF" }}>
+          <Animated.View style={{ transform: [{ translateY: searchTranslate }], backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
             <View style={{ paddingHorizontal: 14, paddingVertical: 6 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: "#E8E8E8", borderRadius: 999, paddingHorizontal: 14, height: 38, backgroundColor: "#F5F5F5" }}>
-                <Ionicons name="search" size={18} color="#8C8C8C" />
-                <TextInput style={{ flex: 1, color: "#191919", fontWeight: "600" }} placeholder="Search products, categories..." placeholderTextColor="#8C8C8C" value={searchQuery} onChangeText={setSearchQuery} />
-                {searchQuery.length > 0 && <Pressable onPress={() => setSearchQuery("")}><Ionicons name="close-circle" size={18} color="#8C8C8C" /></Pressable>}
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: theme.color("#E8E8E8", "borderColor"), borderRadius: 999, paddingHorizontal: 14, height: 38, backgroundColor: theme.color("#F5F5F5", "backgroundColor") }}>
+                <Ionicons name="search" size={18} color={theme.color("#8C8C8C")} />
+                <TextInput style={{ flex: 1, color: theme.color("#191919", "color"), fontWeight: "600" }} placeholder="Search products, categories..." placeholderTextColor={theme.color("#8C8C8C")} value={searchQuery} onChangeText={setSearchQuery} />
+                {searchQuery.length > 0 && <Pressable onPress={() => setSearchQuery("")}><Ionicons name="close-circle" size={18} color={theme.color("#8C8C8C")} /></Pressable>}
               </View>
             </View>
-            <View style={{ paddingBottom: 6, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
+            <View style={{ paddingBottom: 6, borderBottomWidth: 1, borderColor: theme.color("#EDEDED", "borderColor") }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
                 {categories.map(cat => (
-                  <Pressable key={cat} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#E8E8E8", backgroundColor: "#FFFFFF" }, selectedCategory === cat && { borderColor: "#FF4747", backgroundColor: "#FFF1F1" }]} onPress={() => setSelectedCategory(cat)}>
-                    <Text style={[{ color: "#595959", fontWeight: "800", fontSize: 12 }, selectedCategory === cat && { color: "#FF4747" }]}>{cat}</Text>
+                  <Pressable key={cat} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: theme.color("#E8E8E8", "borderColor"), backgroundColor: theme.color("#FFFFFF", "backgroundColor") }, selectedCategory === cat && { borderColor: theme.color("#FF4747", "borderColor"), backgroundColor: theme.color("#FFF1F1", "backgroundColor") }]} onPress={() => setSelectedCategory(cat)}>
+                    <Text style={[{ color: theme.color("#595959", "color"), fontWeight: "800", fontSize: 12 }, selectedCategory === cat && { color: theme.color("#FF4747", "color") }]}>{cat}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
             </View>
-            <View style={{ paddingBottom: 7, borderBottomWidth: 1, borderColor: "#EDEDED" }}>
+            <View style={{ paddingBottom: 7, borderBottomWidth: 1, borderColor: theme.color("#EDEDED", "borderColor") }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 12, gap: 8 }}>
                 {([ ["all", "All products"], ["local", "In your country"], ["international", "Ships from abroad"] ] as const).map(([view, label]) => (
-                  <Pressable key={view} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: "#F5F5F5" }, stockView === view && { backgroundColor: "#191919" }]} onPress={() => { setSelectedCategory("All"); setStockView(view); }}>
-                    <Text style={{ color: stockView === view ? "#FFFFFF" : "#595959", fontWeight: "800", fontSize: 12 }}>{label}</Text>
+                  <Pressable key={view} style={[{ height: 32, paddingHorizontal: 14, borderRadius: 999, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("#F5F5F5", "backgroundColor") }, stockView === view && { backgroundColor: theme.color("#191919", "backgroundColor") }]} onPress={() => { setSelectedCategory("All"); setStockView(view); }}>
+                    <Text style={{ color: theme.color(stockView === view ? "#FFFFFF" : "#595959", "color"), fontWeight: "800", fontSize: 12 }}>{label}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -1900,35 +1905,35 @@ function AcrossApp() {
       )}
 
 	  {showFlashSale ? (
-		<View style={{ backgroundColor: "#FFFFFF", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderColor: "#EDEDED", flexDirection: "row", alignItems: "center", gap: 10 }}>
-		  <Pressable onPress={() => setShowFlashSale(false)} accessibilityLabel="Back to shop"><Ionicons name="arrow-back" size={24} color="#191919" /></Pressable>
-		  <View><Text style={{ color: "#191919", fontSize: 22, fontWeight: "900" }}>Flash Sale</Text><Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>Limited-time verified deals</Text></View>
+		<View style={{ backgroundColor: theme.color("#FFFFFF", "backgroundColor"), paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderColor: theme.color("#EDEDED", "borderColor"), flexDirection: "row", alignItems: "center", gap: 10 }}>
+		  <Pressable onPress={() => setShowFlashSale(false)} accessibilityLabel="Back to shop"><Ionicons name="arrow-back" size={24} color={theme.color("#191919")} /></Pressable>
+		  <View><Text style={{ color: theme.color("#191919", "color"), fontSize: 22, fontWeight: "900" }}>Flash Sale</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>Limited-time verified deals</Text></View>
 		</View>
 	  ) : null}
 
       <View style={s.content}>
 		{showFlashSale ? (
 		  <View style={{ flex: 1 }}>
-			<View style={{ margin: 12, backgroundColor: "#F5F5F5", borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center" }}><Ionicons name="search" size={18} color="#8C8C8C" /><TextInput value={flashSaleSearch} onChangeText={setFlashSaleSearch} placeholder="Search flash-sale products" style={s.searchInput} /></View>
+			<View style={{ margin: 12, backgroundColor: theme.color("#F5F5F5", "backgroundColor"), borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center" }}><Ionicons name="search" size={18} color={theme.color("#8C8C8C")} /><TextInput value={flashSaleSearch} onChangeText={setFlashSaleSearch} placeholder="Search flash-sale products" style={s.searchInput} /></View>
 			<Animated.FlatList data={flashSaleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
 			  contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
 			  renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />}
 			  onEndReached={() => { if (flashSaleHasMore && !flashSaleLoading) void loadFlashSales(false); }} onEndReachedThreshold={0.4}
 			  refreshControl={<RefreshControl refreshing={flashSaleLoading && flashSaleProducts.length > 0} onRefresh={() => { void loadFlashSales(true); }} tintColor="#FF4747" />}
-			  ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="flash-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{flashSaleLoading ? "Loading deals..." : "No flash-sale products right now"}</Text></View>} />
+			  ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="flash-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{flashSaleLoading ? "Loading deals..." : "No flash-sale products right now"}</Text></View>} />
 		  </View>
 		) : activeTab === "home" && (
           <Animated.FlatList data={visibleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
-            ListHeaderComponent={<><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: "#FFFFFF" }}>
+            ListHeaderComponent={<><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: "#191919", fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
-                <Text style={{ color: "#8C8C8C", fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
+                <Text style={{ color: theme.color("#191919", "color"), fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
+                <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
 			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
-            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalLoading ? "Loading products..." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{stockView !== "international" && productFeed.status === "error" && <Pressable onPress={() => void loadProducts(true)}><Text style={{color: "#FF4747", padding: 12}}>Try again</Text></Pressable>}</View>}
+            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalLoading ? "Loading products..." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{stockView !== "international" && productFeed.status === "error" && <Pressable onPress={() => void loadProducts(true)}><Text style={{color: theme.color("#FF4747", "color"), padding: 12}}>Try again</Text></Pressable>}</View>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
@@ -1937,25 +1942,25 @@ function AcrossApp() {
         {activeTab === "cart" && (
           <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             {cart.length === 0 && !quote ? (
-              <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color="#BFBFBF" /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
+              <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
             ) : (
               <>
               <Text style={[s.muted, {marginBottom:12}]}>All your items are saved here. Items from the same seller and delivery route are paid for together. Other groups have separate payments and tracking.</Text>
               {cartGroups.map((group,index) => (<View key={group.key}>
-                <Pressable accessibilityRole="radio" accessibilityState={{selected:group.key===activeCartGroup,disabled:!!quote || busy || paymentBusy}} disabled={!!quote || busy || paymentBusy} onPress={()=>setSelectedCartGroup(group.key)} style={[s.panel,{borderWidth:1,borderColor:group.key===activeCartGroup?"#12805F":"#E5E7EB",marginBottom:8}]}>
+                <Pressable accessibilityRole="radio" accessibilityState={{selected:group.key===activeCartGroup,disabled:!!quote || busy || paymentBusy}} disabled={!!quote || busy || paymentBusy} onPress={()=>setSelectedCartGroup(group.key)} style={[s.panel,{borderWidth:1,borderColor: theme.color(group.key===activeCartGroup?"#12805F":"#E5E7EB", "borderColor"),marginBottom:8}]}>
                   <Text style={s.panelTitle}>{group.key===activeCartGroup?"✓ ":""}{group.items[0].product.provider_name || `Checkout group ${index+1}`} · {group.items[0].product.fulfillment_mode==="merchant_local"?"Local delivery":"Imported delivery"}</Text>
                   <Text style={s.muted}>{group.items.length} {group.items.length===1?"product":"products"} · {group.items[0].product.currency}. {group.key===activeCartGroup?"Total below is for this group.":quote?"Saved for after the current payment.":"Tap to review and pay for this group."}</Text>
                 </Pressable>
-                {group.items.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color="#191919" /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color="#191919" /></Pressable></View></View></View>))}</View>))}
+                {group.items.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color={theme.color("#191919")} /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color={theme.color("#191919")} /></Pressable></View></View></View>))}</View>))}
               <View style={s.panel}>
                 <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
-                {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: "#12805F"}]}>-{money(displayedXPDiscount, quote?.currency || checkoutItems[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
-                {xpEnabled && !quote && <Pressable accessibilityRole="checkbox" accessibilityState={{checked: useXP, disabled: busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1}} disabled={busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1} onPress={() => setUseXP(value => !value)} style={{flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12}}><Ionicons name={useXP ? "checkbox" : "square-outline"} size={22} color="#12805F" /><View style={{flex: 1}}><Text style={{fontWeight: "800", color: "#191919"}}>Use XP - {xpBalance} available</Text><Text style={s.muted}>Up to {Math.min(xpBalance, Math.floor(totals.platformFee))} XP off the service fee. Seller prices and gateway charges stay payable.</Text></View></Pressable>}
+                {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: theme.color("#12805F", "color")}]}>-{money(displayedXPDiscount, quote?.currency || checkoutItems[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
+                {xpEnabled && !quote && <Pressable accessibilityRole="checkbox" accessibilityState={{checked: useXP, disabled: busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1}} disabled={busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1} onPress={() => setUseXP(value => !value)} style={{flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12}}><Ionicons name={useXP ? "checkbox" : "square-outline"} size={22} color={theme.color("#12805F")} /><View style={{flex: 1}}><Text style={{fontWeight: "800", color: theme.color("#191919", "color")}}>Use XP - {xpBalance} available</Text><Text style={s.muted}>Up to {Math.min(xpBalance, Math.floor(totals.platformFee))} XP off the service fee. Seller prices and gateway charges stay payable.</Text></View></Pressable>}
                 <View style={s.metric}><Text style={s.metricLabel}>Total</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, checkoutItems[0]?.product.currency)}</Text></View>
 				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
-				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: "#12805F", fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
+				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: theme.color("#12805F", "color"), fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
 				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
                 <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -1969,7 +1974,7 @@ function AcrossApp() {
                     <Text style={s.secondaryButtonText}>Check payment status</Text>
                   </Pressable>
                 ) : null}
-                {paymentMessage ? <Text style={{ marginTop: 10, color: paymentState === "failed" ? "#B42318" : "#30423D", fontWeight: "700" }}>{paymentMessage}</Text> : null}
+                {paymentMessage ? <Text style={{ marginTop: 10, color: theme.color(paymentState === "failed" ? "#B42318" : "#30423D", "color"), fontWeight: "700" }}>{paymentMessage}</Text> : null}
               </View></>
             )}
           </ScrollView>
@@ -1981,26 +1986,26 @@ function AcrossApp() {
           <ScrollView ref={accountScrollRef} alwaysBounceVertical keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
               <Pressable onPress={pickAvatar}>
-                {profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: "#F0F0F0" }} />
-                : <View style={s.accountAvatar}><Ionicons name="person" size={28} color="#FFF" /></View>}
+                {profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: theme.color("#F0F0F0", "backgroundColor") }} />
+                : <View style={s.accountAvatar}><Ionicons name="person" size={28} color={theme.color("#FFF")} /></View>}
               </Pressable>
               <View style={{ flex: 1 }}>
                 <Text style={s.accountName}>{profileName || "Atlantic Express buyer"}</Text>
                 <Text style={s.accountMeta}>{profileRegion || "Nigeria"} · {profilePhone || "Add phone"}</Text>
               </View>
-              <Pressable onPress={() => setEditingProfile(true)} style={{ padding: 8 }}><Ionicons name="create-outline" size={22} color="#FF4747" /></Pressable>
+              <Pressable onPress={() => setEditingProfile(true)} style={{ padding: 8 }}><Ionicons name="create-outline" size={22} color={theme.color("#FF4747")} /></Pressable>
             </View>
             {editingProfile && (
               <View style={s.panel}>
                 <Text style={s.panelTitle}>Edit Profile</Text>
                 <Pressable onPress={pickAvatar} style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                  <Ionicons name="camera-outline" size={24} color="#FF4747" />
-                  <Text style={{ color: "#FF4747", fontWeight: "700" }}>Change profile picture</Text>
+                  <Ionicons name="camera-outline" size={24} color={theme.color("#FF4747")} />
+                  <Text style={{ color: theme.color("#FF4747", "color"), fontWeight: "700" }}>Change profile picture</Text>
                 </Pressable>
                 <TextInput style={s.input} value={profileName} onChangeText={setProfileName} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Full name" />
                 <TextInput style={s.input} value={profilePhone} onChangeText={setProfilePhone} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Phone number" keyboardType="phone-pad" />
-                <Text style={{ marginBottom: 8, fontWeight: "700", color: "#30423D" }}>Delivery country and checkout currency</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => { if (profileCountryCode !== market.country_code) { setProfileCountryCode(market.country_code); setProfileAddress(""); setProfileCity(""); setProfileState(""); setProfilePostalCode(""); } }} style={[s.secondaryButton, { marginRight: 8, borderColor: profileCountryCode === market.country_code ? "#12805F" : "#D0D5DD" }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView>
+                <Text style={{ marginBottom: 8, fontWeight: "700", color: theme.color("#30423D", "color") }}>Delivery country and checkout currency</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => { if (profileCountryCode !== market.country_code) { setProfileCountryCode(market.country_code); setProfileAddress(""); setProfileCity(""); setProfileState(""); setProfilePostalCode(""); } }} style={[s.secondaryButton, { marginRight: 8, borderColor: theme.color(profileCountryCode === market.country_code ? "#12805F" : "#D0D5DD", "borderColor") }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView>
                 <TextInput style={s.input} value={profileRegion} onChangeText={setProfileRegion} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Region" />
                 <TextInput style={s.input} value={profileAddress} onChangeText={setProfileAddress} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="Street address" />
                 <TextInput style={s.input} value={profileCity} onChangeText={setProfileCity} onFocus={event => revealFocusedInput(accountScrollRef, event.nativeEvent.target)} placeholder="City" />
@@ -2016,35 +2021,42 @@ function AcrossApp() {
             <View style={s.panel}>
               {xpReserved > 0 && <Text style={s.muted}>{xpReserved} XP reserved for pending checkout. Points are spent only after confirmed payment.</Text>}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: "#FF4747" }}>{xpBalance} XP</Text><Text style={{ color: "#8C8C8C", fontSize: 13, fontWeight: "700" }}>Up to NGN {xpBalance} in eligible service-fee discounts</Text></View>
+                <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: theme.color("#FF4747", "color") }}>{xpBalance} XP</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 13, fontWeight: "700" }}>Up to NGN {xpBalance} in eligible service-fee discounts</Text></View>
                 <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
-              <Text style={{ marginTop: 12, color: "#66736F", fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1 off Atlantic Express service fee on eligible NGN product orders, capped at the order service fee. XP cannot pay for products, delivery or Flutterwave charges and cannot be withdrawn. Unused points stay in your balance. Claim 1 XP daily; your first product or completed-service review earns 10 XP. New accounts receive a one-time 650 XP welcome bonus. Purchase rewards: below ₦1,000 = 1 XP; ₦1,000–₦9,999 = 2 XP; ₦10,000–₦99,999 = 5 XP; ₦100,000–₦499,999 = 10 XP; ₦500,000+ = 25 XP.</Text>
+              <Text style={{ marginTop: 12, color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1 off Atlantic Express service fee on eligible NGN product orders, capped at the order service fee. XP cannot pay for products, delivery or Flutterwave charges and cannot be withdrawn. Unused points stay in your balance. Claim 1 XP daily; your first product or completed-service review earns 10 XP. New accounts receive a one-time 650 XP welcome bonus. Purchase rewards: below ₦1,000 = 1 XP; ₦1,000–₦9,999 = 2 XP; ₦10,000–₦99,999 = 5 XP; ₦100,000–₦499,999 = 10 XP; ₦500,000+ = 25 XP.</Text>
+            </View>
+            <View style={s.panel}>
+              <Text style={s.panelTitle}>Appearance</Text>
+              <Text style={s.muted}>Choose a theme or follow your phone settings.</Text>
+              <View style={{flexDirection:"row",gap:8,marginTop:12}}>
+                {(["system","light","dark"] as const).map(choice=><Pressable key={choice} accessibilityRole="radio" accessibilityState={{checked:theme.preference===choice}} onPress={()=>theme.setPreference(choice)} style={[s.secondaryButton,{flex:1},theme.preference===choice && s.primaryButtonSmall]}><Text style={theme.preference===choice ? s.primaryButtonText : s.secondaryButtonText}>{choice[0].toUpperCase()+choice.slice(1)}</Text></Pressable>)}
+              </View>
             </View>
             <View style={s.panel}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-                <View style={{ flex: 1 }}><Text style={s.panelTitle}>Notification sound</Text><Text style={{ color: "#66736F", fontSize: 12, lineHeight: 18 }}>Play a sound for orders, messages, services and account updates.</Text></View>
+                <View style={{ flex: 1 }}><Text style={s.panelTitle}>Notification sound</Text><Text style={{ color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>Play a sound for orders, messages, services and account updates.</Text></View>
                 <Pressable style={[s.primaryButtonSmall, !soundEnabled && s.secondaryButton]} onPress={() => void toggleNotificationSound()}><Text style={soundEnabled ? s.primaryButtonText : s.secondaryButtonText}>{soundEnabled ? "On" : "Off"}</Text></Pressable>
               </View>
-              {!!notificationStatus && <Text accessibilityRole="alert" style={{color:"#66736F",fontSize:12,lineHeight:18,marginTop:10}}>{notificationStatus}</Text>}
+              {!!notificationStatus && <Text accessibilityRole="alert" style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>{notificationStatus}</Text>}
               <View style={{flexDirection:"row",gap:10,marginTop:10}}>
                 <Pressable disabled={notificationTestBusy} style={[s.secondaryButton,{flex:1},notificationTestBusy && s.disabled]} onPress={()=>void testNotificationSound()}><Text style={s.secondaryButtonText}>{notificationTestBusy ? "Testing..." : "Test sound"}</Text></Pressable>
                 <Pressable style={[s.secondaryButton,{flex:1}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert("Phone settings", "Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Order updates."))}><Text style={s.secondaryButtonText}>Phone settings</Text></Pressable>
               </View>
-              <Text style={{color:"#66736F",fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Order updates, and check your notification volume and Do Not Disturb setting.</Text>
+              <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Order updates, and check your notification volume and Do Not Disturb setting.</Text>
             </View>
             <View style={s.quickLinks}>
-              <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color="#FF4747"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments, references and XP discounts</Text></View><Ionicons name="chevron-forward" size={18} color="#BFBFBF"/></Pressable>
+              <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color={theme.color("#FF4747")}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments, references and XP discounts</Text></View><Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")}/></Pressable>
               {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
                 { tab: "support" as Tab, label: "Support", icon: "chatbubble-ellipses-outline" as const, meta: "Contact us" }
               ].map(link => (
                 <Pressable key={link.tab} style={s.quickLinkCard} onPress={() => setActiveTab(link.tab)}>
-                  <Ionicons name={link.icon} size={22} color="#FF4747" /><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{link.label}</Text><Text style={s.quickLinkMeta}>{link.meta}</Text></View>
-                  <Ionicons name="chevron-forward" size={18} color="#BFBFBF" />
+                  <Ionicons name={link.icon} size={22} color={theme.color("#FF4747")} /><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{link.label}</Text><Text style={s.quickLinkMeta}>{link.meta}</Text></View>
+                  <Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")} />
                 </Pressable>
               ))}
             </View>
-            <Pressable style={s.logoutButton} onPress={logout}><Ionicons name="log-out-outline" size={18} color="#FF4747" /><Text style={s.logoutButtonText}>Sign out</Text></Pressable>
+            <Pressable style={s.logoutButton} onPress={logout}><Ionicons name="log-out-outline" size={18} color={theme.color("#FF4747")} /><Text style={s.logoutButtonText}>Sign out</Text></Pressable>
           </ScrollView>
           </KeyboardAvoidingView>
         )}
@@ -2053,35 +2065,35 @@ function AcrossApp() {
           <ScrollView ref={trackScrollRef} alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.panel}><Text style={s.kicker}>Orders</Text><Text style={s.panelTitle}>Purchase history and tracking</Text></View>
             {orders.length === 0 ? (
-              <View style={s.panel}><Text style={{ color: "#8C8C8C" }}>No orders found yet. Pull down to refresh after payment.</Text></View>
+              <View style={s.panel}><Text style={{ color: theme.color("#8C8C8C", "color") }}>No orders found yet. Pull down to refresh after payment.</Text></View>
             ) : orders.map(order => {
               const { stages, currentIndex } = trackingProgress(order);
               return (
-                <View key={order.id} onLayout={event => { orderOffsetsRef.current[order.id] = event.nativeEvent.layout.y; }} style={[s.panel, focusedOrderId === order.id && { borderWidth: 2, borderColor: "#FF4747" }]}>
+                <View key={order.id} onLayout={event => { orderOffsetsRef.current[order.id] = event.nativeEvent.layout.y; }} style={[s.panel, focusedOrderId === order.id && { borderWidth: 2, borderColor: theme.color("#FF4747", "borderColor") }]}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 12 }}>
                     <View style={{ flex: 1 }}>
                       <Text style={s.panelTitle}>{order.items_summary || `${order.item_count} item(s)`}</Text>
-                      <Text style={{ marginTop: 4, color: "#8C8C8C", fontSize: 12 }}>{new Date(order.created_at).toLocaleString()}</Text>
+                      <Text style={{ marginTop: 4, color: theme.color("#8C8C8C", "color"), fontSize: 12 }}>{new Date(order.created_at).toLocaleString()}</Text>
                     </View>
-                    <Text style={{ color: order.order_status === "Paid" ? "#12805F" : "#B54708", fontWeight: "900" }}>{order.order_status}</Text>
+                    <Text style={{ color: theme.color(order.order_status === "Paid" ? "#12805F" : "#B54708", "color"), fontWeight: "900" }}>{order.order_status}</Text>
                   </View>
-                  <Text style={{ marginTop: 10, color: "#191919", fontWeight: "900" }}>{money(order.total_amount, order.currency)}</Text>
-                  {!!order.package_label && <Text style={{ marginTop: 4, color: "#66736F", fontSize: 12 }}>Package: {order.package_label}</Text>}
+                  <Text style={{ marginTop: 10, color: theme.color("#191919", "color"), fontWeight: "900" }}>{money(order.total_amount, order.currency)}</Text>
+                  {!!order.package_label && <Text style={{ marginTop: 4, color: theme.color("#66736F", "color"), fontSize: 12 }}>Package: {order.package_label}</Text>}
                   {!!order.fulfillment && (
-                    <View style={{ marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: "#F3F8F6", borderWidth: 1, borderColor: "#D9E9E2" }}>
-                      <Text style={{ color: "#66736F", fontSize: 12, fontWeight: "800" }}>{fulfillmentRouteLabel(order.fulfillment.route)}</Text>
-                      <Text style={{ marginTop: 4, color: "#101817", fontSize: 16, fontWeight: "900" }}>{readableFulfillmentStatus(order.fulfillment.status)}</Text>
+                    <View style={{ marginTop: 14, padding: 12, borderRadius: 12, backgroundColor: theme.color("#F3F8F6", "backgroundColor"), borderWidth: 1, borderColor: theme.color("#D9E9E2", "borderColor") }}>
+                      <Text style={{ color: theme.color("#66736F", "color"), fontSize: 12, fontWeight: "800" }}>{fulfillmentRouteLabel(order.fulfillment.route)}</Text>
+                      <Text style={{ marginTop: 4, color: theme.color("#101817", "color"), fontSize: 16, fontWeight: "900" }}>{readableFulfillmentStatus(order.fulfillment.status)}</Text>
                       {order.fulfillment.route === "merchant_cross_border" && order.seller_funds && order.seller_funds.status !== "settled" && (
                         <View style={{ marginTop: 8 }}>
-                          <Text style={{ color: "#B54708", fontWeight: "800" }}>
+                          <Text style={{ color: theme.color("#B54708", "color"), fontWeight: "800" }}>
                             {order.seller_funds.status === "failed" || order.seller_funds.status === "reversed" ? "Seller payout needs attention" : "Payment confirmed — seller settlement pending"}
                           </Text>
-                          <Text style={{ marginTop: 4, color: "#4E625C" }}>You have already paid. The seller must receive the payout before purchasing or dispatching this imported order. You do not need to pay again.</Text>
+                          <Text style={{ marginTop: 4, color: theme.color("#4E625C", "color") }}>You have already paid. The seller must receive the payout before purchasing or dispatching this imported order. You do not need to pay again.</Text>
                         </View>
                       )}
-                      {!!order.fulfillment.current_location && <Text style={{ marginTop: 4, color: "#4E625C" }}>Current location: {order.fulfillment.current_location}</Text>}
-                      {!!order.fulfillment.carrier && <Text style={{ marginTop: 3, color: "#4E625C" }}>Carrier: {order.fulfillment.carrier}{order.fulfillment.tracking_number ? ` · ${order.fulfillment.tracking_number}` : ""}</Text>}
-                      {!!order.fulfillment.estimated_delivery_at && <Text style={{ marginTop: 3, color: "#4E625C" }}>Estimated delivery: {new Date(order.fulfillment.estimated_delivery_at).toLocaleDateString()}</Text>}
+                      {!!order.fulfillment.current_location && <Text style={{ marginTop: 4, color: theme.color("#4E625C", "color") }}>Current location: {order.fulfillment.current_location}</Text>}
+                      {!!order.fulfillment.carrier && <Text style={{ marginTop: 3, color: theme.color("#4E625C", "color") }}>Carrier: {order.fulfillment.carrier}{order.fulfillment.tracking_number ? ` · ${order.fulfillment.tracking_number}` : ""}</Text>}
+                      {!!order.fulfillment.estimated_delivery_at && <Text style={{ marginTop: 3, color: theme.color("#4E625C", "color") }}>Estimated delivery: {new Date(order.fulfillment.estimated_delivery_at).toLocaleDateString()}</Text>}
                     </View>
                   )}
                   <View style={[s.timeline, { marginTop: 16 }]}>{stages.map((stageName, index) => {
@@ -2089,20 +2101,20 @@ function AcrossApp() {
                     return (<View key={stageName} style={s.timelineItem}>
                       <View style={[s.dot, done && s.doneDot]} />
                       {index !== stages.length - 1 && <View style={[s.line, done && s.doneLine]} />}
-                      <View style={s.timelineText}><Text style={s.timelineTitle}>{stageName}</Text>{index === currentIndex && <Text style={{ color: "#12805F", fontSize: 12, fontWeight: "800" }}>Current stage</Text>}</View>
+                      <View style={s.timelineText}><Text style={s.timelineTitle}>{stageName}</Text>{index === currentIndex && <Text style={{ color: theme.color("#12805F", "color"), fontSize: 12, fontWeight: "800" }}>Current stage</Text>}</View>
                     </View>);
                   })}</View>
                   {deliveryConfirmOrder?.id === order.id && (
-                    <View style={{ marginTop: 16, padding: 14, borderRadius: 12, backgroundColor: "#FFF5F5", borderWidth: 1, borderColor: "#FFD6D6" }}>
-                      <Text style={{ fontSize: 16, fontWeight: "900", color: "#191919" }}>Did you receive this package?</Text>
-                      <Text style={{ marginTop: 6, color: "#595959", lineHeight: 19 }}>Confirm only after you have collected and checked this order. Confirmation completes its tracking record and unlocks your review reward.</Text>
+                    <View style={{ marginTop: 16, padding: 14, borderRadius: 12, backgroundColor: theme.color("#FFF5F5", "backgroundColor"), borderWidth: 1, borderColor: theme.color("#FFD6D6", "borderColor") }}>
+                      <Text style={{ fontSize: 16, fontWeight: "900", color: theme.color("#191919", "color") }}>Did you receive this package?</Text>
+                      <Text style={{ marginTop: 6, color: theme.color("#595959", "color"), lineHeight: 19 }}>Confirm only after you have collected and checked this order. Confirmation completes its tracking record and unlocks your review reward.</Text>
                       <View style={{ flexDirection: "row", gap: 10, marginTop: 14 }}>
-                        <Pressable style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: "#FFFFFF", alignItems: "center" }} onPress={() => {
+                        <Pressable style={{ flex: 1, padding: 12, borderRadius: 10, backgroundColor: theme.color("#FFFFFF", "backgroundColor"), alignItems: "center" }} onPress={() => {
                           setSupportSubject("Delivery issue");
                           setSupportMessage(`I did not receive my order ${order.id}. Please help.`);
                           setActiveTab("support");
                         }}>
-                          <Text style={{ fontWeight: "800", color: "#595959" }}>Not received</Text>
+                          <Text style={{ fontWeight: "800", color: theme.color("#595959", "color") }}>Not received</Text>
                         </Pressable>
                         <Pressable style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]} onPress={() => confirmDelivery(order.id)} disabled={busy}>
                           <Text style={s.primaryButtonText}>{busy ? "Confirming…" : "Yes, received!"}</Text>
@@ -2131,13 +2143,13 @@ function AcrossApp() {
                 <View style={s.panel}>
                   <Text style={s.panelTitle}>Your conversations</Text>
                   <Pressable style={[s.primaryButtonSmall, {marginVertical: 10}]} onPress={() => setShowSupportForm(true)}><Text style={s.primaryButtonText}>New conversation</Text></Pressable>
-                  {supportError ? <Text style={{color: "#B42318"}}>{supportError}</Text> : null}
-                  {supportLoading ? <ActivityIndicator color="#FF4747" /> : null}
-                  {supportTickets.length === 0 && !supportLoading && !supportError ? <Text style={{ color: "#8C8C8C", marginTop: 8 }}>No tickets yet.</Text>
+                  {supportError ? <Text style={{color: theme.color("#B42318", "color")}}>{supportError}</Text> : null}
+                  {supportLoading ? <ActivityIndicator color={theme.color("#FF4747")} /> : null}
+                  {supportTickets.length === 0 && !supportLoading && !supportError ? <Text style={{ color: theme.color("#8C8C8C", "color"), marginTop: 8 }}>No tickets yet.</Text>
                   : supportTickets.map(ticket => (
                     <Pressable key={ticket.id} style={s.quickLinkCard} onPress={async () => { setTicketMessages([]); setSupportCursor(""); setSupportError(""); setSelectedTicket(ticket); }}>
                       <View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{ticket.subject}</Text><Text style={s.quickLinkMeta}>{ticket.status} · {new Date(ticket.created_at).toLocaleDateString()}</Text></View>
-                      <Ionicons name="chevron-forward" size={18} color="#BFBFBF" />
+                      <Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")} />
                     </Pressable>
                   ))}
                   {!!ticketListCursor && <Pressable disabled={supportLoading} onPress={() => { void loadSupportTickets(ticketListCursor); }} style={s.secondaryButton}><Text style={s.secondaryButtonText}>Load earlier conversations</Text></Pressable>}
@@ -2173,7 +2185,7 @@ function AcrossApp() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
 			<Pressable key={item.key} style={s.bottomNavItem} onPress={() => { setShowFlashSale(false); setActiveTab(item.key); }}>
-              <View style={s.bottomNavIconWrap}>{item.key === "account" && profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 24, height: 24, borderRadius: 12, borderWidth: active ? 2 : 0, borderColor: "#FF4747", backgroundColor: "#F0F0F0" }} /> : <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={active ? "#FF4747" : "#8C8C8C"} />}{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
+              <View style={s.bottomNavIconWrap}>{item.key === "account" && profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 24, height: 24, borderRadius: 12, borderWidth: active ? 2 : 0, borderColor: theme.color("#FF4747", "borderColor"), backgroundColor: theme.color("#F0F0F0", "backgroundColor") }} /> : <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={theme.color(active ? "#FF4747" : "#8C8C8C")} />}{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
               <Text style={[s.bottomNavLabel, active && s.bottomNavLabelActive]}>{item.label}</Text>
             </Pressable>
           ); })}
@@ -2182,18 +2194,18 @@ function AcrossApp() {
 
       {/* Delivery Confirm Modal */}
       {false && deliveryConfirmOrder && (
-        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center", zIndex: 200, padding: 24 }}>
-          <View style={{ backgroundColor: "#FFFFFF", borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 }}>
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: theme.color("rgba(0,0,0,0.5)", "backgroundColor"), justifyContent: "center", alignItems: "center", zIndex: 200, padding: 24 }}>
+          <View style={{ backgroundColor: theme.color("#FFFFFF", "backgroundColor"), borderRadius: 16, padding: 24, width: "100%", maxWidth: 340 }}>
             <View style={{ alignItems: "center", marginBottom: 16 }}>
-              <Ionicons name="checkmark-circle" size={48} color="#12805F" />
+              <Ionicons name="checkmark-circle" size={48} color={theme.color("#12805F")} />
             </View>
-            <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: "#191919" }}>Package Delivered?</Text>
-            <Text style={{ marginTop: 8, fontSize: 14, color: "#595959", textAlign: "center", lineHeight: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: theme.color("#191919", "color") }}>Package Delivered?</Text>
+            <Text style={{ marginTop: 8, fontSize: 14, color: theme.color("#595959", "color"), textAlign: "center", lineHeight: 20 }}>
               Did you receive your package? Confirming unlocks your review reward. Leave a review to earn 10 XP for eligible Atlantic Express service-fee discounts.
             </Text>
             <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
               <Pressable
-                style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#F5F5F5", alignItems: "center" }}
+                style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: theme.color("#F5F5F5", "backgroundColor"), alignItems: "center" }}
                 onPress={() => {
                   setDeliveryConfirmOrder(null);
                   setSupportSubject("Delivery issue");
@@ -2201,7 +2213,7 @@ function AcrossApp() {
                   setActiveTab("support");
                 }}
               >
-                <Text style={{ fontWeight: "800", color: "#595959" }}>Not received</Text>
+                <Text style={{ fontWeight: "800", color: theme.color("#595959", "color") }}>Not received</Text>
               </Pressable>
               <Pressable
                 style={[s.primaryButtonSmall, { flex: 1 }, busy && s.disabled]}
@@ -2216,12 +2228,12 @@ function AcrossApp() {
       )}
 
       <Modal visible={showDiscountOffer} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
-        <View style={{ flex: 1, padding: 22, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.58)" }}>
-          <View style={{ width: "100%", maxWidth: 360, borderRadius: 22, padding: 24, backgroundColor: "#FFFFFF" }}>
-            <Pressable style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", zIndex: 2 }} onPress={() => setShowDiscountOffer(false)} accessibilityLabel="Close discount offer"><Ionicons name="close" size={24} color="#595959" /></Pressable>
-            <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: "#FFF1F1" }}><Ionicons name="flash" size={28} color="#FF4747" /></View>
-            <Text style={{ marginTop: 18, color: "#191919", fontSize: 26, lineHeight: 32, fontWeight: "900" }}>Today’s super discount</Text>
-            <Text style={{ marginTop: 10, color: "#595959", fontSize: 15, lineHeight: 22 }}>Save up to {bestFlashDiscount}% on live Flash Sale products while stock lasts.</Text>
+        <View style={{ flex: 1, padding: 22, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("rgba(0,0,0,0.58)", "backgroundColor") }}>
+          <View style={{ width: "100%", maxWidth: 360, borderRadius: 22, padding: 24, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
+            <Pressable style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", zIndex: 2 }} onPress={() => setShowDiscountOffer(false)} accessibilityLabel="Close discount offer"><Ionicons name="close" size={24} color={theme.color("#595959")} /></Pressable>
+            <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("#FFF1F1", "backgroundColor") }}><Ionicons name="flash" size={28} color={theme.color("#FF4747")} /></View>
+            <Text style={{ marginTop: 18, color: theme.color("#191919", "color"), fontSize: 26, lineHeight: 32, fontWeight: "900" }}>Today’s super discount</Text>
+            <Text style={{ marginTop: 10, color: theme.color("#595959", "color"), fontSize: 15, lineHeight: 22 }}>Save up to {bestFlashDiscount}% on live Flash Sale products while stock lasts.</Text>
             <Pressable style={[s.primaryButton, { marginTop: 22 }]} onPress={() => { setShowDiscountOffer(false); void openFlashSale(); }}><Text style={s.primaryButtonText}>Shop verified deals</Text></Pressable>
           </View>
         </View>

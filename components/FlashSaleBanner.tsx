@@ -1,5 +1,6 @@
+import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import {View,  ScrollView, Pressable, StyleSheet} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Product } from "./types";
 import { money } from "./utils";
@@ -12,14 +13,16 @@ interface Props {
 }
 
 export function FlashSaleBanner({ flashSales, onSelectProduct, onViewAll }: Props) {
+  const theme = useTheme();
+  const styles = useThemedStyles(baseStyles);
   if (flashSales.length === 0) return null;
 
   return (
     <View style={styles.banner}>
       <View style={styles.header}>
-        <Ionicons name="flash" size={20} color="#FFFFFF" />
+        <Ionicons name="flash" size={20} color={theme.color("#FFFFFF")} />
         <Text style={styles.title}>Flash Sale</Text>
-		<Pressable onPress={onViewAll} style={styles.viewAll}><Text style={styles.subtitle}>View all</Text><Ionicons name="chevron-forward" size={14} color="#FFFFFF" /></Pressable>
+		<Pressable onPress={onViewAll} style={styles.viewAll}><Text style={styles.subtitle}>View all</Text><Ionicons name="chevron-forward" size={14} color={theme.color("#FFFFFF")} /></Pressable>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {flashSales.slice(0, 8).map((p) => (
@@ -43,7 +46,7 @@ export function FlashSaleBanner({ flashSales, onSelectProduct, onViewAll }: Prop
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   banner: { backgroundColor: "#FF4747", paddingVertical: 12, paddingLeft: 14, marginBottom: 8 },
   header: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
   title: { color: "#FFFFFF", fontSize: 18, fontWeight: "900" },

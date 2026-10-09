@@ -1,5 +1,6 @@
+import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import {ActivityIndicator, Pressable, StyleSheet,  View} from "react-native";
 import { ReviewStars } from "./ReviewStars";
 import { API_URL } from "./config";
 import { fetchWithTimeout } from "./utils";
@@ -8,6 +9,8 @@ import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 type Review = { id: string; rating: number; review_text: string; reviewer_name: string; created_at: string };
 
 export function ServiceReviews({ listingId }: { listingId: string }) {
+  const theme = useTheme();
+  const styles = useThemedStyles(baseStyles);
   const [items, setItems] = useState<Review[]>([]);
   const [cursor, setCursor] = useState("");
   const [busy, setBusy] = useState(false);
@@ -46,11 +49,11 @@ export function ServiceReviews({ listingId }: { listingId: string }) {
     </View>)}
     {!busy && !error && !items.length && <Text style={styles.body}>No reviews yet. After your service is completed, open My requests to share your experience.</Text>}
     {!!error && <><Text style={styles.error}>{error}</Text><Pressable disabled={busy} onPress={() => void load()} style={styles.button}><Text style={styles.score}>Retry reviews</Text></Pressable></>}
-    {busy && <ActivityIndicator color="#FF4747" />}
+    {busy && <ActivityIndicator color={theme.color("#FF4747")} />}
     {!!cursor && !error && <Pressable disabled={busy} onPress={() => void load(cursor)} style={styles.button}><Text style={styles.score}>More reviews</Text></Pressable>}
   </View>;
 }
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   section: { marginTop: 8, padding: 16, backgroundColor: "#FFF" },
   title: { fontSize: 17, fontWeight: "900", color: "#191919" },
   help: { fontSize: 12, color: "#777", marginTop: 4 },

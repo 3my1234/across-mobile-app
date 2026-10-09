@@ -7,7 +7,7 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/atlantic-express-logo.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": false,
     "assetBundlePatterns": [
       "**/*"

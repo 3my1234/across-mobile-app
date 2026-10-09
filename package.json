@@ -16,7 +16,8 @@
     "test:marketplace": "node scripts/test-provider-chat.cjs && node scripts/test-product-loading.cjs && node scripts/test-product-chat-options.cjs",
     "test:checkout": "node scripts/test-cart-review.cjs",
     "test:notifications": "node scripts/test-notification-setup.cjs",
-    "ios": "expo run:ios"
+    "ios": "expo run:ios",
+    "test:theme": "node scripts/test-theme.cjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
@@ -38,6 +39,7 @@
     "expo-notifications": "~0.32.17",
     "expo-secure-store": "~15.0.7",
     "expo-status-bar": "~3.0.8",
+    "expo-system-ui": "~6.0.9",
     "expo-web-browser": "~15.0.9",
     "fast-text-encoding": "^1.0.6",
     "react": "19.1.0",

@@ -1,10 +1,10 @@
+import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {mergeChatMessages} from "./chatImages";
 import { ProviderConversation } from "./ProviderConversation";
 import { servicePriceLabel } from "./servicePricing";
 import { ReviewStars } from "./ReviewStars";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
+import {ActivityIndicator,
   AppState,
   Alert,
   FlatList,
@@ -15,11 +15,10 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
+
+
   useWindowDimensions,
-  View
-} from "react-native";
+  View} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 import { API_URL, BOTTOM_NAV_HEIGHT } from "./config";
@@ -119,6 +118,8 @@ function bookingQuantityCopy(listingType: string) {
 }
 
 export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore" }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages" }) {
+  const theme = useTheme();
+  const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
   const [mode, setMode] = useState<"explore" | "requests" | "messages">(initialMode);
   const [items, setItems] = useState<Listing[]>([]);
@@ -631,12 +632,12 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           <ServiceReviews listingId={selected.id} />
           {requiresSafetyAcknowledgement && (
             <View style={styles.warning}>
-              <Ionicons name="warning" size={22} color="#9A5B00" />
+              <Ionicons name="warning" size={22} color={theme.color("#9A5B00")} />
               <View style={styles.grow}>
                 <Text style={styles.warningTitle}>Inspect and verify before you pay</Text>
                 <Text style={styles.warningText}>{selected.safety_warning || "Inspect the property in person and verify the provider's authority to offer it. Do not make advance payments before verification."}</Text>
                 <Pressable style={styles.checkRow} onPress={() => setSafetyAcknowledged(value => !value)} accessibilityRole="checkbox" accessibilityState={{ checked: safetyAcknowledged }}>
-                  <Ionicons name={safetyAcknowledged ? "checkbox" : "square-outline"} size={23} color="#FF4747" />
+                  <Ionicons name={safetyAcknowledged ? "checkbox" : "square-outline"} size={23} color={theme.color("#FF4747")} />
                   <Text style={styles.grow}>I understand this safety notice.</Text>
                 </Pressable>
               </View>
@@ -647,7 +648,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               <Text style={styles.sectionTitle}>Choose a date and time</Text>
               {slots.length ? slots.map(slot => (
                 <Pressable key={slot.id} onPress={() => setSlotId(current => current === slot.id ? "" : slot.id)} style={[styles.slot, slotId === slot.id && styles.slotActive]}>
-                  <Ionicons name={slotId === slot.id ? "radio-button-on" : "radio-button-off"} size={20} color="#FF4747" />
+                  <Ionicons name={slotId === slot.id ? "radio-button-on" : "radio-button-off"} size={20} color={theme.color("#FF4747")} />
                   <Text style={styles.grow}>{new Date(slot.starts_at).toLocaleString()} · {slot.remaining} booking {slot.remaining === 1 ? "spot" : "spots"} left</Text>
                 </Pressable>
               )) : <Text style={styles.meta}>The provider has not added fixed times. Write your preferred date and time in the message below.</Text>}
@@ -691,8 +692,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       {mode === "explore" ? (
         <>
           <View style={styles.searchTools}>
-            <View style={styles.search}><Ionicons name="search" size={18} color="#777" /><TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" /></View>
-            <Pressable hitSlop={4} accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={nearby ? "#FFFFFF" : "#FF4747"} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>Near me</Text></Pressable>
+            <View style={styles.search}><Ionicons name="search" size={18} color={theme.color("#777")} /><TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" /></View>
+            <Pressable hitSlop={4} accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={theme.color(nearby ? "#FFFFFF" : "#FF4747")} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>Near me</Text></Pressable>
           </View>
           {(nearby || cacheNotice) && <View style={styles.locationStrip}><Text numberOfLines={1} style={styles.locationSummary}>{nearby ? `${nearby.label || "Current location"} · 100 km` : "All locations"}{cacheNotice ? ` · ${cacheNotice}` : ""}</Text>{nearby && <Pressable hitSlop={8} onPress={() => setNearby(null)}><Text style={styles.showAllText}>Show all</Text></Pressable>}</View>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroller} contentContainerStyle={styles.chips}>
@@ -700,7 +701,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
-          {loading && !items.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
+          {loading && !items.length ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.loader} /> : (
             <FlatList
               style={styles.results}
               data={items}
@@ -727,11 +728,11 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                 </Pressable>
               )}
               ListEmptyComponent={<EmptyState icon="business-outline" title="No matching verified listings" message={error || (nearby ? "No approved services were found within 100 km of the location shown above. Refresh your location or select Show all." : "Try another search or category.")} />}
-              ListFooterComponent={loadingMore ? <ActivityIndicator color="#FF4747" style={styles.pageLoader} /> : null}
+              ListFooterComponent={loadingMore ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.pageLoader} /> : null}
             />
           )}
         </>
-      ) : mode === "requests" ? (loading && !requests.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
+      ) : mode === "requests" ? (loading && !requests.length ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.loader} /> : (
         <FlatList
           data={requests}
           keyExtractor={item => item.id}
@@ -758,9 +759,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             </View>
           )}
           ListEmptyComponent={<EmptyState icon="calendar-outline" title="No requests yet" message={error || "Bookings and enquiries you send will appear here."} />}
-          ListFooterComponent={loadingMore ? <ActivityIndicator color="#FF4747" style={styles.pageLoader} /> : null}
+          ListFooterComponent={loadingMore ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.pageLoader} /> : null}
         />
-      )) : loading && !conversations.length ? <ActivityIndicator color="#FF4747" style={styles.loader} /> : (
+      )) : loading && !conversations.length ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.loader} /> : (
         <FlatList
           data={conversations}
           keyExtractor={item => item.id}
@@ -787,10 +788,12 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
 }
 
 function EmptyState({ icon, title, message }: { icon: keyof typeof Ionicons.glyphMap; title: string; message: string }) {
-  return <View style={styles.empty}><Ionicons name={icon} size={42} color="#AAA" /><Text style={styles.sectionTitle}>{title}</Text><Text style={styles.emptyText}>{message}</Text></View>;
+  const theme = useTheme();
+  const styles = useThemedStyles(baseStyles);
+  return <View style={styles.empty}><Ionicons name={icon} size={42} color={theme.color("#AAA")} /><Text style={styles.sectionTitle}>{title}</Text><Text style={styles.emptyText}>{message}</Text></View>;
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   fill: { flex: 1, backgroundColor: "#F7F7F7" },
   grow: { flex: 1 },
   results: { flex: 1 },
