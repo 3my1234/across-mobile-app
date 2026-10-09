@@ -1,3 +1,4 @@
+import { XPWithdrawalPanel } from "./components/XPWithdrawalPanel";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput, ThemeProvider } from "./components/ThemeProvider";
 import { SupportConversation } from "./components/SupportConversation";
 import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
@@ -129,6 +130,7 @@ function AcrossApp() {
   const [stockView, setStockView] = useState<"all" | "local" | "international">("all");
   const [internationalProducts, setInternationalProducts] = useState<Product[]>([]);
   const [internationalLoading, setInternationalLoading] = useState(false);
+  const [internationalFeed, setInternationalFeed] = useState<{key:string;status:"loading"|"ready"|"error"}>({key:"",status:"loading"});
   const [internationalRefreshVersion, setInternationalRefreshVersion] = useState(0);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCartGroup, setSelectedCartGroup] = useState("");
@@ -176,6 +178,7 @@ function AcrossApp() {
   const [xpReserved, setXpReserved] = useState(0);
   const [xpEnabled, setXpEnabled] = useState(false);
   const [useXP, setUseXP] = useState(false);
+  const [withdrawalEnabled,setWithdrawalEnabled]=useState(false);
   const [supportError, setSupportError] = useState("");
   const [supportLoading, setSupportLoading] = useState(false);
   const supportTicketRequest = useRef(0);
@@ -365,6 +368,9 @@ function AcrossApp() {
 
   useEffect(() => {
     if (stockView !== "international" || stage !== "app") return;
+    let active = true;
+    const key = `${catalogCountry}|${catalogState}|${catalogCity}`;
+    setInternationalFeed({key,status:"loading"});
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), PRODUCT_REQUEST_TIMEOUT);
     setInternationalLoading(true);
@@ -376,15 +382,15 @@ function AcrossApp() {
         const response = await fetch(freshCatalogURL(`${API_URL}/api/v1/products?${params.toString()}`), { signal: controller.signal, headers: { "Cache-Control": "no-cache" } });
         if (!response.ok) throw new Error(`catalog request failed: ${response.status}`);
         const catalog: Product[] = ((await response.json()).products ?? []).map(mapProduct);
-        if (!controller.signal.aborted) { setInternationalProducts(catalog); applyProductSnapshots(catalog); }
+        if (active) { setInternationalProducts(catalog); setInternationalFeed({key,status:"ready"}); applyProductSnapshots(catalog); }
       } catch {
-        if (!controller.signal.aborted) setInternationalProducts([]);
+        if (active) setInternationalFeed({key,status:"error"});
       } finally {
         clearTimeout(timeout);
-        if (!controller.signal.aborted) setInternationalLoading(false);
+        if (active) setInternationalLoading(false);
       }
     })();
-    return () => { controller.abort(); clearTimeout(timeout); };
+    return () => { active = false; controller.abort(); clearTimeout(timeout); };
     // Reconciliation reads current snapshots/payment state through refs; only
     // destination, view, and refresh changes should restart this fetch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -824,7 +830,7 @@ function AcrossApp() {
     setShowPaymentHistory(false);
     setPaymentMessage("");
     setOrders([]);
-    setXpBalance(0); setXpReserved(0); setXpEnabled(false); setUseXP(false); supportTicketRequest.current++; supportMessageRequest.current++; setSupportError("");
+    setXpBalance(0); setXpReserved(0); setWithdrawalEnabled(false); setXpEnabled(false); setUseXP(false); supportTicketRequest.current++; supportMessageRequest.current++; setSupportError("");
     setXpClaimed(false);
     setSupportTickets([]); setTicketListCursor(""); setShowSupportForm(false);
     setSupportSubject("");
@@ -1295,7 +1301,7 @@ function AcrossApp() {
       const actor = token;
       const selectedItems = checkoutItems;
       const items = selectedItems.map(i => ({ product_id: i.product.id, sku: i.product.sku, quantity: i.quantity, origin_hub_id: i.product.origin_hub?.id || "", variant: {} }));
-      const {response:r,body:quotePayload} = await fetchJSONWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items, use_xp: useXP }) });
+      const {response:r,body:quotePayload} = await fetchJSONWithTimeout(`${API_URL}/api/v1/checkout/quote`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(detectedCountryCode ? { "X-Client-Country-Code": detectedCountryCode } : {}) }, body: JSON.stringify({ country_code: catalogCountry, items, use_xp: false }) });
       if (actor !== sessionTokenRef.current) return;
       if (r.status === 401) { await logout(); return; }
       if (!r.ok) {
@@ -1587,7 +1593,7 @@ function AcrossApp() {
   async function loadXPBalance(authToken: string | null = token) {
     if (!authToken) return;
     const generation = ++xpRequest.current;
-    try { const r = await fetchWithTimeout(`${API_URL}/api/v1/xp/balance`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); if (generation !== xpRequest.current || sessionTokenRef.current !== authToken) return; setXpBalance(d.xp || 0); setXpReserved(d.reserved_xp || 0); setXpEnabled(d.redemption_enabled === true); } } catch {}
+    try { const r = await fetchWithTimeout(`${API_URL}/api/v1/xp/balance`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } }); if (r.ok) { const d = await r.json(); if (generation !== xpRequest.current || sessionTokenRef.current !== authToken) return; setXpBalance(d.xp || 0); setXpReserved(d.reserved_xp || 0); setXpEnabled(false); setWithdrawalEnabled(d.withdrawal_enabled === true); } } catch {}
   }
 
   async function loadOrders(authToken: string | null = token) {
@@ -1623,9 +1629,10 @@ function AcrossApp() {
       const data = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, data, "Confirmation failed"));
       setDeliveryConfirmOrder(null);
-      Alert.alert("Receipt confirmed", "Thank you. Leave your first review to earn 10 XP for eligible Atlantic Express service-fee discounts. Seller prices, delivery and gateway charges remain payable.");
+      Alert.alert("Receipt confirmed", "Thank you. Leave your first review to earn 1 XP. Your XP counts towards a cash withdrawal from 1,000 XP.");
       await loadOrders(token);
       await loadNotifications(token);
+      void loadXPBalance(token);
     } catch (e) {
       Alert.alert("Failed", e instanceof Error ? e.message : "Could not confirm delivery");
     } finally {
@@ -1951,7 +1958,7 @@ function AcrossApp() {
                 <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
 			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
-            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalLoading ? "Loading products..." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{stockView !== "international" && productFeed.status === "error" && <Pressable onPress={() => void loadProducts(true)}><Text style={{color: theme.color("#FF4747", "color"), padding: 12}}>Try again</Text></Pressable>}</View>}
+            ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || internationalFeed.status === "loading" ? "Loading products..." : internationalFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{(stockView === "international" ? internationalFeed.status === "error" : productFeed.status === "error") && <Pressable onPress={() => stockView === "international" ? setInternationalRefreshVersion(value=>value+1) : void loadProducts(true)}><Text style={{color: theme.color("#FF4747", "color"), padding: 12}}>Try again</Text></Pressable>}</View>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
@@ -1975,7 +1982,7 @@ function AcrossApp() {
                 <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
                 <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
                 {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: theme.color("#12805F", "color")}]}>-{money(displayedXPDiscount, quote?.currency || checkoutItems[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
-                {xpEnabled && !quote && <Pressable accessibilityRole="checkbox" accessibilityState={{checked: useXP, disabled: busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1}} disabled={busy || paymentBusy || xpBalance < 1 || totals.platformFee < 1} onPress={() => setUseXP(value => !value)} style={{flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 12}}><Ionicons name={useXP ? "checkbox" : "square-outline"} size={22} color={theme.color("#12805F")} /><View style={{flex: 1}}><Text style={{fontWeight: "800", color: theme.color("#191919", "color")}}>Use XP - {xpBalance} available</Text><Text style={s.muted}>Up to {Math.min(xpBalance, Math.floor(totals.platformFee))} XP off the service fee. Seller prices and gateway charges stay payable.</Text></View></Pressable>}
+
                 <View style={s.metric}><Text style={s.metricLabel}>Total for this group</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, checkoutItems[0]?.product.currency)}</Text></View>
 				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
 				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: theme.color("#12805F", "color"), fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
@@ -2039,11 +2046,12 @@ function AcrossApp() {
             <View style={s.panel}>
               {xpReserved > 0 && <Text style={s.muted}>{xpReserved} XP reserved for pending checkout. Points are spent only after confirmed payment.</Text>}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: theme.color("#FF4747", "color") }}>{xpBalance} XP</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 13, fontWeight: "700" }}>Up to NGN {xpBalance} in eligible service-fee discounts</Text></View>
+                <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: theme.color("#FF4747", "color") }}>{xpBalance} XP</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 13, fontWeight: "700" }}>NGN {xpBalance} available as XP</Text></View>
                 <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
-              <Text style={{ marginTop: 12, color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1 off Atlantic Express service fee on eligible NGN product orders, capped at the order service fee. XP cannot pay for products, delivery or Flutterwave charges and cannot be withdrawn. Unused points stay in your balance. Claim 1 XP daily; your first product or completed-service review earns 10 XP. New accounts receive a one-time 650 XP welcome bonus. Purchase rewards: below ₦1,000 = 1 XP; ₦1,000–₦9,999 = 2 XP; ₦10,000–₦99,999 = 5 XP; ₦100,000–₦499,999 = 10 XP; ₦500,000+ = 25 XP.</Text>
+              <Text style={{ marginTop: 12, color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1. Withdraw from 1,000 XP after admin review. New accounts earn 5 XP. Daily login: 1 XP. First verified review: 1 XP. Completed NGN purchases earn 1 XP per NGN 1,000, capped at 25 per order. XP cannot be used at checkout.</Text>
             </View>
+            {withdrawalEnabled && token && <View style={s.panel}><XPWithdrawalPanel key={token} token={token} balance={xpBalance} onRefresh={()=>loadXPBalance(token)}/></View>}
             <View style={s.panel}>
               <Text style={s.panelTitle}>Appearance</Text>
               <Text style={s.muted}>Choose a theme or follow your phone settings.</Text>
@@ -2064,7 +2072,7 @@ function AcrossApp() {
               <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Order updates, and check your notification volume and Do Not Disturb setting.</Text>
             </View>
             <View style={s.quickLinks}>
-              <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color={theme.color("#FF4747")}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments, references and XP discounts</Text></View><Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")}/></Pressable>
+              <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color={theme.color("#FF4747")}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments and transaction references</Text></View><Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")}/></Pressable>
               {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
                 { tab: "support" as Tab, label: "Support", icon: "chatbubble-ellipses-outline" as const, meta: "Contact us" }
               ].map(link => (
@@ -2220,7 +2228,7 @@ function AcrossApp() {
             </View>
             <Text style={{ fontSize: 18, fontWeight: "900", textAlign: "center", color: theme.color("#191919", "color") }}>Package Delivered?</Text>
             <Text style={{ marginTop: 8, fontSize: 14, color: theme.color("#595959", "color"), textAlign: "center", lineHeight: 20 }}>
-              Did you receive your package? Confirming unlocks your review reward. Leave a review to earn 10 XP for eligible Atlantic Express service-fee discounts.
+              Did you receive your package? Confirming unlocks your review reward. Leave your first verified review to earn 1 XP towards a cash withdrawal from 1,000 XP.
             </Text>
             <View style={{ flexDirection: "row", gap: 10, marginTop: 20 }}>
               <Pressable
