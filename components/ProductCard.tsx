@@ -1,5 +1,6 @@
+import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import {View,  Pressable, StyleSheet} from "react-native";
 import { Product } from "./types";
 import { money } from "./utils";
 import { ResilientImage } from "./ResilientImage";
@@ -14,6 +15,8 @@ interface Props {
 }
 
 export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
+  const theme = useTheme();
+  const styles = useThemedStyles(baseStyles);
   const currentPrice = Number(product.flash_sale_price || product.price);
   const comparePrice = Number(product.compare_at_price || 0);
   const discountPercent = comparePrice > currentPrice && comparePrice > 0
@@ -43,7 +46,7 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
             <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{money(currentPrice, product.currency)}</Text>
             {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
           </View>
-          <Pressable hitSlop={6} accessibilityLabel={product.payment_mode==="contact" ? `Message seller about ${product.title}` : onAdd ? `Add ${product.title} to cart` : `View ${product.title}`} disabled={onAdd && product.payment_mode!=="contact" ? product.inventory_count <= 0 || cartQuantity >= product.inventory_count : false} onPress={event=>{event.stopPropagation();(product.payment_mode==="contact" ? onPress : (onAdd || onPress))();}} style={[styles.cartButton,onAdd && product.payment_mode!=="contact" && (product.inventory_count<=0 || cartQuantity>=product.inventory_count) && {opacity:0.45}]}><Ionicons name={product.payment_mode==="contact" ? "chatbubble-outline" : "cart-outline"} size={19} color="#191919"/>{cartQuantity>0 && <Text style={styles.cartCount}>{cartQuantity}</Text>}</Pressable>
+          <Pressable hitSlop={6} accessibilityLabel={product.payment_mode==="contact" ? `Message seller about ${product.title}` : onAdd ? `Add ${product.title} to cart` : `View ${product.title}`} disabled={onAdd && product.payment_mode!=="contact" ? product.inventory_count <= 0 || cartQuantity >= product.inventory_count : false} onPress={event=>{event.stopPropagation();(product.payment_mode==="contact" ? onPress : (onAdd || onPress))();}} style={[styles.cartButton,onAdd && product.payment_mode!=="contact" && (product.inventory_count<=0 || cartQuantity>=product.inventory_count) && {opacity:0.45}]}><Ionicons name={product.payment_mode==="contact" ? "chatbubble-outline" : "cart-outline"} size={19} color={theme.color("#191919")}/>{cartQuantity>0 && <Text style={styles.cartCount}>{cartQuantity}</Text>}</Pressable>
         </View>
         {comparePrice > currentPrice && <View style={styles.discountRow}>
           <Text style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{money(comparePrice, product.currency)}</Text>
@@ -58,7 +61,7 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   card: { flex: 1, marginBottom: 4, overflow: "hidden", borderRadius: 0, backgroundColor: "#FFFFFF" },
   image: { width: "100%", aspectRatio: 1, backgroundColor: "#F0F0F0" },
   body: { paddingHorizontal: 6, paddingVertical: 6 },

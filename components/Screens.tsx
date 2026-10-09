@@ -1,10 +1,9 @@
+import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {ProductSellerChat} from "./ProductSellerChat";
 import React, { useState, useEffect, useRef } from "react";
-import {
-  ActivityIndicator, Alert, Image, ImageBackground,
+import {ActivityIndicator, Alert, Image, ImageBackground,
   findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
-  RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet, Text, TextInput, View, useWindowDimensions
-} from "react-native";
+  RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet,  type TextInput as NativeTextInput, View, useWindowDimensions} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
@@ -13,7 +12,7 @@ import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
 import { money, uploadReviewImage, mapProduct, fetchWithTimeout } from "./utils";
 import { saveProductReview } from "./productReview";
-import { s } from "./Styles";
+import { s as sharedStyles } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
 import { COLORS } from "./theme";
 import { ReviewStars } from "./ReviewStars";
@@ -25,10 +24,12 @@ const MOBILE_AUTH_BACKGROUND = require("../assets/mobile-background.png");
 
 // ---- Launch Screen ----
 export function LaunchScreen({ label }: { label?: string }) {
+  const theme = useTheme();
+  const s = useThemedStyles(sharedStyles);
   return (
     <SafeAreaView style={s.launch}>
       <Image source={LOGO} style={s.launchLogo} resizeMode="contain" />
-      <ActivityIndicator size="small" color="#12805F" />
+      <ActivityIndicator size="small" color={theme.color("#12805F")} />
       <Text style={s.loadingText}>{label || "Checking your session"}</Text>
     </SafeAreaView>
   );
@@ -36,6 +37,7 @@ export function LaunchScreen({ label }: { label?: string }) {
 
 // ---- Missing Config Screen ----
 export function MissingConfigScreen() {
+  const s = useThemedStyles(sharedStyles);
   return (
     <SafeAreaView style={s.launch}>
       <Image source={LOGO} style={s.launchLogo} resizeMode="contain" />
@@ -47,6 +49,7 @@ export function MissingConfigScreen() {
 
 // ---- Startup Error Screen ----
 export function StartupErrorScreen({ message }: { message: string }) {
+  const s = useThemedStyles(sharedStyles);
   return (
     <SafeAreaView style={s.launch}>
       <Image source={LOGO} style={s.launchLogo} resizeMode="contain" />
@@ -75,6 +78,8 @@ interface AuthProps {
 }
 
 export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+  const theme = useTheme();
+  const s = useThemedStyles(sharedStyles);
   const authInsets = useSafeAreaInsets();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -107,7 +112,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
   return (
     <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" blurRadius={2} style={s.authBg} imageStyle={s.authBgImage}>
       <View pointerEvents="none" style={s.authBackdrop} />
-      <StatusBar style="dark" />
+      <StatusBar style={theme.dark ? "light" : "dark"} />
       <View style={[s.authSafe, { paddingTop: authInsets.top, paddingBottom: authInsets.bottom, paddingLeft: authInsets.left, paddingRight: authInsets.right }]}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
           <ScrollView ref={authScrollRef} contentInsetAdjustmentBehavior="never" contentContainerStyle={[s.authScroll, isWelcome && s.authWelcomeScroll, authKeyboardVisible && { paddingBottom: 220 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
@@ -123,13 +128,13 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
                 <View style={s.authPanel}>
                 {!!noticeText && (
                   <View style={s.authNotice}>
-                    <Ionicons name="alert-circle-outline" size={16} color="#B54708" />
+                    <Ionicons name="alert-circle-outline" size={16} color={theme.color("#B54708")} />
                     <Text style={s.authNoticeText}>{noticeText}</Text>
                   </View>
                 )}
                 <Pressable style={s.authPrimaryButton} onPress={() => onModeChange("signup")}>
                   <Text style={s.primaryButtonText}>Create free account</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  <Ionicons name="arrow-forward" size={18} color={theme.color("#FFFFFF")} />
                 </Pressable>
                 <View style={s.authDivider}>
                   <View style={s.authDividerLine} />
@@ -143,17 +148,17 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
                   accessibilityLabel={googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Google sign-in is loading"}
                   accessibilityState={{ disabled: googleBusy, busy: (!googleReady && !googleTimedOut) || googleBusy }}
                 >
-                  {(!googleReady && !googleTimedOut) || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name={googleReady ? "logo-google" : "refresh"} size={18} color="#101817" />}
+                  {(!googleReady && !googleTimedOut) || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name={googleReady ? "logo-google" : "refresh"} size={18} color={theme.color("#101817")} />}
                   <Text style={s.gmailButtonText}>{googleBusy ? "Opening Google…" : googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Connecting Google sign-in…"}</Text>
                 </Pressable>
                 {!googleReady && googleTimedOut && (
                   <View style={s.authInlineMessage}>
-                    <Ionicons name="information-circle-outline" size={17} color="#667085" />
+                    <Ionicons name="information-circle-outline" size={17} color={theme.color("#667085")} />
                     <Text style={s.authInlineMessageText}>Google is taking longer than expected. Retry, or sign in securely with email.</Text>
                   </View>
                 )}
                 <Pressable style={s.authEmailButton} onPress={() => onModeChange("signin")}>
-                  <Ionicons name="mail-outline" size={18} color="#202725" />
+                  <Ionicons name="mail-outline" size={18} color={theme.color("#202725")} />
                   <Text style={s.authEmailButtonText}>Sign in with email</Text>
                 </Pressable>
                 <Text style={s.authTerms}>By continuing, you agree to Atlantic Express&apos; terms and privacy policy.</Text>
@@ -164,11 +169,11 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
                 <Text style={s.authTitle}>{title}</Text>
                 <Text style={s.authFormCopy}>{mode === "signin" ? "Access your orders, messages, saved details, and provider requests." : "Join the marketplace to shop, book services, pay securely, and track your orders."}</Text>
                 {mode === "signup" && !!noticeText && <Text style={s.authFormCopy}>{noticeText}</Text>}
-                {mode === "signup" && <><Text style={s.authFormCopy}>Delivery country and checkout currency</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: countryCode === market.country_code ? COLORS.primary : "#D0D5DD" }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
+                {mode === "signup" && <><Text style={s.authFormCopy}>Delivery country and checkout currency</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: theme.color(countryCode === market.country_code ? COLORS.primary : "#D0D5DD", "borderColor") }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#30423D" /></Pressable></View>
+                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
@@ -197,6 +202,8 @@ interface DetailProps {
 }
 
 export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity }: DetailProps) {
+  const theme = useTheme();
+  const styles = useThemedStyles(baseStyles);
   const [sellerChat,setSellerChat]=useState(false);
   const contactSeller=()=>{if(!token){Alert.alert("Sign in required","Sign in to message this seller.");return;}setSellerChat(true);};
   const insets = useSafeAreaInsets();
@@ -228,7 +235,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const [actionBarHeight, setActionBarHeight] = useState(120);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const detailScrollRef = useRef<ScrollView | null>(null);
-  const reviewInputRef = useRef<TextInput | null>(null);
+  const reviewInputRef = useRef<NativeTextInput | null>(null);
   const sectionOffsets = useRef({ overview: 0, reviews: 0, recommended: 0 });
   const sectionJump = useRef(false);
   const snapshotRequest = useRef(0);
@@ -440,11 +447,11 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
       <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.detailHeader}>
-          <Pressable style={styles.detailBackButton} accessibilityLabel="Back to products" onPress={onClose}><Ionicons name="chevron-back" size={23} color="#191919" /></Pressable>
+          <Pressable style={styles.detailBackButton} accessibilityLabel="Back to products" onPress={onClose}><Ionicons name="chevron-back" size={23} color={theme.color("#191919")} /></Pressable>
           <View style={styles.sectionTabs}>
             {(["overview", "reviews", "recommended"] as const).map(section=><Pressable key={section} accessibilityRole="tab" accessibilityState={{selected:activeSection===section}} style={styles.sectionTab} onPress={()=>scrollToSection(section)}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTabText,activeSection===section && styles.sectionTabActive]}>{section === "overview" ? "Overview" : section === "reviews" ? "Reviews" : "Recommended"}</Text>{activeSection===section && <View style={styles.sectionUnderline}/>}</Pressable>)}
           </View>
-          <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.flash_sale_price || product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color="#191919" /></Pressable>
+          <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.flash_sale_price || product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color={theme.color("#191919")} /></Pressable>
         </View>
         <ScrollView ref={detailScrollRef} scrollEventThrottle={100} onScrollBeginDrag={()=>{sectionJump.current=false;}} onScroll={event=>{if(sectionJump.current)return;const y=event.nativeEvent.contentOffset.y+48-sectionOffsets.current.overview;const section=y>=sectionOffsets.current.recommended && sectionOffsets.current.recommended>0 ? "recommended" : y>=sectionOffsets.current.reviews && sectionOffsets.current.reviews>0 ? "reviews" : "overview";setActiveSection(section);}} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
           <ScrollView
@@ -494,13 +501,13 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
                 <ReviewStars rating={summary.average_rating} size={18}/>
                 <Text style={styles.reviewSummaryText}>({summary.count.toLocaleString()})</Text>
               </View>
-              {summary.count>0 && <View style={styles.verifiedBanner}><Ionicons name="shield-checkmark" size={17} color="#12805F"/><Text style={styles.verifiedBannerText}>Reviews from verified purchases</Text></View>}
-              {loading ? <ActivityIndicator color="#FF4747" style={{marginTop:12}}/> : reviews.map(r=><View key={r.id} style={styles.reviewCard}>
+              {summary.count>0 && <View style={styles.verifiedBanner}><Ionicons name="shield-checkmark" size={17} color={theme.color("#12805F")}/><Text style={styles.verifiedBannerText}>Reviews from verified purchases</Text></View>}
+              {loading ? <ActivityIndicator color={theme.color("#FF4747")} style={{marginTop:12}}/> : reviews.map(r=><View key={r.id} style={styles.reviewCard}>
                 <View style={styles.reviewCardHead}><View style={styles.reviewAvatar}><Text style={styles.reviewAvatarText}>{(r.author || "Buyer").trim().charAt(0).toUpperCase()}</Text></View><Text style={styles.reviewAuthor}>{r.is_mine ? "Your review" : r.author}</Text><Text style={styles.reviewDate}>{new Date(r.created_at).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}</Text></View>
                 <View style={styles.reviewRatingLine}><ReviewStars rating={r.rating} size={15}/><Text style={styles.verifiedText}>Verified purchase</Text></View>
                 {!!r.review_text && <Text style={styles.reviewText}>{r.review_text}</Text>}
                 {!!r.media_urls?.length && <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.reviewMediaRow}>{r.media_urls.map((uri,index)=><Pressable key={`${r.id}-${index}`} accessibilityLabel={`View review photo ${index+1}`} onPress={()=>{setGalleryPhotos(r.media_urls);setGalleryIndex(index);setGalleryOpen(true);}}><ResilientImage uri={uri} style={styles.reviewMedia} resizeMode="cover"/></Pressable>)}</ScrollView>}
-                <Pressable accessibilityLabel="Share this review" style={styles.reviewShare} onPress={()=>void Share.share({message:`${r.author} rated ${product.title} ${r.rating}/5 on Atlantic Express. ${r.review_text}\nhttps://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={15} color="#595959"/><Text style={styles.reviewShareText}>Share</Text></Pressable>
+                <Pressable accessibilityLabel="Share this review" style={styles.reviewShare} onPress={()=>void Share.share({message:`${r.author} rated ${product.title} ${r.rating}/5 on Atlantic Express. ${r.review_text}\nhttps://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={15} color={theme.color("#595959")}/><Text style={styles.reviewShareText}>Share</Text></Pressable>
               </View>)}
               {!loading && !reviewError && reviews.length===0 && <Text style={styles.reviewText}>No reviews yet. Verified buyers can share their experience after delivery.</Text>}
               {!loading && !!reviewError && <Text style={styles.reviewError}>{reviewError}</Text>}
@@ -529,7 +536,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               <Text style={styles.detailSectionTitle}>Recommended for you</Text>
               <Text style={styles.recommendationHint}>Related products selected from the live catalogue.</Text>
               {!!recommendationsError && <Pressable onPress={()=>void loadRecommendations()}><Text style={styles.reviewError}>{recommendationsError}</Text></Pressable>}
-              {recommendations.length === 0 ? recommendationsLoading ? <ActivityIndicator color="#FF4747" style={{padding:20}}/> : !recommendationsError && <Text style={styles.recommendationEmpty}>No related products available yet.</Text> : (
+              {recommendations.length === 0 ? recommendationsLoading ? <ActivityIndicator color={theme.color("#FF4747")} style={{padding:20}}/> : !recommendationsError && <Text style={styles.recommendationEmpty}>No related products available yet.</Text> : (
                 <View style={styles.recommendationGrid}>
                   {recommendations.map(item=><View key={item.id} style={styles.recommendationCard}><ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={()=>onSelectProduct(item)} onAdd={()=>onAdd(item)}/></View>)}
                 </View>
@@ -539,18 +546,18 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
         </ScrollView>
         {!keyboardVisible && <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
           {allowsCheckout && <View style={styles.quantityRow}>
-            <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={() => onRemove(product)} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color="#101817" /></Pressable>
+            <Pressable style={[styles.quantityButton, (cartQuantity === 0 || outOfStock) && styles.disabled]} onPress={() => onRemove(product)} disabled={cartQuantity === 0 || outOfStock}><Ionicons name="remove" size={20} color={theme.color("#101817")} /></Pressable>
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
-            <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color="#101817" /></Pressable>
+            <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color={theme.color("#101817")} /></Pressable>
           </View>}
-          {product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color="#191919"/></Pressable>}
+          {product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color={theme.color("#191919")}/></Pressable>}
           <Pressable style={[styles.detailCartButton,allowsCheckout && outOfStock && styles.disabled]} onPress={()=>{if(!allowsCheckout){contactSeller();return;}if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={allowsCheckout && outOfStock}><Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
         </View>}
       </KeyboardAvoidingView>
       <Modal visible={galleryOpen} animationType="fade" transparent={false} statusBarTranslucent onRequestClose={() => setGalleryOpen(false)}>
         <View style={[styles.galleryModal, { paddingTop: insets.top, paddingBottom: bottomInset }]}>
           <View style={styles.galleryModalHeader}>
-            <Pressable style={styles.galleryClose} onPress={() => setGalleryOpen(false)} accessibilityLabel="Close image gallery"><Ionicons name="close" size={26} color="#FFFFFF" /></Pressable>
+            <Pressable style={styles.galleryClose} onPress={() => setGalleryOpen(false)} accessibilityLabel="Close image gallery"><Ionicons name="close" size={26} color={theme.color("#FFFFFF")} /></Pressable>
             <Text style={styles.galleryModalCount}>{galleryIndex + 1}/{(galleryPhotos || images).length}</Text>
             <View style={styles.galleryHeaderSpacer} />
           </View>
@@ -573,11 +580,12 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
 }
 
 function ProductPhoto({uri}:{uri:string}) {
+  const theme = useTheme();
   const [ratio,setRatio]=useState(1);
-  return <ResilientImage uri={uri} resizeMode="contain" style={{width:"100%",aspectRatio:ratio,backgroundColor:"#F7F7F7"}} onLoad={event=>{const {width,height}=event.nativeEvent.source;if(width>0 && height>0)setRatio(width/height);}}/>;
+  return <ResilientImage uri={uri} resizeMode="contain" style={{width:"100%",aspectRatio:ratio,backgroundColor: theme.color("#F7F7F7", "backgroundColor")}} onLoad={event=>{const {width,height}=event.nativeEvent.source;if(width>0 && height>0)setRatio(width/height);}}/>;
 }
 
-const styles = StyleSheet.create({
+const baseStyles = StyleSheet.create({
   sectionTabActive:{color:"#191919",fontWeight:"800"},
   sectionUnderline:{position:"absolute",bottom:3,height:3,width:22,borderRadius:2,backgroundColor:"#191919"},
   productSocialRow:{flexDirection:"row",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6,marginTop:8},
