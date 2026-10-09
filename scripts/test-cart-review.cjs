@@ -36,11 +36,13 @@ async function main(){
   cartGroupKey:helpers.cartGroupKey,cartFingerprint:items=>items.map(i=>i.product.sku+':'+i.quantity).join('|'),money:String,Alert:{alert:()=>{}}};
  const checkout=run(app.slice(app.indexOf('  async function checkout('),app.indexOf('  async function payWithFlutterwave(')),checkoutState);
  await Promise.all([checkout.checkout(),checkout.checkout()]);assert.equal(calls.length,2,'two rapid taps must create only one quote and one saved recovery record');assert.equal(calls[0].items.length,2);assert.equal(calls[0].items[0].quantity,2);assert.equal(quote.cart_items.length,2);assert.equal(cart.length,4);
- const paymentState={token:'buyer',sessionTokenRef:{current:'buyer'},quote,quoteRef:{current:quote},completedPayments:{current:new Set()},cartRef:{current:cart},
+ let paymentPrompt, destination;
+ const paymentState={groupCart:helpers.groupCart,token:'buyer',sessionTokenRef:{current:'buyer'},quote,quoteRef:{current:quote},completedPayments:{current:new Set()},cartRef:{current:cart},
   setCart:fn=>{cart=fn(cart);},removePurchasedItems:helpers.removePurchasedItems,stopPaymentPolling:()=>{},paymentConfirmationIssue:{current:''},setPaymentState:()=>{},setPaymentMessage:()=>{},setQuote:()=>{},
-  SecureStore:{deleteItemAsync:async()=>{deletions++;}},PENDING_PAYMENT_KEY:'pending',loadNotifications:async()=>{},loadXPBalance:async()=>{},loadOrders:async()=>{},Alert:{alert:()=>{}},setActiveTab:()=>{}};
+  SecureStore:{deleteItemAsync:async()=>{deletions++;}},PENDING_PAYMENT_KEY:'pending',loadNotifications:async()=>{},loadXPBalance:async()=>{},loadOrders:async()=>{},Alert:{alert:(...args)=>{paymentPrompt=args;}},setActiveTab:value=>{destination=value;}};
  const payment=run(app.slice(app.indexOf('  async function completeSuccessfulPayment('),app.indexOf('  function stopPaymentPolling(')),paymentState);
  await payment.completeSuccessfulPayment(quote);assert.equal(cart.length,2);assert.equal(cart[0].product.id,'c');assert.equal(cart[1].product.id,'d');
+ assert.match(paymentPrompt[1], /2 unpaid groups/);assert.equal(destination,'track');paymentPrompt[2][1].onPress();assert.equal(destination,'cart');
  await payment.completeSuccessfulPayment(quote);assert.equal(deletions,1,'duplicate confirmations must not remove goods twice');
  const reviewCalls=[];let scenario='lost';const draft={rating:4,review_text:'  Updated  ',media_urls:['photo']};
  const reviews=moduleOf('components/productReview.ts',{'./config':{API_URL:'https://example.test'},'./utils':{fetchJSONWithTimeout:async(url,init)=>{

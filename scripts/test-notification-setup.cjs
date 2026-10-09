@@ -68,6 +68,18 @@ async function main() {
   state.sessionTokenRef.current='other-buyer';
   assert.equal(await context.registerPushNotifications('buyer',true,true),false);
   assert.equal(posts.length,count,'stale sessions must not register tokens');
+  let registered=false, serverOK=true, localTests=0, serverTests=0, testAlert;
+  const testContext=vm.createContext({token:'buyer',notificationTestBusy:false,setNotificationTestBusy:()=>{},Platform:{OS:'android'},
+    Notifications:{...state.Notifications,scheduleNotificationAsync:async()=>{localTests++;}},
+    soundPreferenceVersion:{current:0},notificationSoundEnabled:false,setSoundEnabled:()=>{},writeNotificationSoundEnabled:async()=>{},
+    registerPushNotifications:async()=>registered,pushTokenRef:{current:'expo-token'},API_URL:'https://example.test',
+    fetchJSONWithTimeout:async(url)=>{assert.match(url,/notifications\/test-push$/);serverTests++;return{response:{ok:serverOK},body:{}};},
+    Alert:{alert:(...args)=>{testAlert=args;}}});
+  const testStart=app.indexOf('  async function testNotificationSound(');
+  vm.runInContext(transpile(app.slice(testStart,app.indexOf('  async function openNotification(',testStart))),testContext);
+  await testContext.testNotificationSound();assert.equal(serverTests,0);assert.equal(localTests,0);assert.equal(testAlert[0],'Test could not connect');
+  registered=true;await testContext.testNotificationSound();assert.equal(serverTests,1);assert.equal(localTests,0);assert.equal(testAlert[0],'Test sent from server');
+  serverOK=false;await testContext.testNotificationSound();assert.equal(testAlert[0],'Unable to test notifications');assert.equal(localTests,0,'server failure must never pass using a local test');
   console.log('Whole/fractional prices, push-registration retries, muted-channel diagnostics, serialized preferences and stale-session regressions passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

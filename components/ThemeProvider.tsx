@@ -4,6 +4,7 @@ import {StatusBar} from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {themeColor, themeStyles} from "./theme";
+import {compactTypography} from "./typography";
 
 export type ThemePreference = "system" | "light" | "dark";
 const KEY = "atl.appearance.v1";
@@ -29,5 +30,5 @@ export function ThemeProvider({children}:{children:React.ReactNode}) {
 }
 export function useTheme(){const theme=useContext(ThemeContext); return {...theme,color:(value:string,role="color")=>themeColor(value,role,theme.dark)};}
 export function useThemedStyles<T>(styles:T):T {const {dark}=useContext(ThemeContext);return useMemo(()=>themeStyles(styles,dark),[styles,dark]);}
-export function ThemedText(props:TextProps){const {dark}=useContext(ThemeContext);return <NativeText {...props} style={[{color:dark ? "#F1F4F3" : "#191919"},props.style]}/>;}
-export const ThemedTextInput=React.forwardRef<NativeTextInput,TextInputProps>(function ThemedTextInput(props,ref){const {dark}=useContext(ThemeContext);return <NativeTextInput ref={ref} placeholderTextColor={dark ? "#B5C0BC" : "#6F7975"} keyboardAppearance={dark ? "dark" : "light"} selectionColor="#FF4747" {...props} style={[{color:dark ? "#F1F4F3" : "#191919"},props.style]}/>;});
+export function ThemedText(props:TextProps){const {dark}=useContext(ThemeContext);return <NativeText {...props} style={[{color:dark ? "#F1F4F3" : "#191919"},props.style,compactTypography(props.style)]}/>;}
+export const ThemedTextInput=React.forwardRef<NativeTextInput,TextInputProps>(function ThemedTextInput(props,ref){const {dark}=useContext(ThemeContext);return <NativeTextInput ref={ref} placeholderTextColor={dark ? "#B5C0BC" : "#6F7975"} keyboardAppearance={dark ? "dark" : "light"} selectionColor="#FF4747" {...props} style={[{color:dark ? "#F1F4F3" : "#191919"},props.style,compactTypography(props.style)]}/>;});
