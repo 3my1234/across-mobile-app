@@ -516,7 +516,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             {canReview && (
               <View style={styles.reviewForm}>
                 <Text style={styles.detailSectionTitle}>{hasExistingReview ? "Update your review" : "Your review"}</Text>
-                <Text style={styles.muted}>{hasExistingReview ? "Revise your rating, comment, or photos whenever your experience changes." : "Earn 10 XP for your first verified review after delivery. Use XP only against Atlantic Express service fees on eligible NGN product orders."}</Text>
+                <Text style={styles.muted}>{hasExistingReview ? "Revise your rating, comment, or photos whenever your experience changes." : "Earn 1 XP for your first verified review after delivery. Request a cash withdrawal from 1,000 XP."}</Text>
                 <View style={styles.starRow}><ReviewStars rating={reviewRating} size={32} disabled={reviewBusy} onChange={setReviewRating} /></View>
                 <TextInput ref={reviewInputRef} editable={!reviewBusy} style={styles.reviewInput} value={reviewText} onChangeText={setReviewText} onFocus={revealReviewEditor} placeholder="Share your experience" multiline textAlignVertical="top" />
                 <View style={styles.reviewActionRow}><Pressable style={[styles.reviewSecondaryButton, reviewBusy && styles.disabled]} onPress={pickReviewImage} disabled={reviewBusy}><Text style={styles.secondaryButtonText}>Add photo</Text></Pressable><Pressable style={[styles.detailCartButton, reviewBusy && styles.disabled]} onPress={saveReview} disabled={reviewBusy}><Text style={styles.primaryButtonText}>{reviewBusy ? "Saving..." : hasExistingReview ? "Update review" : "Post review"}</Text></Pressable></View>

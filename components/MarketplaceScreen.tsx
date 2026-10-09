@@ -149,6 +149,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const [type, setType] = useState("");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [listingFeed, setListingFeed] = useState<{key:string;status:"loading"|"ready"|"error"}>({key:"",status:"loading"});
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [listingCursor, setListingCursor] = useState("");
@@ -173,6 +174,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const [savingReview, setSavingReview] = useState<string | null>(null);
   const reviewSubmitBusy = useRef(false);
   const [highlyRated, setHighlyRated] = useState(false);
+  const listingQueryKey = JSON.stringify([type, search.trim(), highlyRated, nearby?.latitude ?? null, nearby?.longitude ?? null]);
+  const listingQueryRef = useRef(listingQueryKey); listingQueryRef.current = listingQueryKey;
+  const listingPending = listingFeed.key !== listingQueryKey || listingFeed.status === "loading";
   const authHeaders = useMemo(() => ({ Authorization: `Bearer ${token || ""}` }), [token]);
 
   useEffect(() => {
@@ -233,6 +237,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
 
   const loadListings = useCallback(async (refresh = false, cursor = "") => {
     const request = ++listingRequest.current;
+    const queryKey = listingQueryKey;
+    if (!cursor) setListingFeed({key:queryKey,status:"loading"});
     if (refresh) setRefreshing(true); else if (cursor) setLoadingMore(true); else setLoading(true);
     setError("");
     try {
@@ -245,11 +251,12 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       const endpoint = nearby ? "nearby" : "listings";
       const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/marketplace/${endpoint}?${query.toString()}`), { headers: { "Cache-Control": "no-cache" } });
       const body = await response.json().catch(() => ({}));
-      if (request !== listingRequest.current) return;
-      if (response.status >= 400 && response.status < 500) { setError(apiMessage(body, "Services are unavailable for this search")); return; }
+      if (request !== listingRequest.current || listingQueryRef.current !== queryKey) return;
+      if (response.status >= 400 && response.status < 500) { setError(apiMessage(body, "Services are unavailable for this search")); setListingFeed({key:queryKey,status:"error"}); return; }
       if (!response.ok) throw new Error(apiMessage(body, "Services are temporarily unavailable"));
       const incoming: Listing[] = Array.isArray(body.items) ? body.items : [];
       onlineListingsLoaded.current = true;
+      setListingFeed({key:queryKey,status:"ready"});
       setItems(current => cursor ? [...current, ...incoming.filter(item => !current.some(existing => existing.id === item.id))] : incoming);
       setSelected(current => {
         const updated = current && incoming.find(item => item.id === current.id);
@@ -264,14 +271,16 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       }
     } catch (loadError) {
       const snapshot = await readNearbySnapshot<Listing>();
-      if (request !== listingRequest.current) return;
+      if (request !== listingRequest.current || listingQueryRef.current !== queryKey) return;
       if (snapshot) {
         setNearby(snapshot.coordinates);
         setItems(filterNearbySnapshot(snapshot.items, type, search).filter(item => !highlyRated || ((item.review_count || 0) > 0 && (item.average_rating || 0) >= 4)));
+        setListingFeed({key:queryKey,status:"ready"});
         setCacheNotice(`Offline results saved ${new Date(snapshot.fetchedAt).toLocaleString()}`);
         setError("");
       } else {
         setError(loadError instanceof Error ? loadError.message : "Services are temporarily unavailable");
+        setListingFeed({key:queryKey,status:"error"});
       }
     } finally {
       if (request === listingRequest.current) {
@@ -280,7 +289,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
         setRefreshing(false);
       }
     }
-  }, [nearby, search, type, highlyRated]);
+  }, [nearby, search, type, highlyRated, listingQueryKey]);
 
   async function refreshNearby() {
     setLoading(true);
@@ -700,8 +709,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             <Pressable accessibilityRole="button" accessibilityState={{ selected: highlyRated }} accessibilityLabel="Filter services rated four stars and above" onPress={() => setHighlyRated(value => !value)} style={[styles.chip, highlyRated && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, highlyRated && styles.chipTextActive]}>4+ stars</Text></Pressable>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
-          <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{items.length} verified listings</Text></View>
-          {loading && !items.length ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.loader} /> : (
+          <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{listingPending ? "Loading services..." : `${items.length} verified listings`}</Text></View>
+          {listingPending && !items.length ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.loader} /> : (
             <FlatList
               style={styles.results}
               data={items}
@@ -727,7 +736,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                   </View>
                 </Pressable>
               )}
-              ListEmptyComponent={<EmptyState icon="business-outline" title="No matching verified listings" message={error || (nearby ? "No approved services were found within 100 km of the location shown above. Refresh your location or select Show all." : "Try another search or category.")} />}
+              ListEmptyComponent={<EmptyState icon="business-outline" title={error ? "Could not load services" : "No matching verified listings"} message={error || (nearby ? "No approved services were found within 100 km of the location shown above. Refresh your location or select Show all." : "Try another search or category.")} />}
               ListFooterComponent={loadingMore ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.pageLoader} /> : null}
             />
           )}
@@ -751,7 +760,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                 <View style={styles.reviewRow}>
                   <Text style={styles.reviewLabel}>{(reviewedRequests[item.id] || item.review_rating) ? "Your rating" : "Rate this provider - earn 10 XP"}</Text>
                   <ReviewStars rating={reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0} size={28} disabled={!!savingReview} onChange={rating => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], rating } }))} />
-                  <Text style={styles.meta}>10 XP for your first review. Use XP against Atlantic Express service fees on eligible NGN product orders.</Text>
+                  <Text style={styles.meta}>1 XP for your first verified review. Request a cash withdrawal from 1,000 XP.</Text>
                   <TextInput accessibilityLabel="Your service review" editable={!savingReview} multiline maxLength={1000} placeholder="Tell other customers about your experience (optional)" value={reviewDrafts[item.id]?.text ?? item.review_text ?? ""} onChangeText={text => setReviewDrafts(current => ({ ...current, [item.id]: { ...current[item.id], text } }))} style={[styles.input, styles.textarea]} />
                   <Pressable disabled={!!savingReview || !(reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating)} style={[styles.primary, (!!savingReview || !(reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating)) && styles.disabled]} onPress={() => void submitReview(item, reviewDrafts[item.id]?.rating || reviewedRequests[item.id] || item.review_rating || 0, reviewDrafts[item.id]?.text ?? item.review_text ?? "")}><Text style={styles.primaryText}>{savingReview === item.id ? "Saving review…" : item.review_rating ? "Update review" : "Submit review"}</Text></Pressable>
                 </View>
