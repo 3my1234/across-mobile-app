@@ -1,6 +1,7 @@
+import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import React, { useEffect, useRef, useState } from "react";
-import {ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Platform, Pressable, StyleSheet,   View} from "react-native";
+import {ActivityIndicator, FlatList, Image, Platform, Pressable, StyleSheet,   View} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SupportMessage, SupportTicket } from "./types";
 import { LOGO } from "./config";
@@ -17,10 +18,10 @@ export function SupportConversation({ ticket, messages, error, busy, onClose, on
   useEffect(() => { setDraft(""); nearBottom.current = true; }, [ticket.id]);
   useEffect(() => { if (nearBottom.current) requestAnimationFrame(() => list.current?.scrollToEnd({ animated: false })); }, [lastMessage?.id, lastMessage?.created_at, ticket.id]);
   const send = async () => { const text = draft.trim(); if (!text || busy) return; await onSend(text); setDraft(""); nearBottom.current = true; };
-  return <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+  return <KeyboardFrame style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <View style={styles.header}><Pressable onPress={onClose} accessibilityLabel="Back to support conversations" style={styles.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")} /></Pressable><View style={styles.heading}><Text numberOfLines={1} style={styles.title}>{ticket.subject}</Text><Text style={styles.meta}>Atlantic Express support · {ticket.status}</Text></View></View>
     {!!error && <Pressable onPress={onRefresh}><Text style={styles.error}>{error} · Tap to retry</Text></Pressable>}
-    <FlatList ref={list} data={messages} keyExtractor={(message, index) => message.id || `${message.created_at}:${index}`} style={styles.fill} contentContainerStyle={styles.thread}
+    <FlatList ref={list} data={messages} keyExtractor={(message, index) => message.id || `${message.created_at}:${index}`} style={styles.fill} contentContainerStyle={styles.thread} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
       onScroll={event => { const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent; nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 100; }} scrollEventThrottle={100}
       onContentSizeChange={() => { if (nearBottom.current) list.current?.scrollToEnd({ animated: false }); }}
       maintainVisibleContentPosition={{minIndexForVisible: 0}}
@@ -31,7 +32,7 @@ export function SupportConversation({ ticket, messages, error, busy, onClose, on
         <View style={[styles.bubble, mine && styles.mineBubble]}><Text style={styles.message}>{item.message}</Text><Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text></View>
       </View>; }} />
     {ticket.status !== "closed" ? <View style={styles.composer}><TextInput accessibilityLabel="Message Atlantic Express support" value={draft} onChangeText={setDraft} multiline maxLength={5000} placeholder="Write a message…" style={styles.input} editable={!busy}/><Pressable accessibilityLabel="Send message" disabled={busy || !draft.trim()} onPress={() => { void send().catch(() => {}); }} style={[styles.send, (busy || !draft.trim()) && styles.disabled]}>{busy ? <ActivityIndicator color={theme.color("#FFF")} /> : <Ionicons name="arrow-up" size={22} color={theme.color("#FFF")} />}</Pressable></View> : <Text style={styles.closed}>This conversation is closed. Create a new ticket if you need more help.</Text>}
-  </KeyboardAvoidingView>;
+  </KeyboardFrame>;
 }
 
 const baseStyles = StyleSheet.create({

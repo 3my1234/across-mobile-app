@@ -1,3 +1,4 @@
+import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {mergeChatMessages} from "./chatImages";
 import { ProviderConversation } from "./ProviderConversation";
@@ -8,7 +9,6 @@ import {ActivityIndicator,
   AppState,
   Alert,
   FlatList,
-  KeyboardAvoidingView,
   Linking,
   Platform,
   Pressable,
@@ -608,7 +608,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     const requiresSafetyAcknowledgement = !selected.direct_booking;
     const quantityCopy = bookingQuantityCopy(selected.listing_type);
     return (
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.fill}>
+      <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.fill}>
         <ScrollView
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
@@ -687,7 +687,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
             )}
           </View>
         </ScrollView>
-      </KeyboardAvoidingView>
+      </KeyboardFrame>
     );
   }
 
