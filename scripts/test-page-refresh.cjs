@@ -58,6 +58,7 @@ async function main() {
     quote:paidQuote,quoteRef:{current:paidQuote},completedPayments:{current:new Set()},removePurchasedItems:(items,purchased)=>items.filter(item=>!purchased.some(p=>p.product_id===item.product.id)),
     cartRef:{current:cart},setCart:value=>{cart=typeof value==='function'?value(cart):value;},setQuote:()=>{},PENDING_PAYMENT_KEY:"pending",
     SecureStore:{deleteItemAsync:async()=>{pendingDeleted++;}},loadNotifications:async()=>{},loadXPBalance:async()=>{},loadOrders:async()=>{},
+    groupCart:items=>items.length ? [items] : [],
     Alert:{alert:()=>{}},setActiveTab:()=>{},sleep:async()=>{}};
   const paymentStart=source.indexOf("  async function verifyPaymentWithBackend(");
   const paymentEnd=source.indexOf("\n  async function claimDailyXP",paymentStart);

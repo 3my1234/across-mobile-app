@@ -1,8 +1,9 @@
+import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {ProductSellerChat} from "./ProductSellerChat";
 import React, { useState, useEffect, useRef } from "react";
 import {ActivityIndicator, Alert, Image, ImageBackground,
-  findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable,
+  findNodeHandle, Keyboard, Modal, Platform, Pressable,
   RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet,  type TextInput as NativeTextInput, View, useWindowDimensions} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
@@ -114,7 +115,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
       <View pointerEvents="none" style={s.authBackdrop} />
       <StatusBar style={theme.dark ? "light" : "dark"} />
       <View style={[s.authSafe, { paddingTop: authInsets.top, paddingBottom: authInsets.bottom, paddingLeft: authInsets.left, paddingRight: authInsets.right }]}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
+        <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
           <ScrollView ref={authScrollRef} contentInsetAdjustmentBehavior="never" contentContainerStyle={[s.authScroll, isWelcome && s.authWelcomeScroll, authKeyboardVisible && { paddingBottom: 220 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets>
             <View style={s.authBrand}>
               <Image source={LOGO} style={[s.authLogo, !isWelcome && s.authLogoCompact]} resizeMode="contain" />
@@ -181,7 +182,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
               </View>
             )}
           </ScrollView>
-        </KeyboardAvoidingView>
+        </KeyboardFrame>
       </View>
     </ImageBackground>
   );
@@ -445,7 +446,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const allowsCheckout=product.payment_mode!=="contact",allowsContact=product.payment_mode==="contact" || product.payment_mode==="both";
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
-      <KeyboardAvoidingView style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <KeyboardFrame style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <View style={styles.detailHeader}>
           <Pressable style={styles.detailBackButton} accessibilityLabel="Back to products" onPress={onClose}><Ionicons name="chevron-back" size={23} color={theme.color("#191919")} /></Pressable>
           <View style={styles.sectionTabs}>
@@ -553,7 +554,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           {product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color={theme.color("#191919")}/></Pressable>}
           <Pressable style={[styles.detailCartButton,allowsCheckout && outOfStock && styles.disabled]} onPress={()=>{if(!allowsCheckout){contactSeller();return;}if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={allowsCheckout && outOfStock}><Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
         </View>}
-      </KeyboardAvoidingView>
+      </KeyboardFrame>
       <Modal visible={galleryOpen} animationType="fade" transparent={false} statusBarTranslucent onRequestClose={() => setGalleryOpen(false)}>
         <View style={[styles.galleryModal, { paddingTop: insets.top, paddingBottom: bottomInset }]}>
           <View style={styles.galleryModalHeader}>

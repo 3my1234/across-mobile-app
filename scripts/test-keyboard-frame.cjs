@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+let offset=0,origin=120;
+const react={useRef:()=>({current:{measureInWindow:callback=>callback(0,origin)}}),useState:()=>[offset,value=>{offset=value;}],createElement:(type,props,...children)=>({type,props,children})};
+const context={exports:{},require:name=>name==='react'?react:{KeyboardAvoidingView:'keyboard',Platform:{OS:'android'},View:'frame'}};
+const source=fs.readFileSync('components/KeyboardFrame.tsx','utf8');
+vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,context);
+let frame=context.exports.KeyboardFrame({style:{flex:1},children:'composer'});
+frame.props.onLayout();frame=context.exports.KeyboardFrame({style:{flex:1},children:'composer'});
+assert.equal(frame.children[0].props.keyboardVerticalOffset,120);
+assert.equal(frame.children[0].props.behavior,'height');
+origin=44;frame.props.onLayout();frame=context.exports.KeyboardFrame({behavior:'padding',children:'form'});
+assert.equal(frame.children[0].props.keyboardVerticalOffset,44,'layout changes remeasure the header origin');
+assert.equal(frame.children[0].props.behavior,'padding');
+console.log('Keyboard frame passed: measured header offset, layout changes, Android height and iOS padding. Physical keyboard acceptance still required.');

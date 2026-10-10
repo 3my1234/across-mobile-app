@@ -1,6 +1,7 @@
+import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import React, { useEffect, useRef, useState } from "react";
-import {ActivityIndicator, Alert, BackHandler, Image, Modal, ScrollView, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet,   View} from "react-native";
+import {ActivityIndicator, Alert, BackHandler, Image, Modal, ScrollView, FlatList, Platform, Pressable, StyleSheet,   View} from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Crypto from "expo-crypto";
 import { uploadChatImage } from "./chatImages";
@@ -49,7 +50,7 @@ export function ProviderConversation(props: Props) {
     try{await props.onSend(text,keys,messageReference.current.id);if(mounted.current){setDraft("");setPhotos([]);messageReference.current={fingerprint:"",id:""};nearBottom.current=true;}}
     finally{sending.current=false;}
   };
-  return <KeyboardAvoidingView style={s.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+  return <KeyboardFrame style={s.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <View style={s.header}><Pressable onPress={props.onClose} accessibilityLabel="Back to conversations" style={s.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")}/></Pressable><View style={s.heading}><Text style={s.title} numberOfLines={1}>{props.provider}</Text><Text style={s.meta} numberOfLines={1}>{props.title}</Text></View></View>
     {!!props.error && <Pressable onPress={props.onRefresh}><Text style={s.error}>{props.error} · Tap to retry</Text></Pressable>}
     <FlatList ref={list} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={s.thread} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
@@ -62,6 +63,6 @@ export function ProviderConversation(props: Props) {
     {!!photos.length && <ScrollView horizontal style={{flexGrow:0,maxHeight:90,backgroundColor: theme.color("#FFF", "backgroundColor")}}>{photos.map(photo=><Pressable key={photo.key} onPress={()=>{if(!props.busy && !uploading)setPhotos(current=>current.filter(item=>item.key!==photo.key));}} accessibilityLabel="Remove attached photo"><Image source={{uri:photo.uri}} style={{width:72,height:72,margin:6,borderRadius:8}}/><Text style={{position:"absolute",right:9,top:6,color: theme.color("#B42318", "color")}}>X</Text></Pressable>)}</ScrollView>}
     <Modal visible={!!viewPhoto} onRequestClose={()=>setViewPhoto(null)}><View style={{flex:1,backgroundColor: theme.color("#111", "backgroundColor"),paddingTop:50}}><Pressable onPress={()=>setViewPhoto(null)} accessibilityLabel="Close photo" style={{padding:15}}><Text style={{color: theme.color("#FFF", "color")}}>Close</Text></Pressable>{viewPhoto && <Image source={{uri:viewPhoto}} resizeMode="contain" style={{flex:1}}/>}</View></Modal>
     <View style={[s.composer,{paddingBottom:props.bottomInset+8}]}><Pressable accessibilityLabel="Attach photos" disabled={uploading||props.busy||props.paused||photos.length>=4} onPress={()=>void attach()} style={s.send}>{uploading?<ActivityIndicator color={theme.color("#FFF")}/>:<Ionicons name="image-outline" size={22} color={theme.color("#FFF")}/>}</Pressable><TextInput accessibilityLabel="Message provider" value={draft} onChangeText={setDraft} editable={!props.busy && !props.paused && !uploading} placeholder="Write a message…" multiline maxLength={2000} style={s.input}/><Pressable accessibilityLabel="Send provider message" disabled={uploading||props.busy||props.paused||(!draft.trim()&&!photos.length)} onPress={()=>void send().catch(()=>{})} style={[s.send,(uploading||props.busy||props.paused||(!draft.trim()&&!photos.length))&&s.disabled]}>{props.busy ? <ActivityIndicator color={theme.color("#FFF")}/> : <Ionicons name="arrow-up" size={23} color={theme.color("#FFF")}/>}</Pressable></View>
-  </KeyboardAvoidingView>;
+  </KeyboardFrame>;
 }
 const baseStyles = StyleSheet.create({fill:{flex:1,backgroundColor:"#F3F4F4"},header:{flexDirection:"row",alignItems:"center",backgroundColor:"#FFF",paddingVertical:10,paddingRight:12},back:{minWidth:44,minHeight:44,alignItems:"center",justifyContent:"center"},heading:{flex:1},title:{fontSize:16,fontWeight:"800",color:"#191919"},meta:{fontSize:12,color:"#66736F"},error:{padding:10,color:"#B42318"},thread:{padding:12,flexGrow:1,gap:10},bubble:{maxWidth:"84%",padding:12,borderRadius:16},mine:{alignSelf:"flex-end",backgroundColor:"#FFF0D6",borderBottomRightRadius:4},theirs:{alignSelf:"flex-start",backgroundColor:"#FFF",borderBottomLeftRadius:4},message:{color:"#191919",lineHeight:20},time:{fontSize:10,color:"#66736F",marginTop:5},earlier:{padding:12,alignItems:"center"},composer:{flexDirection:"row",alignItems:"flex-end",gap:8,backgroundColor:"#FFF",paddingHorizontal:12,paddingTop:8},input:{flex:1,minHeight:44,maxHeight:120,backgroundColor:"#F3F4F4",padding:12,borderRadius:20,color:"#191919"},send:{width:44,height:44,borderRadius:22,alignItems:"center",justifyContent:"center",backgroundColor:"#FF4747"},disabled:{opacity:.45}});

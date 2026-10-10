@@ -1,3 +1,4 @@
+import { KeyboardFrame } from "./components/KeyboardFrame";
 import { XPWithdrawalPanel } from "./components/XPWithdrawalPanel";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput, ThemeProvider } from "./components/ThemeProvider";
 import { SupportConversation } from "./components/SupportConversation";
@@ -14,7 +15,7 @@ import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {ActivityIndicator, Alert, Animated, AppState, Dimensions, Image,
-  findNodeHandle, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView,
+  findNodeHandle, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView,
    type TextInput as NativeTextInput, View} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
@@ -2007,7 +2008,7 @@ function AcrossApp() {
 
         {activeTab === "account" && showPaymentHistory && token && <PaymentHistoryScreen key={token} token={token} bottomInset={bottomInset + BOTTOM_NAV_HEIGHT} onBack={()=>setShowPaymentHistory(false)} onViewOrders={()=>{setShowPaymentHistory(false);setActiveTab("track");void loadOrders(token);}} onConfirmed={async orderId=>{if(quote?.order_id===orderId) await completeSuccessfulPayment();else await Promise.all([loadOrders(token),loadXPBalance(token),loadNotifications(token)]);}}/>}
         {activeTab === "account" && !showPaymentHistory && (
-          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView ref={accountScrollRef} alwaysBounceVertical keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: keyboardVisible ? 180 : bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
             <View style={s.accountHero}>
               <Pressable onPress={pickAvatar}>
@@ -2084,7 +2085,7 @@ function AcrossApp() {
             </View>
             <Pressable style={s.logoutButton} onPress={logout}><Ionicons name="log-out-outline" size={18} color={theme.color("#FF4747")} /><Text style={s.logoutButtonText}>Sign out</Text></Pressable>
           </ScrollView>
-          </KeyboardAvoidingView>
+          </KeyboardFrame>
         )}
 
         {activeTab === "track" && (
@@ -2156,7 +2157,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          selectedTicket ? <SupportConversation ticket={selectedTicket} messages={ticketMessages} error={supportError} busy={busy} loading={messageLoading} hasEarlier={!!supportCursor} onEarlier={() => { if (!messageLoading) void loadTicketMessages(selectedTicket.id, supportCursor); }} onClose={() => { supportMessageRequest.current++; setSelectedTicket(null); setTicketMessages([]); setSupportCursor(""); }} onSend={replyToSupportTicket} onRefresh={() => { void loadTicketMessages(selectedTicket.id); }} /> : <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          selectedTicket ? <SupportConversation ticket={selectedTicket} messages={ticketMessages} error={supportError} busy={busy} loading={messageLoading} hasEarlier={!!supportCursor} onEarlier={() => { if (!messageLoading) void loadTicketMessages(selectedTicket.id, supportCursor); }} onClose={() => { supportMessageRequest.current++; setSelectedTicket(null); setTicketMessages([]); setSupportCursor(""); }} onSend={replyToSupportTicket} onRefresh={() => { void loadTicketMessages(selectedTicket.id); }} /> : <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView
             ref={supportScrollRef}
             alwaysBounceVertical
@@ -2204,7 +2205,7 @@ function AcrossApp() {
                 )}
               </View>
           </ScrollView>
-          </KeyboardAvoidingView>
+          </KeyboardFrame>
         )}
       </View>
 
