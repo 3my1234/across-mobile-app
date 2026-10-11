@@ -433,13 +433,18 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     threadInFlight.current=true;
     if(!quiet)setChatLoading(true);
     try {
-      const query=new URLSearchParams({limit:"50"});if(cursor)query.set("cursor",cursor);
+      const query=new URLSearchParams({limit:"50",mark_read:"false"});if(cursor)query.set("cursor",cursor);
       const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
       if(!response.ok)throw new Error(apiMessage(body,"Messages could not be loaded"));
       if(request!==threadRequest.current || actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return;
       const incoming: ConversationMessage[]=Array.isArray(body.items)?body.items:[];
       setConversationMessages(current=>mergeChatMessages(current,incoming));
       if(!quiet || cursor)setConversationCursor(body.next_cursor || "");
+      const newest=incoming.at(-1);
+      if(newest?.id && AppState.currentState === "active") {
+        const {response:ack,body:read}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/read`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message_id:newest.id})});
+        if(ack.ok && request===threadRequest.current && actor===chatActor.current && conversationRef.current?.id===conversation.id) setConversations(current=>current.map(item=>item.id===conversation.id?{...item,unread_count:read.unread_count || 0}:item));
+      }
       setChatError("");
     } catch(messageError){if(request===threadRequest.current&&actor===chatActor.current)setChatError(messageError instanceof Error?messageError.message:"Messages could not be loaded");}
     finally{if(request===threadRequest.current){threadInFlight.current=false;setChatLoading(false);}}
@@ -449,8 +454,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     threadRequest.current++;
     setConversationMessages([]);setConversationCursor("");setChatError("");
     conversationRef.current=conversation;
-    setSelectedConversation({...conversation,unread_count:0});
-    setConversations(current=>current.map(item=>item.id===conversation.id?{...item,unread_count:0}:item));
+    setSelectedConversation(conversation);
     if(conversation.id)await loadConversationMessages(conversation);
   }
 
@@ -778,7 +782,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadConversations(true)} tintColor="#FF4747" />}
           contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 24 }}
           renderItem={({ item }) => (
-            <Pressable style={styles.requestCard} onPress={() => void openConversation(item)}>
+            <Pressable style={[styles.requestCard,!!item.unread_count && styles.unreadCard]} onPress={() => void openConversation(item)}>
               <View style={styles.requestHeader}>
                 <Text style={styles.requestTitle} numberOfLines={2}>{item.listing_title}</Text>
                 {!!item.unread_count && <Text style={styles.status}>{item.unread_count} new</Text>}
@@ -875,6 +879,7 @@ const baseStyles = StyleSheet.create({
   disabled: { opacity: 0.5 },
   contact: { marginTop: 12, padding: 14, borderRadius: 10, backgroundColor: "#F7F7F7" },
   link: { color: "#C9353B", fontWeight: "800", marginTop: 8 },
+  unreadCard: {borderLeftWidth:4,borderLeftColor:"#FF4747",backgroundColor:"#FFF4F4"},
   requestCard: { padding: 14, marginBottom: 10, borderRadius: 12, backgroundColor: "#FFF", borderWidth: 1, borderColor: "#E8E8E8" },
   requestHeader: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   requestTitle: { flex: 1, color: "#191919", fontSize: 16, fontWeight: "900" },

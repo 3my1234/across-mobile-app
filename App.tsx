@@ -202,6 +202,7 @@ function AcrossApp() {
   const [supportCursor, setSupportCursor] = useState("");
   const [messageLoading, setMessageLoading] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
+  const visibleSupport = useRef({tab: activeTab, ticket: selectedTicket?.id}); visibleSupport.current = {tab:activeTab,ticket:selectedTicket?.id};
   const [ticketMessages, setTicketMessages] = useState<SupportMessage[]>([]);
   const ticketMessagesRef = useRef(ticketMessages); ticketMessagesRef.current = ticketMessages;
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -669,7 +670,7 @@ function AcrossApp() {
         if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
         const {response,body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/push-token`, {
           method:"POST",headers:{Authorization:`Bearer ${authToken}`,"Content-Type":"application/json"},
-          body:JSON.stringify({token:pushToken,platform:Platform.OS,sound_enabled:effectiveSound,notification_channel:Platform.OS === "android" ? ALERT_CHANNEL_ID : undefined})
+          body:JSON.stringify({token:pushToken,platform:Platform.OS,sound_enabled:effectiveSound,expo_project_id:projectId,notification_channel:Platform.OS === "android" ? ALERT_CHANNEL_ID : undefined})
         });
         if (!response.ok) throw new Error(body?.message || "Push registration failed");
         if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
@@ -1647,6 +1648,11 @@ function AcrossApp() {
       });
       if (cursor) setSupportCursor(d.next_cursor || "");
       else if (!ticketMessagesRef.current.length) setSupportCursor(d.next_cursor || "");
+      const newest = (d.messages || []).at(-1);
+      if (newest?.id && visibleSupport.current.tab === "support" && visibleSupport.current.ticket === ticketId && AppState.currentState === "active") {
+        const {response:ack,body:read} = await fetchJSONWithTimeout(`${API_URL}/api/v1/support/tickets/${ticketId}/read`, {method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({message_id:newest.id})});
+        if (ack.ok && seq === supportMessageRequest.current && token === sessionTokenRef.current) setSupportTickets(current=>current.map(item=>item.id===ticketId?{...item,unread_count:read.unread_count || 0}:item));
+      }
       setSupportError("");
     } catch (error) { if (seq === supportMessageRequest.current && token === sessionTokenRef.current) setSupportError(error instanceof Error ? error.message : "Conversation unavailable. Pull to retry."); }
     finally { if (supportReads.current.get(key) === seq) supportReads.current.delete(key); if (seq === supportMessageRequest.current) setMessageLoading(false); }
@@ -2121,8 +2127,8 @@ function AcrossApp() {
                   {supportLoading ? <ActivityIndicator color={theme.color("#FF4747")} /> : null}
                   {supportTickets.length === 0 && !supportLoading && !supportError ? <Text style={{ color: theme.color("#8C8C8C", "color"), marginTop: 8 }}>No tickets yet.</Text>
                   : supportTickets.map(ticket => (
-                    <Pressable key={ticket.id} style={s.quickLinkCard} onPress={async () => { setTicketMessages([]); setSupportCursor(""); setSupportError(""); setSelectedTicket(ticket); }}>
-                      <View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{ticket.subject}</Text><Text style={s.quickLinkMeta}>{ticket.status} · {new Date(ticket.created_at).toLocaleDateString()}</Text></View>
+                    <Pressable key={ticket.id} style={[s.quickLinkCard, !!ticket.unread_count && {borderLeftWidth:4,borderLeftColor:theme.color("#FF4747")}]} onPress={async () => { setTicketMessages([]); setSupportCursor(""); setSupportError(""); setSelectedTicket(ticket); }}>
+                      <View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{ticket.subject}</Text>{!!ticket.unread_count && <Text style={{color:theme.color("#FF4747"),fontWeight:"800",fontSize:12}}>{ticket.unread_count} unread</Text>}<Text style={s.quickLinkMeta}>{ticket.status} · {new Date(ticket.created_at).toLocaleDateString()}</Text></View>
                       <Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")} />
                     </Pressable>
                   ))}

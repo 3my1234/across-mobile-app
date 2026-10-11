@@ -30,7 +30,7 @@ async function main(){
  // attachments after a lost response, so retrying cannot duplicate the send.
  let attempt=0,reference=0,cleared=false;const references=[];
  const composerGlobals={draft:'',photos:[{key:'private/image'}],uploading:false,props:{busy:false,paused:false,onSend:async(text,keys,id)=>{references.push(id);if(++attempt===1)throw new Error('timeout');assert.equal(text,'');assert.equal(keys[0],'private/image');}},sending:{current:false},messageReference:{current:{fingerprint:'',id:''}},Crypto:{randomUUID:()=>`message-${++reference}`},mounted:{current:true},setDraft:()=>{cleared=true;},setPhotos:()=>{},nearBottom:{current:false}};
- const composer=read('ProviderConversation.tsx');const c=run(composer.slice(composer.indexOf('  const send = async'),composer.indexOf('  return <KeyboardAvoidingView')),composerGlobals);vm.runInContext('globalThis.sendMessage=send',c);
+ const composer=read('ProviderConversation.tsx');const c=run(composer.slice(composer.indexOf('  const send = async'),composer.indexOf('  return <KeyboardFrame')),composerGlobals);vm.runInContext('globalThis.sendMessage=send',c);
  await assert.rejects(c.sendMessage(),/timeout/);assert.equal(cleared,false);await c.sendMessage();assert.equal(references[0],references[1]);assert.equal(cleared,true);
  console.log('Product chat/options passed: image uploads, private URL reuse/expiry, mode mapping, cart exclusion, new/existing photo sends, acknowledgement, account isolation and idempotent retries.');
 }
