@@ -39,7 +39,7 @@ async function main() {
   let status='', posts=[], fail=true, muted=false, concurrent=0, maximum=0;
   const state = {
     Platform:{OS:'android'},soundPreferenceVersion:{current:0},sessionTokenRef:{current:'buyer'},
-    readNotificationSoundEnabled:async()=>true,pushSetupFlight:{current:null},pushSetupLastSuccess:{current:null},pushTokenRef:{current:null},
+    ALERT_CHANNEL_ID:"atl-updates-v2",ensureAndroidNotificationChannels:async()=>{},readNotificationSoundEnabled:async()=>true,pushSetupFlight:{current:null},pushSetupLastSuccess:{current:null},pushTokenRef:{current:null},
     Notifications:{AndroidImportance:{MAX:5,DEFAULT:3},setNotificationChannelAsync:async()=>{},getPermissionsAsync:async()=>({status:'granted'}),
       getExpoPushTokenAsync:async()=>({data:'expo-token'}),getNotificationChannelAsync:async()=>({sound:muted?null:'default',importance:5})},
     Constants:{expoConfig:{extra:{eas:{projectId:'project'}}}},API_URL:'https://example.test',setNotificationStatus:value=>{status=value;},
@@ -54,6 +54,7 @@ async function main() {
   await Promise.all([context.registerPushNotifications('buyer'),context.registerPushNotifications('buyer')]);
   assert.equal(posts.length,2,'concurrent retry should share a successful registration');
   assert.equal(maximum,1);
+  assert.equal(posts.at(-1).notification_channel,'atl-updates-v2');
   muted=true;
   assert.equal(await context.registerPushNotifications('buyer',undefined,true),true);
   assert.match(status,/Phone settings silence/,'report an OS-muted channel without claiming it is fixed');
@@ -68,18 +69,26 @@ async function main() {
   state.sessionTokenRef.current='other-buyer';
   assert.equal(await context.registerPushNotifications('buyer',true,true),false);
   assert.equal(posts.length,count,'stale sessions must not register tokens');
-  let registered=false, serverOK=true, localTests=0, serverTests=0, testAlert;
-  const testContext=vm.createContext({token:'buyer',notificationTestBusy:false,setNotificationTestBusy:()=>{},Platform:{OS:'android'},
-    Notifications:{...state.Notifications,scheduleNotificationAsync:async()=>{localTests++;}},
-    soundPreferenceVersion:{current:0},notificationSoundEnabled:false,setSoundEnabled:()=>{},writeNotificationSoundEnabled:async()=>{},
-    registerPushNotifications:async()=>registered,pushTokenRef:{current:'expo-token'},API_URL:'https://example.test',
-    fetchJSONWithTimeout:async(url)=>{assert.match(url,/notifications\/test-push$/);serverTests++;return{response:{ok:serverOK},body:{}};},
-    Alert:{alert:(...args)=>{testAlert=args;}}});
-  const testStart=app.indexOf('  async function testNotificationSound(');
-  vm.runInContext(transpile(app.slice(testStart,app.indexOf('  async function openNotification(',testStart))),testContext);
-  await testContext.testNotificationSound();assert.equal(serverTests,0);assert.equal(localTests,0);assert.equal(testAlert[0],'Test could not connect');
-  registered=true;await testContext.testNotificationSound();assert.equal(serverTests,1);assert.equal(localTests,0);assert.equal(testAlert[0],'Test sent from server');
-  serverOK=false;await testContext.testNotificationSound();assert.equal(testAlert[0],'Unable to test notifications');assert.equal(localTests,0,'server failure must never pass using a local test');
+  let foregroundHandler;
+  const handlerContext=vm.createContext({notificationSoundEnabled:true,Notifications:{setNotificationHandler:handler=>foregroundHandler=handler}});
+  vm.runInContext(transpile(app.slice(app.indexOf('Notifications.setNotificationHandler('),app.indexOf('const PRIVY_APP_ID'))),handlerContext);
+  let presentation=await foregroundHandler.handleNotification({request:{content:{data:{sound_enabled:true}}}});
+  assert.equal(presentation.shouldPlaySound,true);assert.equal(presentation.shouldShowBanner,true);assert.equal(presentation.shouldShowList,true);
+  presentation=await foregroundHandler.handleNotification({request:{content:{data:{sound_enabled:false}}}});
+  assert.equal(presentation.shouldPlaySound,false);
+  assert.doesNotMatch(app, /testNotificationSound|notificationTestBusy|Test sound/);
+  const channelSource=read('components/notificationChannels.ts');
+  const channels=[];
+  const configContext=vm.createContext({exports:{},require:()=>({AndroidImportance:{MAX:7,DEFAULT:5},AndroidAudioUsage:{NOTIFICATION:5},AndroidAudioContentType:{SONIFICATION:4},setNotificationChannelAsync:async(id,config)=>channels.push({id,config})})});
+  vm.runInContext(transpile(channelSource),configContext);
+  await configContext.exports.ensureAndroidNotificationChannels();
+  const audible=channels.find(c=>c.id==='atl-updates-v2');
+  assert.equal(audible.config.sound,'default');assert.equal(audible.config.importance,7);assert.equal(audible.config.audioAttributes.usage,5);
+  assert.equal(channels.find(c=>c.id==='orders-silent').config.sound,null);
+  assert.equal(JSON.parse(read('app.json')).expo.plugins.find(p=>Array.isArray(p)&&p[0]==='expo-notifications')[1].defaultChannel,'atl-updates-v2');
+  state.Platform.OS='ios';state.sessionTokenRef.current='buyer';muted=false;
+  await context.registerPushNotifications('buyer',true,true);
+  assert.equal(posts.at(-1).notification_channel,undefined,'iOS uses the payload sound, not Android channels');
   console.log('Whole/fractional prices, push-registration retries, muted-channel diagnostics, serialized preferences and stale-session regressions passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
