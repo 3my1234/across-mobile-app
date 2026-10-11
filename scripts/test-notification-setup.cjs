@@ -55,6 +55,7 @@ async function main() {
   assert.equal(posts.length,2,'concurrent retry should share a successful registration');
   assert.equal(maximum,1);
   assert.equal(posts.at(-1).notification_channel,'atl-updates-v2');
+  assert.equal(posts.at(-1).expo_project_id,'project');
   muted=true;
   assert.equal(await context.registerPushNotifications('buyer',undefined,true),true);
   assert.match(status,/Phone settings silence/,'report an OS-muted channel without claiming it is fixed');

@@ -105,6 +105,7 @@ export type AuthMode = "welcome" | "signin" | "signup";
 export type AppStage = "booting" | "auth" | "app";
 
 export type SupportTicket = {
+  unread_count?: number;
   id: string;
   subject: string;
   message: string;
