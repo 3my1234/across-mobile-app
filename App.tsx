@@ -22,6 +22,7 @@ import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
 import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, INTERNATIONAL_TRACKING_STAGES, LOCAL_TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
 import { money, fetchWithTimeout, fetchJSONWithTimeout, fetchHistoryJSON, sleep, mapProduct } from "./components/utils";
+import { ALERT_CHANNEL_ID, ensureAndroidNotificationChannels } from "./components/notificationChannels";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
 import { ResilientImage } from "./components/ResilientImage";
@@ -38,8 +39,8 @@ import { s as sharedStyles } from "./components/Styles";
 WebBrowser.maybeCompleteAuthSession();
 let notificationSoundEnabled = true;
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: notificationSoundEnabled,
+  handleNotification: async notification => ({
+    shouldPlaySound: notificationSoundEnabled && notification.request.content.data?.sound_enabled !== false,
     shouldSetBadge: true,
     shouldShowBanner: true,
     shouldShowList: true
@@ -208,7 +209,6 @@ function AcrossApp() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationStatus, setNotificationStatus] = useState("");
-  const [notificationTestBusy, setNotificationTestBusy] = useState(false);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
@@ -657,11 +657,10 @@ function AcrossApp() {
     const setup = (async () => {
       try {
         if (Platform.OS === "android") {
-          await Notifications.setNotificationChannelAsync("orders", {name:"Order updates",importance:Notifications.AndroidImportance.MAX,sound:"default",vibrationPattern:[0,250,180,250]});
-          await Notifications.setNotificationChannelAsync("orders-silent", {name:"Order updates (silent)",importance:Notifications.AndroidImportance.DEFAULT,sound:null});
+          await ensureAndroidNotificationChannels();
         }
         const current = await Notifications.getPermissionsAsync();
-        const permission = current.status === "granted" ? current : current.canAskAgain ? await Notifications.requestPermissionsAsync() : current;
+        const permission = current.status === "granted" ? current : current.canAskAgain ? await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowBadge: true, allowSound: true } }) : current;
         if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
         if (permission.status !== "granted") { setNotificationStatus("Phone notifications are disabled. Open phone settings to allow them."); return false; }
         const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
@@ -670,16 +669,16 @@ function AcrossApp() {
         if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
         const {response,body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/push-token`, {
           method:"POST",headers:{Authorization:`Bearer ${authToken}`,"Content-Type":"application/json"},
-          body:JSON.stringify({token:pushToken,platform:Platform.OS,sound_enabled:effectiveSound})
+          body:JSON.stringify({token:pushToken,platform:Platform.OS,sound_enabled:effectiveSound,notification_channel:Platform.OS === "android" ? ALERT_CHANNEL_ID : undefined})
         });
         if (!response.ok) throw new Error(body?.message || "Push registration failed");
         if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
         pushTokenRef.current = pushToken;
-        const channel = Platform.OS === "android" ? await Notifications.getNotificationChannelAsync("orders") : null;
+        const channel = Platform.OS === "android" ? await Notifications.getNotificationChannelAsync(ALERT_CHANNEL_ID) : null;
         if (authToken !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return false;
         pushSetupLastSuccess.current = {key,at:Date.now()};
         const phoneMuted = channel ? channel.sound === null || channel.importance < Notifications.AndroidImportance.DEFAULT : permission.ios?.allowsSound === false;
-        setNotificationStatus(!effectiveSound ? "Notification sounds are off." : phoneMuted ? "Phone settings silence notification sound. Open phone settings to turn sound on." : "Notifications are connected. Use Test sound to check your phone.");
+        setNotificationStatus(!effectiveSound ? "Notification sounds are off." : phoneMuted ? "Phone settings silence notification sound. Open phone settings to turn sound on." : "Phone notifications are connected.");
         return true;
       } catch {
         if (authToken === sessionTokenRef.current && version === soundPreferenceVersion.current) setNotificationStatus("Notifications could not connect. We'll retry automatically when the app is active.");
@@ -707,58 +706,6 @@ function AcrossApp() {
     try { await writeNotificationSoundEnabled(next); } catch { if (version === soundPreferenceVersion.current) { notificationSoundEnabled = previous; setSoundEnabled(previous); setNotificationStatus("Sound preference could not be saved. Please try again."); } return; }
     if (version !== soundPreferenceVersion.current) return;
     if (token) await registerPushNotifications(token, next);
-  }
-
-  async function testNotificationSound() {
-    if (notificationTestBusy) return;
-    setNotificationTestBusy(true);
-    try {
-      if (Platform.OS === "android") {
-        await Notifications.setNotificationChannelAsync("orders", {
-          name: "Order updates",
-          importance: Notifications.AndroidImportance.MAX,
-          sound: "default",
-          vibrationPattern: [0, 250, 180, 250]
-        });
-      }
-      const current = await Notifications.getPermissionsAsync();
-      const permission = current.status === "granted" ? current : await Notifications.requestPermissionsAsync();
-      if (permission.status !== "granted") {
-        Alert.alert("Notifications disabled", "Allow notifications for Atl in your phone settings, then try again.");
-        return;
-      }
-      soundPreferenceVersion.current++;
-      notificationSoundEnabled = true;
-      setSoundEnabled(true);
-      await writeNotificationSoundEnabled(true);
-      if (token) {
-        if (!await registerPushNotifications(token, true, true)) {
-          Alert.alert("Test could not connect", "Your phone has not connected to the notification service. Please try again when you have internet access.");
-          return;
-        }
-        const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/test-push`, {
-          method: "POST", headers: {Authorization: `Bearer ${token}`, "Content-Type": "application/json"},
-          body: JSON.stringify({token: pushTokenRef.current})
-        });
-        if (!response.ok) throw new Error(body?.message || "Server notification test failed");
-        Alert.alert("Test sent from server", "Move Atl to the background and listen for the notification. This tests the same delivery service as your order updates; delivery may take a few seconds.");
-        return;
-      }
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Atl notifications are ready",
-          body: "You will hear this sound for order, message, and service updates.",
-          sound: "default",
-          data: { notification_type: "sound_test" }
-        },
-        trigger: Platform.OS === "android"
-          ? { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 2, channelId: "orders" }
-          : { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 2 }
-      });
-      Alert.alert("Test scheduled", "Keep Atl open or move it to the background. The test notification should arrive in about two seconds.");
-    } catch {
-      Alert.alert("Unable to test notifications", "The notification service could not complete the test. Check your connection and try again. If it keeps failing, contact support.");
-    } finally { setNotificationTestBusy(false); }
   }
 
   async function openNotification(notification: any) {
@@ -2067,10 +2014,9 @@ function AcrossApp() {
               </View>
               {!!notificationStatus && <Text accessibilityRole="alert" style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>{notificationStatus}</Text>}
               <View style={{flexDirection:"row",gap:10,marginTop:10}}>
-                <Pressable disabled={notificationTestBusy} style={[s.secondaryButton,{flex:1},notificationTestBusy && s.disabled]} onPress={()=>void testNotificationSound()}><Text style={s.secondaryButtonText}>{notificationTestBusy ? "Testing..." : "Test sound"}</Text></Pressable>
-                <Pressable style={[s.secondaryButton,{flex:1}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert("Phone settings", "Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Order updates."))}><Text style={s.secondaryButtonText}>Phone settings</Text></Pressable>
+                <Pressable style={[s.secondaryButton,{flex:1}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert("Phone settings", "Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Messages and updates."))}><Text style={s.secondaryButtonText}>Phone settings</Text></Pressable>
               </View>
-              <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Order updates, and check your notification volume and Do Not Disturb setting.</Text>
+              <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Messages and updates, and check your notification volume and Do Not Disturb setting.</Text>
             </View>
             <View style={s.quickLinks}>
               <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color={theme.color("#FF4747")}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments and transaction references</Text></View><Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")}/></Pressable>

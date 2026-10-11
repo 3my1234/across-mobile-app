@@ -40,7 +40,7 @@
       [
         "expo-notifications",
         {
-          "defaultChannel": "orders",
+          "defaultChannel": "atl-updates-v2",
           "color": "#FF4747"
         }
       ],
