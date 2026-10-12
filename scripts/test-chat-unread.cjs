@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const source=fs.readFileSync('components/MarketplaceScreen.tsx','utf8');
 const transpile=code=>ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
 let chats=[{id:'chat',unread_count:3}],ackCount=0,fail=false,resolveAck;
-const g={token:'buyer',threadRequest:{current:0},threadInFlight:{current:false},chatActor:{current:'buyer'},conversationRef:{current:{id:'chat'}},AppState:{currentState:'active'},API_URL:'https://example.test',authHeaders:{},URLSearchParams,
+const g={threadETags:{current:new Map()},providerChatHistory:{get:()=>null,put:()=>{},clear:()=>{}},token:'buyer',threadRequest:{current:0},threadInFlight:{current:false},chatActor:{current:'buyer'},conversationRef:{current:{id:'chat'}},AppState:{currentState:'active'},API_URL:'https://example.test',authHeaders:{},URLSearchParams,
 setChatLoading(){},setConversationMessages(){},setConversationCursor(){},setChatError(){},mergeChatMessages:(a,b)=>b,
 setConversations(fn){chats=fn(chats)},apiMessage:()=> 'failed',fetchHistoryJSON:async()=>({response:{ok:!fail},body:{items:[{id:'message',created_at:'2026-10-11'}]}}),
 fetchJSONWithTimeout:async(url,options)=>{assert.match(url,/chat\/read$/);assert.equal(JSON.parse(options.body).message_id,'message');ackCount++;return new Promise(resolve=>resolveAck=resolve)}};

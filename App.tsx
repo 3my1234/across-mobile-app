@@ -1,3 +1,4 @@
+import {supportChatHistory,providerChatHistory} from "./components/chatHistoryCache";
 import { KeyboardFrame } from "./components/KeyboardFrame";
 import { XPWithdrawalPanel } from "./components/XPWithdrawalPanel";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput, ThemeProvider } from "./components/ThemeProvider";
@@ -781,7 +782,7 @@ function AcrossApp() {
     setOrders([]);
     setXpBalance(0); setXpReserved(0); setWithdrawalEnabled(false); setXpEnabled(false); setUseXP(false); supportTicketRequest.current++; supportMessageRequest.current++; setSupportError("");
     setXpClaimed(false);
-    setSupportTickets([]); setTicketListCursor(""); setShowSupportForm(false);
+    supportChatHistory.clear();providerChatHistory.clear();setSupportTickets([]); setTicketListCursor(""); setShowSupportForm(false);
     setSupportSubject("");
     setSupportMessage("");
     setSelectedTicket(null);
@@ -1642,13 +1643,18 @@ function AcrossApp() {
       if (seq !== supportMessageRequest.current || token !== sessionTokenRef.current) return;
       if (d.ticket_status) setSelectedTicket(current => current?.id === ticketId ? {...current,status:d.ticket_status} : current);
       setTicketMessages(current => {
+        if(token!==sessionTokenRef.current || seq!==supportMessageRequest.current)return current;
         const combined = new Map<string, SupportMessage>();
         [...current, ...(d.messages || [])].forEach((message: SupportMessage) => combined.set(message.id || `${message.created_at}:${message.sender_id}:${message.message}`, message));
-        return [...combined.values()].sort((a,b) => a.created_at.localeCompare(b.created_at) || String(a.id).localeCompare(String(b.id)));
+        const merged=[...combined.values()].sort((a,b) => a.created_at.localeCompare(b.created_at) || String(a.id).localeCompare(String(b.id)));
+        const cached=supportChatHistory.get(token,ticketId);
+        supportChatHistory.put(token,ticketId,merged,cursor || !cached?.messages.length ? d.next_cursor || "" : cached.cursor);
+        return merged;
       });
       if (cursor) setSupportCursor(d.next_cursor || "");
       else if (!ticketMessagesRef.current.length) setSupportCursor(d.next_cursor || "");
       const newest = (d.messages || []).at(-1);
+      setMessageLoading(false);
       if (newest?.id && visibleSupport.current.tab === "support" && visibleSupport.current.ticket === ticketId && AppState.currentState === "active") {
         const {response:ack,body:read} = await fetchJSONWithTimeout(`${API_URL}/api/v1/support/tickets/${ticketId}/read`, {method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({message_id:newest.id})});
         if (ack.ok && seq === supportMessageRequest.current && token === sessionTokenRef.current) setSupportTickets(current=>current.map(item=>item.id===ticketId?{...item,unread_count:read.unread_count || 0}:item));
@@ -2127,7 +2133,7 @@ function AcrossApp() {
                   {supportLoading ? <ActivityIndicator color={theme.color("#FF4747")} /> : null}
                   {supportTickets.length === 0 && !supportLoading && !supportError ? <Text style={{ color: theme.color("#8C8C8C", "color"), marginTop: 8 }}>No tickets yet.</Text>
                   : supportTickets.map(ticket => (
-                    <Pressable key={ticket.id} style={[s.quickLinkCard, !!ticket.unread_count && {borderLeftWidth:4,borderLeftColor:theme.color("#FF4747")}]} onPress={async () => { setTicketMessages([]); setSupportCursor(""); setSupportError(""); setSelectedTicket(ticket); }}>
+                    <Pressable key={ticket.id} style={[s.quickLinkCard, !!ticket.unread_count && {borderLeftWidth:4,borderLeftColor:theme.color("#FF4747")}]} onPress={async () => { const cached=supportChatHistory.get(token || "",ticket.id);setTicketMessages(cached?.messages || []); setSupportCursor(cached?.cursor || ""); setSupportError(""); setSelectedTicket(ticket); }}>
                       <View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>{ticket.subject}</Text>{!!ticket.unread_count && <Text style={{color:theme.color("#FF4747"),fontWeight:"800",fontSize:12}}>{ticket.unread_count} unread</Text>}<Text style={s.quickLinkMeta}>{ticket.status} · {new Date(ticket.created_at).toLocaleDateString()}</Text></View>
                       <Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")} />
                     </Pressable>
