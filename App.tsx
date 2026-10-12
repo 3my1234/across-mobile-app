@@ -1,4 +1,5 @@
 import {supportChatHistory,providerChatHistory} from "./components/chatHistoryCache";
+import {notificationDestination} from "./components/notificationDestination";
 import { KeyboardFrame } from "./components/KeyboardFrame";
 import { XPWithdrawalPanel } from "./components/XPWithdrawalPanel";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput, ThemeProvider } from "./components/ThemeProvider";
@@ -140,6 +141,10 @@ function AcrossApp() {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [serviceInitialMode, setServiceInitialMode] = useState<"explore" | "requests" | "messages">("explore");
+  const [serviceConversationId,setServiceConversationId]=useState("");
+  const [notificationNavigationKey,setNotificationNavigationKey]=useState(0);
+  const notificationNavigationRequest=useRef(0);
+  const rewardsOffset=useRef(0);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [busy, setBusy] = useState(false);
@@ -544,6 +549,8 @@ function AcrossApp() {
       void Promise.all([loadNotifications(token), loadOrders(token)]);
     });
     const responded = Notifications.addNotificationResponseReceivedListener(response => {
+      if(lastNotificationResponseId.current===response.notification.request.identifier)return;
+      lastNotificationResponseId.current=response.notification.request.identifier;
       void openNotification(response.notification.request.content.data || {});
     });
     void Notifications.getLastNotificationResponseAsync().then(response => {
@@ -693,9 +700,12 @@ function AcrossApp() {
 
   async function markNotificationRead(id: string, reload = true) {
     if (!token) return;
+    const actor=token;
     try {
-      await fetch(`${API_URL}/api/v1/notifications/${id}/read`, { method: "PATCH", headers: { Authorization: `Bearer ${token}` } });
-      if (reload) await loadNotifications();
+      const response=await fetchWithTimeout(`${API_URL}/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "PATCH", headers: { Authorization: `Bearer ${actor}` } });
+      if(!response.ok || actor!==sessionTokenRef.current)return;
+      setNotifications(items=>items.map(item=>item.id===id?{...item,is_read:true}:item));
+      if (reload) await loadNotifications(actor);
     } catch {}
   }
 
@@ -711,33 +721,41 @@ function AcrossApp() {
   }
 
   async function openNotification(notification: any) {
-    if (!token) return;
+    if (!token || token!==sessionTokenRef.current) return;
+    const actor=token,request=++notificationNavigationRequest.current;
     const notificationId = String(notification?.id || notification?.notification_id || "");
-    if (notificationId) await markNotificationRead(notificationId, false);
-    const orderId = String(notification?.order_id || notification?.data?.order_id || "");
-    const notificationType = String(notification?.type || notification?.notification_type || "");
+    const destination=notificationDestination(notification);
     setShowNotifications(false);
-    if (orderId) {
+    setActiveTab(destination.tab);
+    // Navigate immediately. A slow read acknowledgement must never block a tap.
+    if (notificationId) void markNotificationRead(notificationId);
+    if(destination.tab==="services"){
+      setServiceInitialMode(destination.mode);
+      setServiceConversationId(destination.conversationId || "");
+      setNotificationNavigationKey(value=>value+1);
+    }else if(destination.tab==="support"){
+      supportMessageRequest.current++;
+      const ticketId=destination.ticketId;
+      const ticket=ticketId ? supportTickets.find(item=>item.id===ticketId) || {id:ticketId,subject:"Atlantic Express Support",message:"",status:"open",created_at:new Date().toISOString(),updated_at:new Date().toISOString()} : null;
+      const cached=ticketId?supportChatHistory.get(actor,ticketId):null;
+      setTicketMessages(cached?.messages || []);setSupportCursor(cached?.cursor || "");setSupportError("");setSelectedTicket(ticket);
+    }else if(destination.tab==="account" && destination.rewards){
+      void loadXPBalance(actor);
+      setTimeout(()=>{if(actor===sessionTokenRef.current && request===notificationNavigationRequest.current)accountScrollRef.current?.scrollTo({y:Math.max(0,rewardsOffset.current-12),animated:true});},250);
+    }else if(destination.tab==="track" && destination.orderId){
+      const orderId=destination.orderId;
       setFocusedOrderId(orderId);
-      setActiveTab("track");
-      const latestOrders = await loadOrders(token);
+      const latestOrders = await loadOrders(actor);
+      if(actor!==sessionTokenRef.current || request!==notificationNavigationRequest.current)return;
       const target = latestOrders.find(order => order.id === orderId);
       if (target?.current_tracking_stage === "Delivered" && target.order_status !== "Completed") {
         setDeliveryConfirmOrder(target);
       }
       setTimeout(() => {
+        if(actor!==sessionTokenRef.current || request!==notificationNavigationRequest.current)return;
         trackScrollRef.current?.scrollTo({ y: Math.max(0, (orderOffsetsRef.current[orderId] || 0) - 12), animated: true });
       }, 250);
-    } else if (notificationType === "marketplace_message") {
-      setServiceInitialMode("messages");
-      setActiveTab("services");
-    } else if (notificationType === "marketplace_request") {
-      setServiceInitialMode("requests");
-      setActiveTab("services");
-    } else if (notificationType === "ticket_reply") {
-      setActiveTab("support");
     }
-    await loadNotifications(token);
   }
 
   async function markAllRead() {
@@ -764,6 +782,7 @@ function AcrossApp() {
   }
 
   async function clearSession() {
+    notificationNavigationRequest.current++;setServiceConversationId("");setNotificationNavigationKey(0);
     await Promise.all([
       SecureStore.deleteItemAsync(TOKEN_KEY),
       SecureStore.deleteItemAsync(EXPIRY_KEY),
@@ -1922,7 +1941,7 @@ function AcrossApp() {
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
-        {activeTab === "services" && <MarketplaceScreen token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} />}
+        {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} />}
 
         {activeTab === "cart" && (
           <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
@@ -2003,7 +2022,7 @@ function AcrossApp() {
                 </View>
               </View>
             )}
-            <View style={s.panel}>
+            <View style={s.panel} onLayout={event=>{rewardsOffset.current=event.nativeEvent.layout.y;}}>
               {xpReserved > 0 && <Text style={s.muted}>{xpReserved} XP reserved for pending checkout. Points are spent only after confirmed payment.</Text>}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: theme.color("#FF4747", "color") }}>{xpBalance} XP</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 13, fontWeight: "700" }}>NGN {xpBalance} available as XP</Text></View>
