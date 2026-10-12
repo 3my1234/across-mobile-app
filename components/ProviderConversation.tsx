@@ -1,7 +1,8 @@
+import {ChatPhotoViewer} from "./ChatPhotoViewer";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import React, { useEffect, useRef, useState } from "react";
-import {ActivityIndicator, Alert, BackHandler, Image, Modal, ScrollView, FlatList, Platform, Pressable, StyleSheet,   View} from "react-native";
+import {ActivityIndicator, Alert, BackHandler, Image, ScrollView, FlatList, Platform, Pressable, StyleSheet,   View} from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Crypto from "expo-crypto";
 import { uploadChatImage } from "./chatImages";
@@ -61,7 +62,7 @@ export function ProviderConversation(props: Props) {
       renderItem={({item})=><View style={[s.bubble,item.sender_type==="buyer" ? s.mine : s.theirs]}><Text style={s.message}>{item.body}</Text>{(item.media_urls || []).map(uri=><Pressable key={uri} onPress={()=>setViewPhoto(uri)} accessibilityLabel="View chat photo"><Image source={{uri}} style={{width:200,height:180,borderRadius:10,marginTop:6}} resizeMode="cover"/></Pressable>)}<Text style={s.time}>{new Date(item.created_at).toLocaleString()}</Text></View>}/>
     {props.paused && <Text style={s.error}>This provider cannot receive messages right now. Please try again later.</Text>}
     {!!photos.length && <ScrollView horizontal style={{flexGrow:0,maxHeight:90,backgroundColor: theme.color("#FFF", "backgroundColor")}}>{photos.map(photo=><Pressable key={photo.key} onPress={()=>{if(!props.busy && !uploading)setPhotos(current=>current.filter(item=>item.key!==photo.key));}} accessibilityLabel="Remove attached photo"><Image source={{uri:photo.uri}} style={{width:72,height:72,margin:6,borderRadius:8}}/><Text style={{position:"absolute",right:9,top:6,color: theme.color("#B42318", "color")}}>X</Text></Pressable>)}</ScrollView>}
-    <Modal visible={!!viewPhoto} onRequestClose={()=>setViewPhoto(null)}><View style={{flex:1,backgroundColor: theme.color("#111", "backgroundColor"),paddingTop:50}}><Pressable onPress={()=>setViewPhoto(null)} accessibilityLabel="Close photo" style={{padding:15}}><Text style={{color: theme.color("#FFF", "color")}}>Close</Text></Pressable>{viewPhoto && <Image source={{uri:viewPhoto}} resizeMode="contain" style={{flex:1}}/>}</View></Modal>
+    <ChatPhotoViewer key={viewPhoto || "closed"} uri={viewPhoto} onClose={()=>setViewPhoto(null)}/>
     <View style={[s.composer,{paddingBottom:props.bottomInset+8}]}><Pressable accessibilityLabel="Attach photos" disabled={uploading||props.busy||props.paused||photos.length>=4} onPress={()=>void attach()} style={s.send}>{uploading?<ActivityIndicator color={theme.color("#FFF")}/>:<Ionicons name="image-outline" size={22} color={theme.color("#FFF")}/>}</Pressable><TextInput accessibilityLabel="Message provider" value={draft} onChangeText={setDraft} editable={!props.busy && !props.paused && !uploading} placeholder="Write a message…" multiline maxLength={2000} style={s.input}/><Pressable accessibilityLabel="Send provider message" disabled={uploading||props.busy||props.paused||(!draft.trim()&&!photos.length)} onPress={()=>void send().catch(()=>{})} style={[s.send,(uploading||props.busy||props.paused||(!draft.trim()&&!photos.length))&&s.disabled]}>{props.busy ? <ActivityIndicator color={theme.color("#FFF")}/> : <Ionicons name="arrow-up" size={23} color={theme.color("#FFF")}/>}</Pressable></View>
   </KeyboardFrame>;
 }

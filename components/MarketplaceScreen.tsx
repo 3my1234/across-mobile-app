@@ -1,3 +1,4 @@
+import {providerChatHistory} from "./chatHistoryCache";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {mergeChatMessages} from "./chatImages";
@@ -136,6 +137,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const chatBusy = useRef(false);
   const chatOpening = useRef(false);
   const [openingChat, setOpeningChat] = useState(false);
+  const threadETags=useRef(new Map<string,string>());
   const threadRequest = useRef(0);
   const threadInFlight = useRef(false);
   const chatActor = useRef(token); chatActor.current = token;
@@ -434,16 +436,28 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     if(!quiet)setChatLoading(true);
     try {
       const query=new URLSearchParams({limit:"50",mark_read:"false"});if(cursor)query.set("cursor",cursor);
-      const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:authHeaders});
+      const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/messages?${query}`,{headers:{...authHeaders,...(quiet && threadETags.current.has(conversation.id)?{"If-None-Match":threadETags.current.get(conversation.id)!}:{})}});
+      if(response.status===304)return;
       if(!response.ok)throw new Error(apiMessage(body,"Messages could not be loaded"));
       if(request!==threadRequest.current || actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return;
+      const etag=response.headers?.get("ETag");if(etag)threadETags.current.set(conversation.id,etag);
       const incoming: ConversationMessage[]=Array.isArray(body.items)?body.items:[];
-      setConversationMessages(current=>mergeChatMessages(current,incoming));
+      setConversationMessages(current=>{
+        if(actor!==chatActor.current || conversationRef.current?.id!==conversation.id)return current;
+        const merged=mergeChatMessages(current,incoming);
+        const previous=providerChatHistory.get(actor || "",conversation.id);
+        providerChatHistory.put(actor || "",conversation.id,merged,cursor || !previous?.messages.length ? body.next_cursor || "" : previous.cursor);
+        return merged;
+      });
       if(!quiet || cursor)setConversationCursor(body.next_cursor || "");
       const newest=incoming.at(-1);
+      setChatLoading(false);
       if(newest?.id && AppState.currentState === "active") {
+        try {
         const {response:ack,body:read}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.id}/read`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message_id:newest.id})});
+        if(!ack.ok)threadETags.current.delete(conversation.id);
         if(ack.ok && request===threadRequest.current && actor===chatActor.current && conversationRef.current?.id===conversation.id) setConversations(current=>current.map(item=>item.id===conversation.id?{...item,unread_count:read.unread_count || 0}:item));
+        }catch{threadETags.current.delete(conversation.id);}
       }
       setChatError("");
     } catch(messageError){if(request===threadRequest.current&&actor===chatActor.current)setChatError(messageError instanceof Error?messageError.message:"Messages could not be loaded");}
@@ -452,7 +466,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
 
   async function openConversation(conversation: Conversation) {
     threadRequest.current++;
-    setConversationMessages([]);setConversationCursor("");setChatError("");
+    const cached=providerChatHistory.get(token || "",conversation.id);
+    setConversationMessages(cached?.messages || []);setConversationCursor(cached?.cursor || "");setChatError("");
     conversationRef.current=conversation;
     setSelectedConversation(conversation);
     if(conversation.id)await loadConversationMessages(conversation);
@@ -482,7 +497,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
 
   useEffect(()=>{
     chatOpening.current=false;setOpeningChat(false);
-    threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);conversationsRef.current=[];setConversationListCursor("");setChatError("");setChatSending(false);setChatLoading(false);
+    providerChatHistory.clear();threadETags.current.clear();threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);conversationsRef.current=[];setConversationListCursor("");setChatError("");setChatSending(false);setChatLoading(false);
   },[token]);
   useEffect(()=>{
     let stopped=false, busy=false;

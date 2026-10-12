@@ -62,7 +62,7 @@ export async function fetchJSONWithTimeout(url: string, init?: RequestInit, time
   try {
     return await Promise.race([deadline, (async () => {
       const response = await fetch(url, { ...init, signal: controller.signal });
-      const body = await response.json();
+      const body = response.status===304 ? {} : await response.json();
       return { response, body };
     })()]);
   } finally { clearTimeout(timer!); }
