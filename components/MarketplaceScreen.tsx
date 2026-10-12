@@ -118,7 +118,7 @@ function bookingQuantityCopy(listingType: string) {
   return { label: "Number of people receiving this service", help: "Enter 1 when booking only for yourself. This is not the number of days.", unit: "person" };
 }
 
-export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore" }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages" }) {
+export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore",initialConversationId="" }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string }) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
@@ -499,6 +499,21 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     chatOpening.current=false;setOpeningChat(false);
     providerChatHistory.clear();threadETags.current.clear();threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);conversationsRef.current=[];setConversationListCursor("");setChatError("");setChatSending(false);setChatLoading(false);
   },[token]);
+  useEffect(()=>{
+    if(!token || !initialConversationId)return;
+    const actor=token;let cancelled=false;
+    setMode("messages");setChatLoading(true);
+    void (async()=>{
+      try{
+        const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?conversation_id=${encodeURIComponent(initialConversationId)}&limit=1`,{headers:authHeaders});
+        if(cancelled || actor!==chatActor.current)return;
+        const conversation=(body.items || []).find((item:Conversation)=>item.id===initialConversationId);
+        if(!response.ok || !conversation)throw Error("This conversation is unavailable. Refresh your provider chats or contact Support.");
+        await openConversation(conversation);
+      }catch(error){if(!cancelled && actor===chatActor.current){setError(error instanceof Error?error.message:"Conversation could not open. Please retry.");setChatLoading(false);}}
+    })();
+    return()=>{cancelled=true;threadRequest.current++;};
+  },[token,initialConversationId]);
   useEffect(()=>{
     let stopped=false, busy=false;
     const refresh=async()=>{
