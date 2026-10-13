@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Product } from "./types";
 import { money } from "./utils";
 import { ResilientImage } from "./ResilientImage";
+import { ProviderIdentity } from "./ProviderIdentity";
 
 interface Props {
   flashSales: Product[];
@@ -38,6 +39,7 @@ export function FlashSaleBanner({ flashSales, onSelectProduct, onViewAll }: Prop
             />
             <View style={styles.cardCopy}>
 			<Text numberOfLines={1} style={styles.productTitle}>{p.title}</Text>
+			<ProviderIdentity identity={p.provider_identity}/>
 			<Text style={styles.price}>{money(p.price, p.currency)}</Text>
 			{p.compare_at_price ? <Text style={styles.old}>{money(p.compare_at_price, p.currency)}</Text> : null}
             </View>
