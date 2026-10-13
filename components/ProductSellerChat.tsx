@@ -70,5 +70,5 @@ export function ProductSellerChat({product,token,onClose}:{product:Product;token
   }catch(problem){if(alive.current)setError(problem instanceof Error?problem.message:"Message could not be sent");throw problem;}
   finally{sending.current=false;if(alive.current)setBusy(false);}
  }
- return <ProviderConversation token={token} title={product.title} provider={product.provider_name || "Seller"} messages={messages} busy={busy||loading} loading={loading} paused={paused} error={error} hasEarlier={!!cursor} bottomInset={inset.bottom} onClose={onClose} onSend={send} onEarlier={()=>void load(cursor)} onRefresh={()=>void load()}/>;
+ return <ProviderConversation token={token} title={product.title} provider={product.provider_name || "Seller"} identity={product.provider_identity} messages={messages} busy={busy||loading} loading={loading} paused={paused} error={error} hasEarlier={!!cursor} bottomInset={inset.bottom} onClose={onClose} onSend={send} onEarlier={()=>void load(cursor)} onRefresh={()=>void load()}/>;
 }

@@ -1,3 +1,4 @@
+import {ProviderIdentity} from "./ProviderIdentity";
 import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React from "react";
 import {View,  Pressable, StyleSheet} from "react-native";
@@ -32,6 +33,7 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
       />
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>{product.title}</Text>
+        <ProviderIdentity identity={product.provider_identity}/>{product.provider_identity?.verified && product.provider_identity.paid_active && <Text style={styles.metaText}>Promoted</Text>}
         {!!product.category_path?.length && <Text style={styles.category} numberOfLines={1}>{product.category_path[product.category_path.length-1]}</Text>}
         <View style={styles.ratingRow}>
           <ReviewStars rating={product.average_rating} size={12} />
@@ -46,7 +48,7 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
             <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{money(currentPrice, product.currency)}</Text>
             {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
           </View>
-          <Pressable hitSlop={6} accessibilityLabel={product.payment_mode==="contact" ? `Message seller about ${product.title}` : onAdd ? `Add ${product.title} to cart` : `View ${product.title}`} disabled={onAdd && product.payment_mode!=="contact" ? product.inventory_count <= 0 || cartQuantity >= product.inventory_count : false} onPress={event=>{event.stopPropagation();(product.payment_mode==="contact" ? onPress : (onAdd || onPress))();}} style={[styles.cartButton,onAdd && product.payment_mode!=="contact" && (product.inventory_count<=0 || cartQuantity>=product.inventory_count) && {opacity:0.45}]}><Ionicons name={product.payment_mode==="contact" ? "chatbubble-outline" : "cart-outline"} size={19} color={theme.color("#191919")}/>{cartQuantity>0 && <Text style={styles.cartCount}>{cartQuantity}</Text>}</Pressable>
+          <Pressable hitSlop={6} accessibilityLabel={`Message seller about ${product.title}`} onPress={event=>{event.stopPropagation();onPress();}} style={styles.cartButton}><Ionicons name="chatbubble-outline" size={19} color={theme.color("#191919")}/></Pressable>
         </View>
         {comparePrice > currentPrice && <View style={styles.discountRow}>
           <Text style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{money(comparePrice, product.currency)}</Text>

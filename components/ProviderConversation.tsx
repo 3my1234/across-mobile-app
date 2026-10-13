@@ -1,3 +1,4 @@
+import {ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {ChatPhotoViewer} from "./ChatPhotoViewer";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -9,7 +10,7 @@ import { uploadChatImage } from "./chatImages";
 import { Ionicons } from "@expo/vector-icons";
 
 export type ProviderMessage = { id: string; sender_type: "buyer" | "provider"; body: string; media_urls?:string[]; created_at: string };
-type Props = { token:string; title: string; provider: string; messages: ProviderMessage[]; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
+type Props = { token:string; title: string; provider: string; identity?:ProviderIdentityData; messages: ProviderMessage[]; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
 export function ProviderConversation(props: Props) {
   const theme = useTheme();
   const s = useThemedStyles(baseStyles);
@@ -52,7 +53,7 @@ export function ProviderConversation(props: Props) {
     finally{sending.current=false;}
   };
   return <KeyboardFrame style={s.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-    <View style={s.header}><Pressable onPress={props.onClose} accessibilityLabel="Back to conversations" style={s.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")}/></Pressable><View style={s.heading}><Text style={s.title} numberOfLines={1}>{props.provider}</Text><Text style={s.meta} numberOfLines={1}>{props.title}</Text></View></View>
+    <View style={s.header}><Pressable onPress={props.onClose} accessibilityLabel="Back to conversations" style={s.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")}/></Pressable><View style={s.heading}><ProviderIdentity identity={props.identity || {name:props.provider,verified:false}} compact={false}/><Text style={s.meta} numberOfLines={1}>{props.title}</Text></View></View>
     {!!props.error && <Pressable onPress={props.onRefresh}><Text style={s.error}>{props.error} · Tap to retry</Text></Pressable>}
     <FlatList ref={list} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={s.thread} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
       onScroll={event=>{const {contentOffset,contentSize,layoutMeasurement}=event.nativeEvent;nearBottom.current=contentSize.height-contentOffset.y-layoutMeasurement.height<100;}} scrollEventThrottle={100}
