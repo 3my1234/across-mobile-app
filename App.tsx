@@ -30,6 +30,9 @@ import { ProductCard } from "./components/ProductCard";
 import { ResilientImage } from "./components/ResilientImage";
 import { NAV_ITEMS } from "./components/NavItems";
 import { MarketplaceScreen } from "./components/MarketplaceScreen";
+import {CommunityScreen,CommunityMode} from "./components/CommunityScreen";
+import {TownHallBubble} from "./components/TownHallBubble";
+import {communityInviteUsername} from "./components/communityApi";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
 import { readNotificationSoundEnabled, writeNearbySnapshot, writeNotificationSoundEnabled } from "./components/nearbyCache";
 import { freshCatalogURL, useCatalogFreshness } from "./components/catalogFreshness";
@@ -142,6 +145,11 @@ function AcrossApp() {
   const [activeTab, setActiveTab] = useState<Tab>("home");
   const [serviceInitialMode, setServiceInitialMode] = useState<"explore" | "requests" | "messages">("explore");
   const [serviceConversationId,setServiceConversationId]=useState("");
+  const [communityMode,setCommunityMode]=useState<CommunityMode>("chats");
+  const [communityConversationId,setCommunityConversationId]=useState("");
+  const [communityHallRoomId,setCommunityHallRoomId]=useState("");
+  const [communityInvite,setCommunityInvite]=useState("");
+  const [pendingCommunityInvite,setPendingCommunityInvite]=useState("");
   const [notificationNavigationKey,setNotificationNavigationKey]=useState(0);
   const notificationNavigationRequest=useRef(0);
   const rewardsOffset=useRef(0);
@@ -320,6 +328,14 @@ function AcrossApp() {
     if (compare <= current || compare <= 0) return best;
     return Math.max(best, Math.round(((compare - current) / compare) * 100));
   }, 0), [flashSaleProducts]);
+
+  useEffect(()=>{
+    const receive=(url:string)=>{const username=communityInviteUsername(url);if(username)setPendingCommunityInvite(username);};
+    void Linking.getInitialURL().then(url=>{if(url)receive(url);});
+    const subscription=Linking.addEventListener("url",event=>receive(event.url));
+    return()=>subscription.remove();
+  },[]);
+  useEffect(()=>{if(stage!=="app"||!token||!pendingCommunityInvite)return;setCommunityInvite(pendingCommunityInvite);setCommunityMode('friends');setCommunityConversationId('');setCommunityHallRoomId('');setActiveTab('messages');setNotificationNavigationKey(value=>value+1);setPendingCommunityInvite('');},[stage,token,pendingCommunityInvite]);
 
   useEffect(() => {
     void fetch(`${API_URL}/api/v1/buyer-markets`).then(r => r.ok ? r.json() : null).then(data => {
@@ -729,7 +745,12 @@ function AcrossApp() {
     setActiveTab(destination.tab);
     // Navigate immediately. A slow read acknowledgement must never block a tap.
     if (notificationId) void markNotificationRead(notificationId);
-    if(destination.tab==="services"){
+    if(destination.tab==="messages"){
+      setCommunityMode(destination.mode);
+      setCommunityConversationId(destination.chatRoomId || "");
+      setCommunityHallRoomId(destination.townHallRoomId || "");
+      setNotificationNavigationKey(value=>value+1);
+    }else if(destination.tab==="services"){
       setServiceInitialMode(destination.mode);
       setServiceConversationId(destination.conversationId || "");
       setNotificationNavigationKey(value=>value+1);
@@ -1932,6 +1953,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} />}
+        {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={bottomInset+BOTTOM_NAV_HEIGHT} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId} inviteUsername={communityInvite}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
           <Text style={s.panelTitle}>Contact sellers</Text><Text style={s.muted}>Product payments are arranged directly with sellers. Open a product and tap Message seller. Previous paid orders remain available in Track and payment history.</Text>
@@ -2141,6 +2163,7 @@ function AcrossApp() {
         )}
       </View>
 
+      {!keyboardVisible&&token&&['home','services','track'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setCommunityInvite('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
       {!keyboardVisible && <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
