@@ -11,6 +11,7 @@ ios/
 
 dist/
 build/
+.tmp/
 coverage/
 
 npm-debug.log*

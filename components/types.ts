@@ -102,7 +102,7 @@ export type Review = {
 
 export type ReviewSummary = { count: number; average_rating: number };
 
-export type Tab = "home" | "services" | "cart" | "account" | "track" | "support";
+export type Tab = "home" | "services" | "messages" | "cart" | "account" | "track" | "support";
 export type AuthMode = "welcome" | "signin" | "signup";
 export type AppStage = "booting" | "auth" | "app";
 
