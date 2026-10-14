@@ -1,3 +1,4 @@
+import {privateChatStore} from './components/privateChatStore';
 import {supportChatHistory,providerChatHistory} from "./components/chatHistoryCache";
 import {notificationDestination} from "./components/notificationDestination";
 import { KeyboardFrame } from "./components/KeyboardFrame";
@@ -175,6 +176,8 @@ function AcrossApp() {
   const paymentPollGeneration = useRef(0);
   const paymentConfirmationIssue = useRef("");
   const [showPaymentHistory,setShowPaymentHistory]=useState(false);
+  const [showSettings,setShowSettings]=useState(false);
+  const chatCacheOwner=useRef(token);useEffect(()=>{const previous=chatCacheOwner.current;if(previous&&previous!==token){void privateChatStore.clear(previous);setShowSettings(false);}chatCacheOwner.current=token;},[token]);
   const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
   const cartHydrated = useRef(false);
   const cartStorageWrites = useRef(Promise.resolve());
@@ -730,6 +733,7 @@ function AcrossApp() {
   }
 
   async function openNotification(notification: any) {
+    setShowSettings(false);
     if (!token || token!==sessionTokenRef.current) return;
     const actor=token,request=++notificationNavigationRequest.current;
     const notificationId = String(notification?.id || notification?.notification_id || "");
@@ -845,10 +849,11 @@ function AcrossApp() {
   }
 
   async function logout() {
-    setProviderWorkspaceVisible(false);
+    setProviderWorkspaceVisible(false);setShowSettings(false);
     if (logoutInProgress.current) return;
     logoutInProgress.current = true;
     const previousToken = token;
+    if(previousToken)void privateChatStore.clear(previousToken);
     const previousPushToken = pushTokenRef.current;
     setAuthMode("welcome");
 	setOauthBusy(false);
@@ -1831,7 +1836,8 @@ function AcrossApp() {
       <StatusBar style={theme.dark ? "light" : "dark"} />
 
       {/* Notification Bell */}
-      <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100 }}>
+      <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100,flexDirection:'row',alignItems:'center' }}>
+        <Pressable onPress={()=>setShowSettings(true)} accessibilityLabel="Open settings" style={{padding:10}}><Ionicons name="settings-outline" size={23} color={theme.color("#191919")}/></Pressable>
         <Pressable onPress={() => setShowNotifications(v => !v)} style={{ padding: 6 }}>
           <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color={theme.color("#191919")} />
           {unreadCount > 0 && (
@@ -1969,7 +1975,7 @@ function AcrossApp() {
                 <Text style={s.accountName}>{profileName || "Atlantic Express buyer"}</Text>
                 <Text style={s.accountMeta}>{profileRegion || "Nigeria"} · {profilePhone || "Add phone"}</Text>
               </View>
-              <Pressable onPress={() => setEditingProfile(true)} style={{ padding: 8 }}><Ionicons name="create-outline" size={22} color={theme.color("#FF4747")} /></Pressable>
+              <Pressable accessibilityLabel="Open settings" onPress={()=>setShowSettings(true)} style={{padding:10}}><Ionicons name="settings-outline" size={24} color={theme.color("#12805F")}/></Pressable>
             </View>
             {editingProfile && (
               <View style={s.panel}>
@@ -2004,24 +2010,6 @@ function AcrossApp() {
               <Text style={{ marginTop: 12, color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1. Withdraw from 1,000 XP after admin review. New accounts earn 5 XP. Daily login: 1 XP. First verified review: 1 XP. Completed NGN purchases earn 1 XP per NGN 1,000, capped at 25 per order. XP cannot be used at checkout.</Text>
             </View>
             {withdrawalEnabled && token && <View style={s.panel}><XPWithdrawalPanel key={token} token={token} balance={xpBalance} onRefresh={()=>loadXPBalance(token)}/></View>}
-            <View style={s.panel}>
-              <Text style={s.panelTitle}>Appearance</Text>
-              <Text style={s.muted}>Choose a theme or follow your phone settings.</Text>
-              <View style={{flexDirection:"row",gap:8,marginTop:12}}>
-                {(["system","light","dark"] as const).map(choice=><Pressable key={choice} accessibilityRole="radio" accessibilityState={{checked:theme.preference===choice}} onPress={()=>theme.setPreference(choice)} style={[s.secondaryButton,{flex:1},theme.preference===choice && s.primaryButtonSmall]}><Text style={theme.preference===choice ? s.primaryButtonText : s.secondaryButtonText}>{choice[0].toUpperCase()+choice.slice(1)}</Text></Pressable>)}
-              </View>
-            </View>
-            <View style={s.panel}>
-              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-                <View style={{ flex: 1 }}><Text style={s.panelTitle}>Notification sound</Text><Text style={{ color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>Play a sound for orders, messages, services and account updates.</Text></View>
-                <Pressable style={[s.primaryButtonSmall, !soundEnabled && s.secondaryButton]} onPress={() => void toggleNotificationSound()}><Text style={soundEnabled ? s.primaryButtonText : s.secondaryButtonText}>{soundEnabled ? "On" : "Off"}</Text></Pressable>
-              </View>
-              {!!notificationStatus && <Text accessibilityRole="alert" style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>{notificationStatus}</Text>}
-              <View style={{flexDirection:"row",gap:10,marginTop:10}}>
-                <Pressable style={[s.secondaryButton,{flex:1}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert("Phone settings", "Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Messages and updates."))}><Text style={s.secondaryButtonText}>Phone settings</Text></Pressable>
-              </View>
-              <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Messages and updates, and check your notification volume and Do Not Disturb setting.</Text>
-            </View>
             <View style={s.quickLinks}>
               <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color={theme.color("#FF4747")}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments and transaction references</Text></View><Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")}/></Pressable>
               {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
@@ -2033,7 +2021,6 @@ function AcrossApp() {
                 </Pressable>
               ))}
             </View>
-            <Pressable style={s.logoutButton} onPress={logout}><Ionicons name="log-out-outline" size={18} color={theme.color("#FF4747")} /><Text style={s.logoutButtonText}>Sign out</Text></Pressable>
           </ScrollView>
           </KeyboardFrame>
         )}
@@ -2219,6 +2206,25 @@ function AcrossApp() {
       </Modal>
 
       {selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
+      <Modal visible={showSettings} animationType="slide" onRequestClose={()=>setShowSettings(false)}><View style={{flex:1,paddingTop:insets.top,backgroundColor:theme.dark?'#111B21':'#F6F8F7'}}><View style={{flexDirection:'row',alignItems:'center',padding:12,gap:12}}><Pressable onPress={()=>setShowSettings(false)} accessibilityLabel="Close settings" style={{padding:10}}><Ionicons name="arrow-back" size={24} color={theme.dark?'#FFF':'#17251F'}/></Pressable><Ionicons name="settings-outline" size={24} color="#12805F"/><Text style={{fontSize:22,fontWeight:'700'}}>Settings</Text></View><ScrollView contentContainerStyle={{padding:16,paddingBottom:insets.bottom+24}}><Pressable style={s.quickLinkCard} onPress={()=>{setShowSettings(false);setShowPaymentHistory(false);setActiveTab('account');setEditingProfile(true);}}><Ionicons name="person-outline" size={24}/><Text>Edit profile and contact details</Text></Pressable>            <View style={s.panel}>
+              <Text style={s.panelTitle}>Appearance</Text>
+              <Text style={s.muted}>Choose a theme or follow your phone settings.</Text>
+              <View style={{flexDirection:"row",gap:8,marginTop:12}}>
+                {(["system","light","dark"] as const).map(choice=><Pressable key={choice} accessibilityRole="radio" accessibilityState={{checked:theme.preference===choice}} onPress={()=>theme.setPreference(choice)} style={[s.secondaryButton,{flex:1},theme.preference===choice && s.primaryButtonSmall]}><Text style={theme.preference===choice ? s.primaryButtonText : s.secondaryButtonText}>{choice[0].toUpperCase()+choice.slice(1)}</Text></Pressable>)}
+              </View>
+            </View>
+            <View style={s.panel}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                <View style={{ flex: 1 }}><Text style={s.panelTitle}>Notification sound</Text><Text style={{ color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>Play a sound for orders, messages, services and account updates.</Text></View>
+                <Pressable style={[s.primaryButtonSmall, !soundEnabled && s.secondaryButton]} onPress={() => void toggleNotificationSound()}><Text style={soundEnabled ? s.primaryButtonText : s.secondaryButtonText}>{soundEnabled ? "On" : "Off"}</Text></Pressable>
+              </View>
+              {!!notificationStatus && <Text accessibilityRole="alert" style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>{notificationStatus}</Text>}
+              <View style={{flexDirection:"row",gap:10,marginTop:10}}>
+                <Pressable style={[s.secondaryButton,{flex:1}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert("Phone settings", "Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Messages and updates."))}><Text style={s.secondaryButtonText}>Phone settings</Text></Pressable>
+              </View>
+              <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Messages and updates, and check your notification volume and Do Not Disturb setting.</Text>
+            </View>
+<View style={s.panel}><Text style={s.panelTitle}>Privacy and storage</Text><Text style={s.muted}>Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy.</Text><Pressable style={s.secondaryButton} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Text style={s.secondaryButtonText}>Clear local chat history</Text></Pressable></View><Pressable style={s.secondaryButton} onPress={()=>{setShowSettings(false);void logout();}}><Text style={s.secondaryButtonText}>Sign out</Text></Pressable></ScrollView></View></Modal>
       {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()}/>}
     </View>
   );
