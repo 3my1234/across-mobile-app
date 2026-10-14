@@ -12,10 +12,10 @@ async function main(){
  const product=(id,seller,route='merchant_local')=>({id,sku:id,title:id,provider_id:seller,fulfillment_mode:route,currency:'NGN',price:100,inventory_count:10});
  const a=product('a','seller-1'),b=product('b','seller-1'),c=product('c','seller-2'),d=product('d','seller-1','merchant_cross_border');
  let cart=[];const app=read('App.tsx');let quote=null,deletions=0;
- const state={quote,busy:false,activeTab:'home',setCart:fn=>{cart=fn(cart);},getCartQuantity:sku=>cart.find(i=>i.product.sku===sku)?.quantity||0,
+ let selectedProduct;const state={setSelectedProduct:value=>selectedProduct=value,quote,busy:false,activeTab:'home',setCart:fn=>{cart=fn(cart);},getCartQuantity:sku=>cart.find(i=>i.product.sku===sku)?.quantity||0,
   cartGroupKey:helpers.cartGroupKey,clearPendingPayment:()=>{deletions++;},Alert:{alert:()=>{throw new Error('Adding a mixed group must not ask to replace a cart');}}};
  const additions=run(app.slice(app.indexOf('  function addToCart('),app.indexOf('  async function checkout(')),state);
- additions.addToCart(a);additions.addToCart(b);additions.addToCart(c);additions.addToCart(d);additions.addToCart(a);
+ additions.addToCart(a);assert.equal(selectedProduct,a);assert.equal(cart.length,0,'product tap opens contact details without adding a purchase');cart=[{product:a,quantity:2},{product:b,quantity:1},{product:c,quantity:1},{product:d,quantity:1}];
  const groups=helpers.groupCart(cart);assert.equal(groups.length,3);assert.equal(groups[0].items.length,2);assert.equal(cart[0].quantity,2);assert.equal(deletions,0);
  const storedCart=JSON.stringify(cart.map(item=>({product:item.product,sku:item.product.sku,quantity:item.quantity})));
  const savedQuote={order_id:'pending',country_code:'NG',cart_group_key:groups[0].key,cart_items:groups[0].items.map(item=>({product_id:item.product.id,quantity:item.quantity}))};
