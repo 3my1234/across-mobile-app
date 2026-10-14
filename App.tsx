@@ -1195,17 +1195,7 @@ function AcrossApp() {
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }
   function addToCart(p: Product) {
-    if(p.payment_mode==="contact"){setSelectedProduct(p);return;}
-    if (!p.provider_id || !p.fulfillment_mode) {
-      Alert.alert("Product unavailable", "This product is not linked to a verified seller-managed fulfilment route.");
-      return;
-    }
-    if (p.inventory_count < 1) return;
-    if (quote?.cart_group_key === cartGroupKey(p) || (busy && activeTab === "cart")) {
-      Alert.alert("Checkout in progress", "Finish or check this payment before changing its items. You can still add products to other checkout groups.");
-      return;
-    }
-    setCart(items => { const e = items.find(i => i.product.id === p.id); if (!e) return [...items, { product: p, quantity: 1 }]; return items.map(i => i.product.id === p.id ? { ...i, quantity: Math.min(i.quantity + 1, p.inventory_count) } : i); });
+    setSelectedProduct(p);
   }
   function removeFromCart(p: Product) {
     if (quote?.cart_group_key === cartGroupKey(p) || (busy && activeTab === "cart")) {
@@ -1943,46 +1933,11 @@ function AcrossApp() {
 
         {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} />}
 
-        {activeTab === "cart" && (
-          <ScrollView alwaysBounceVertical contentContainerStyle={[s.screenPad, { flexGrow: 1, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}>
-            {cart.length === 0 && !quote ? (
-              <View style={s.emptyPanel}><Ionicons name="cart-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>Your cart is empty</Text><Pressable style={s.primaryButton} onPress={() => setActiveTab("home")}><Text style={s.primaryButtonText}>Shop</Text></Pressable></View>
-            ) : (
-              <>
-              <Text style={[s.muted, {marginBottom:12}]}>All your items are saved here. Items from the same seller and delivery route are paid for together. Other groups have separate payments and tracking.</Text>
-              {cartGroups.map((group,index) => (<View key={group.key}>
-                <Pressable accessibilityRole="radio" accessibilityState={{selected:group.key===activeCartGroup,disabled:!!quote || busy || paymentBusy}} disabled={!!quote || busy || paymentBusy} onPress={()=>setSelectedCartGroup(group.key)} style={[s.panel,{borderWidth:1,borderColor: theme.color(group.key===activeCartGroup?"#12805F":"#E5E7EB", "borderColor"),marginBottom:8}]}>
-                  <Text style={s.panelTitle}>{group.key===activeCartGroup?"✓ ":""}{group.items[0].product.provider_name || `Checkout group ${index+1}`} · {group.items[0].product.fulfillment_mode==="merchant_local"?"Local delivery":"Imported delivery"}</Text>
-                  <Text style={s.muted}>{group.items.length} {group.items.length===1?"product":"products"} · {group.items[0].product.currency}. {group.key===activeCartGroup?"Total below is for this group.":quote?"Saved for after the current payment.":"Tap to review and pay for this group."}</Text>
-                </Pressable>
-                {group.items.map(item => (<View key={item.product.sku} style={s.cartItemCard}><ResilientImage uris={item.product.image_urls} style={s.cartItemImage} resizeMode="cover" /><View style={s.cartItemBody}><Text style={s.cartItemTitle} numberOfLines={2}>{item.product.title}</Text><Text style={s.price}>{money(item.product.price - (item.product.delivery_fee || 0), item.product.currency)}</Text>{!!item.product.delivery_fee && <Text style={s.muted}>Delivery {money(item.product.delivery_fee, item.product.currency)} per item</Text>}<View style={s.quantityRow}><Pressable style={s.quantityButton} onPress={() => removeFromCart(item.product)}><Ionicons name="remove" size={18} color={theme.color("#191919")} /></Pressable><Text style={s.quantityValue}>{item.quantity}</Text><Pressable style={[s.quantityButton, item.quantity >= item.product.inventory_count && s.disabled]} onPress={() => addToCart(item.product)} disabled={item.quantity >= item.product.inventory_count}><Ionicons name="add" size={18} color={theme.color("#191919")} /></Pressable></View></View></View>))}</View>))}
-              <View style={s.panel}>
-                <View style={s.metric}><Text style={s.metricLabel}>Subtotal</Text><Text style={s.metricValue}>{money(quote?.items_total ?? totals.amount, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Delivery</Text><Text style={s.metricValue}>{money(quote?.shipping_fee ?? totals.delivery, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
-                <View style={s.metric}><Text style={s.metricLabel}>Atlantic Express service fee (1%)</Text><Text style={s.metricValue}>{money(quote?.platform_fee_before_xp ?? quote?.platform_fee ?? totals.platformFee, quote?.currency || checkoutItems[0]?.product.currency)}</Text></View>
-                {!!displayedXPDiscount && <View style={s.metric}><Text style={s.metricLabel}>{quote ? "XP applied to service fee" : "XP service-fee discount"}</Text><Text style={[s.metricValue, {color: theme.color("#12805F", "color")}]}>-{money(displayedXPDiscount, quote?.currency || checkoutItems[0]?.product.currency)} ({displayedXPDiscount} XP)</Text></View>}
-
-                <View style={s.metric}><Text style={s.metricLabel}>Total for this group</Text><Text style={[s.metricValue, s.accentText]}>{quote ? money(quote.grand_total, quote.currency) : money(totals.payablePreview - xpPreview, checkoutItems[0]?.product.currency)}</Text></View>
-				<Text style={s.muted}>Deliver to: {[profile?.address, profile?.city, profile?.state, profile?.country_code].filter(Boolean).join(", ") || "Add your delivery address"}</Text>
-				<Pressable onPress={() => { setActiveTab("account"); setEditingProfile(true); }}><Text style={[s.muted, { color: theme.color("#12805F", "color"), fontWeight: "800", marginTop: 4, marginBottom: 10 }]}>Check or edit delivery address</Text></Pressable>
-				{quote?.customer_pays_gateway_fee ? <Text style={s.muted}>Flutterwave will calculate and add its processing charge at secure checkout. The final amount is shown before you authorize payment.</Text> : null}
-                <Pressable style={[s.primaryButton, (busy || paymentBusy) && s.disabled]} onPress={checkout} disabled={busy || paymentBusy}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Image source={FLUTTERWAVE_LOGO} style={{ width: 20, height: 20, resizeMode: "contain" }} />
-                    <Text style={s.primaryButtonText}>{paymentBusy ? "Preparing secure checkout..." : busy ? "Processing..." : quote ? "Continue payment" : "Review total"}</Text>
-                  </View>
-                </Pressable>
-                {quote && <Pressable style={[s.secondaryButton, {marginTop:10}]} disabled={busy || paymentBusy} onPress={()=>void changeCheckoutGroup()}><Text style={s.secondaryButtonText}>Change items or checkout group</Text></Pressable>}
-                {quote ? (
-                  <Pressable style={[s.secondaryButton, { marginTop: 10 }, (busy || paymentBusy) && s.disabled]} onPress={checkPendingPayment} disabled={busy || paymentBusy}>
-                    <Text style={s.secondaryButtonText}>Check payment status</Text>
-                  </Pressable>
-                ) : null}
-                {paymentMessage ? <Text style={{ marginTop: 10, color: theme.color(paymentState === "failed" ? "#B42318" : "#30423D", "color"), fontWeight: "700" }}>{paymentMessage}</Text> : null}
-              </View></>
-            )}
-          </ScrollView>
-        )}
+        {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
+          <Text style={s.panelTitle}>Contact sellers</Text><Text style={s.muted}>Product payments are arranged directly with sellers. Open a product and tap Message seller. Previous paid orders remain available in Track and payment history.</Text>
+          {cart.map(item=><Pressable key={item.product.id} style={s.panel} onPress={()=>setSelectedProduct(item.product)}><Text style={s.panelTitle}>{item.product.title}</Text><Text style={s.secondaryButtonText}>Message seller</Text></Pressable>)}
+          <Pressable style={s.primaryButton} onPress={()=>setActiveTab("home")}><Text style={s.primaryButtonText}>Browse products</Text></Pressable>
+        </ScrollView>}
 
         {activeTab === "account" && showPaymentHistory && token && <PaymentHistoryScreen key={token} token={token} bottomInset={bottomInset + BOTTOM_NAV_HEIGHT} onBack={()=>setShowPaymentHistory(false)} onViewOrders={()=>{setShowPaymentHistory(false);setActiveTab("track");void loadOrders(token);}} onConfirmed={async orderId=>{if(quote?.order_id===orderId) await completeSuccessfulPayment();else await Promise.all([loadOrders(token),loadXPBalance(token),loadNotifications(token)]);}}/>}
         {activeTab === "account" && !showPaymentHistory && (

@@ -1,3 +1,4 @@
+import {ProviderIdentity} from "./ProviderIdentity";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {ProductSellerChat} from "./ProductSellerChat";
@@ -443,7 +444,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   }
 
   if(sellerChat && token)return <View style={[styles.detailOverlay,{paddingTop:insets.top}]}><ProductSellerChat key={`${token}:${product.id}`} product={product} token={token} onClose={()=>setSellerChat(false)}/></View>;
-  const allowsCheckout=product.payment_mode!=="contact",allowsContact=product.payment_mode==="contact" || product.payment_mode==="both";
+  const allowsCheckout=false,allowsContact=true;
   return (
     <View style={[styles.detailOverlay, { paddingTop: insets.top }]}>
       <KeyboardFrame style={styles.detailSafe} behavior={Platform.OS === "ios" ? "padding" : "height"}>
@@ -473,6 +474,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
             <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally from seller" : isCrossBorderMerchantProduct ? "International seller" : "Seller fulfilment unavailable"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
+              <ProviderIdentity identity={product.provider_identity} compact={false} animate/>
             <View style={styles.productSocialRow}><Text style={styles.productSocialText}>{Number(product.sold_count || 0).toLocaleString()} sold</Text><Pressable accessibilityLabel="Read customer reviews" onPress={()=>scrollToSection("reviews")} style={styles.productRating}><Text style={styles.productSocialText}>{product.review_count>0 ? product.average_rating.toFixed(1) : "New"}</Text><ReviewStars rating={product.average_rating} size={13}/><Text style={styles.productSocialText}>({product.review_count})</Text></Pressable></View>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price, product.currency)}</Text>
@@ -493,7 +495,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <View style={styles.detailDescriptionBlock}>
               <Text style={styles.detailSectionTitle}>How to buy</Text>
               {allowsCheckout && <Text style={styles.detailDescription}>Pay securely through Flutterwave. Choose card or bank transfer at checkout where available. Your payment is confirmed first; the seller&apos;s bank payout usually takes one business day for local payments or five business days for international payments, and can take longer. This payout timing is separate from delivery.</Text>}
-              {allowsContact && <><Text style={styles.detailDescription}>Message the seller to agree payment and delivery. Payments arranged directly are outside Atlantic Express checkout and will not appear as paid orders in Track.</Text><Pressable style={styles.photoExpand} onPress={contactSeller}><Text style={styles.secondaryButtonText}>Message seller</Text></Pressable></>}
+              {allowsContact && <><Text style={styles.detailDescription}>Message the seller to agree payment and delivery. Atlantic Express does not collect product payments. Payments and delivery are agreed directly with the seller.</Text><Pressable style={styles.photoExpand} onPress={contactSeller}><Text style={styles.secondaryButtonText}>Message seller</Text></Pressable></>}
             </View>
             <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
@@ -551,7 +553,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <Text style={styles.quantityValue}>{cartQuantity}</Text>
             <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color={theme.color("#101817")} /></Pressable>
           </View>}
-          {product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color={theme.color("#191919")}/></Pressable>}
+          {allowsCheckout && product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color={theme.color("#191919")}/></Pressable>}
           <Pressable style={[styles.detailCartButton,allowsCheckout && outOfStock && styles.disabled]} onPress={()=>{if(!allowsCheckout){contactSeller();return;}if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={allowsCheckout && outOfStock}><Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
         </View>}
       </KeyboardFrame>

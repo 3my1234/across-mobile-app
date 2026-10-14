@@ -1,3 +1,4 @@
+import type {ProviderIdentityData} from "./ProviderIdentity";
 export type Product = {
   id: string;
   sku: string;
@@ -21,6 +22,7 @@ export type Product = {
   payment_mode?: "flutterwave" | "contact" | "both";
   provider_id?: string;
   provider_name?: string;
+  provider_identity?: ProviderIdentityData;
   fulfillment_mode?: "merchant_local" | "merchant_cross_border";
   inventory_country_code?: string;
   inventory_city?: string;

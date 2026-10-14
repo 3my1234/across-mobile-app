@@ -1,3 +1,4 @@
+import {ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {providerChatHistory} from "./chatHistoryCache";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -42,6 +43,7 @@ type Listing = {
   currency_code: string;
   pricing_unit: string;
   provider_name: string;
+  provider_identity?: ProviderIdentityData;
   media_urls: string[];
   contact_available?: boolean;
   attributes?: { price_mode?: string; price_notes?: string };
@@ -66,6 +68,7 @@ type BuyerRequest = {
   review_rating?: number | null;
   review_text?: string | null;
   provider_name: string;
+  provider_identity?: ProviderIdentityData;
   message?: string;
   party_size?: number;
   created_at: string;
@@ -76,6 +79,7 @@ type Conversation = {
   product_id?: string;
   listing_title: string;
   counterpart_name: string;
+  provider_identity?: ProviderIdentityData;
   status: string;
   last_message: string;
   last_message_at: string;
@@ -423,7 +427,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       if (!response.ok) throw new Error(apiMessage(body, "Could not open provider chat"));
       if (chatActor.current !== actor || selectedRef.current?.id !== listing.id) return;
       const existing = (body.items || []).find((item: Conversation)=>item.listing_id === listing.id);
-      const conversation: Conversation = existing || {id:"",listing_id:listing.id,listing_title:listing.title,counterpart_name:listing.provider_name,status:"open",last_message:"",last_message_at:"",unread_count:0,subscription_active:listing.contact_available !== false};
+      const conversation: Conversation = existing || {id:"",listing_id:listing.id,listing_title:listing.title,counterpart_name:listing.provider_name,provider_identity:listing.provider_identity,status:"open",last_message:"",last_message_at:"",unread_count:0,subscription_active:listing.contact_available !== false};
       await openConversation(conversation);
     } catch (messageError) { if(chatActor.current===actor && selectedRef.current?.id===listing.id) Alert.alert("Unable to open messages", messageError instanceof Error ? messageError.message : "Please try again."); }
     finally { if(chatActor.current===actor){chatOpening.current=false;setOpeningChat(false);} }
@@ -633,7 +637,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
   if (selectedConversation) {
-    return <ProviderConversation token={token || ""} key={`${token}:${selectedConversation.id || selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active || selectedConversation.status!=="open"} error={chatError} hasEarlier={!!conversationCursor} bottomInset={bottomInset}
+    return <ProviderConversation token={token || ""} key={`${token}:${selectedConversation.id || selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} identity={selectedConversation.provider_identity} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active || selectedConversation.status!=="open"} error={chatError} hasEarlier={!!conversationCursor} bottomInset={bottomInset}
       onClose={()=>{threadRequest.current++;threadInFlight.current=false;conversationRef.current=null;setSelectedConversation(null);void loadConversations(true);}}
       onSend={sendConversationMessage} onEarlier={()=>{if(conversationCursor&&!threadInFlight.current)void loadConversationMessages(selectedConversation,conversationCursor);}} onRefresh={()=>void loadConversationMessages(selectedConversation)}/>;
   }
@@ -663,6 +667,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           <View style={styles.section}>
             <Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
             <Text style={styles.title}>{selected.title}</Text>
+            <ProviderIdentity identity={selected.provider_identity} compact={false} animate/>
             <Text style={styles.price}>{servicePriceLabel(selected)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
             {!!selected.attributes?.price_notes && <Text style={styles.meta}>{selected.attributes.price_notes}</Text>}
             <Text style={styles.meta}>{selected.provider_name} · {selected.city}, {selected.state}</Text>
@@ -764,7 +769,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                   <View style={styles.cardBody}>
                     <Text numberOfLines={2} style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardPrice}>{servicePriceLabel(item)}</Text>
-                    <Text numberOfLines={1} style={styles.meta}>{item.city} · {item.provider_name}</Text>
+                    <Text numberOfLines={1} style={styles.meta}>{item.city}</Text><ProviderIdentity identity={item.provider_identity}/>{item.provider_identity?.verified && item.provider_identity.paid_active && <Text style={styles.meta}>Promoted</Text>}
                     {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
                     <View style={styles.ratingRow}><ReviewStars rating={item.average_rating || 0} size={10} /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
                   </View>
@@ -817,7 +822,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                 <Text style={styles.requestTitle} numberOfLines={2}>{item.listing_title}</Text>
                 {!!item.unread_count && <Text style={styles.status}>{item.unread_count} new</Text>}
               </View>
-              <Text style={styles.meta}>{item.counterpart_name} · {new Date(item.last_message_at).toLocaleString()}</Text>
+              <ProviderIdentity identity={item.provider_identity || {name:item.counterpart_name,verified:false}}/><Text style={styles.meta}>{new Date(item.last_message_at).toLocaleString()}</Text>
               <Text style={styles.body} numberOfLines={2}>{item.last_message}</Text>
               {!item.subscription_active && <Text style={styles.subscriptionPaused}>Provider subscription inactive — messaging paused</Text>}
             </Pressable>
