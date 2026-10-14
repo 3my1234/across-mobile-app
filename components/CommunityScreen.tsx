@@ -1,10 +1,11 @@
+import {privateChatStore} from './privateChatStore';
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { ThemedText as Text, useTheme, useThemedStyles } from "./ThemeProvider";
+import { ThemedText as Text, ThemedTextInput as TextInput, useTheme, useThemedStyles } from "./ThemeProvider";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { ProviderConversation, ProviderMessage } from "./ProviderConversation";
-import { ProviderIdentity, ProviderIdentityData } from "./ProviderIdentity";
+import { ProviderIdentity, ProviderBadge, ProviderIdentityData } from "./ProviderIdentity";
 import { communityRequest } from "./communityApi";
 import { createChatHistoryCache } from "./chatHistoryCache";
 import { mergeChatMessages } from "./chatImages";
@@ -16,6 +17,7 @@ type Conversation = {
     kind: string;
     source: "shared" | "legacy";
     title: string;
+    avatar_url?:string;last_message?:string;last_message_at?:string;
     actor_role: string;
     peer_user_id: string;
     state: string;
@@ -39,6 +41,8 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     const alive = useRef(true), sequence = useRef(0), threadSequence = useRef(0), current = useRef<Conversation | null>(null), etags = useRef(new Map<string, string>()), messageRef = useRef<ProviderMessage[]>([]), scroll = useRef<ScrollView>(null);
     const openedInitial = useRef("");
     const lastHallRoom=useRef(initialHallRoomId);
+    const [search,setSearch]=useState("");const inboxConfirmed=useRef(false);
+    const openSequence=useRef(0),readFlights=useRef(new Set<string>()),readPending=useRef(new Set<string>());
     const readAcknowledged = useRef(new Map<string, string>());
     useEffect(() => { alive.current = true; return () => { alive.current = false; sequence.current++; threadSequence.current++; }; }, [token]);
     const call = useCallback(async (path: string, options: RequestInit = {}) => communityRequest(token, path, options), [token]);
@@ -56,7 +60,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
             if (!alive.current || request !== sequence.current)
                 return;
             const apply = (previous: any[]) => older ? [...previous, ...data.items.filter((item: any) => !previous.some(old => old.id === item.id))] : data.items || [];
-            setInbox(previous => { const next = apply(previous); snapshots.put(token, "inbox", next, data.next_cursor || ""); return next; });
+            inboxConfirmed.current=true;setInbox(previous => { const next = apply(previous); snapshots.put(token, "inbox", next, data.next_cursor || "");privateChatStore.put(token,"inbox",next.slice(0,25)); return next; });
             setCursor(data.next_cursor || "");
         }
         catch (err) {
@@ -69,8 +73,11 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         }
     }, [call, mode, token]);
     useEffect(() => { void load(); }, [load]);
+    useEffect(()=>{let cancelled=false;void privateChatStore.get(token,'inbox').then(saved=>{if(!cancelled&&saved&&!inboxConfirmed.current)setInbox(current=>current.length?current:saved);});return()=>{cancelled=true;};},[token]);
     useEffect(()=>{if(selected?.kind==='town_hall')setMode('town-hall');},[selected?.kind]);
+    const acknowledge=useCallback((room:string,message:string)=>{if(readPending.current.has(room)||readAcknowledged.current.get(room)===message)return;readPending.current.add(room);void call('/chat/conversations/'+room+'/read',{method:'POST',body:JSON.stringify({message_id:message})}).then(()=>{if(alive.current){readAcknowledged.current.set(room,message);void load();}}).catch(()=>{}).finally(()=>readPending.current.delete(room));},[call,load]);
     const loadThread = useCallback(async (conversation: Conversation, older = "") => {
+        const flight=openSequence.current+":"+conversation.id;if(readFlights.current.has(flight))return;readFlights.current.add(flight);
         const request = ++threadSequence.current;
         setChatLoading(true);
         try {
@@ -80,26 +87,24 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
             if (unchanged) {
                 const latest = messageRef.current.at(-1);
                 if (!older && latest && AppState.currentState === "active" && readAcknowledged.current.get(conversation.id) !== latest.id) {
-                    await call(`/chat/conversations/${conversation.id}/read`, { method: "POST", body: JSON.stringify({ message_id: latest.id }) });
-                    readAcknowledged.current.set(conversation.id, latest.id);
+                    acknowledge(conversation.id,latest.id);
                 }
                 return;
             }
             if (etag && !older)
                 etags.current.set(conversation.id, etag);
             const incoming = (data.items || []).map((message: ProviderMessage) => ({ ...message, sender_type: conversation.source === "legacy" ? message.sender_type : message.is_mine ? "buyer" : "provider", is_mine: conversation.source === "legacy" ? message.sender_type === conversation.actor_role : message.is_mine }));
+            const oldFirst=messageRef.current[0],newFirst=incoming[0],keepCursor=!older&&oldFirst&&newFirst&&oldFirst.created_at<newFirst.created_at;
+            const nextCursor=keepCursor?(history.get(token,conversation.id)?.cursor||data.next_cursor||""):(data.next_cursor||"");
             const next = mergeChatMessages(messageRef.current, incoming);
             messageRef.current = next;
             setMessages(next);
-            setChatCursor(data.next_cursor || "");
+            setChatCursor(nextCursor);
             setCanSend(data.can_send !== false);
-            history.put(token, conversation.id, next, data.next_cursor || "");
+            history.put(token, conversation.id, next, nextCursor);if(!older&&conversation.kind!=="town_hall")privateChatStore.put(token,conversation.id,{messages:incoming,cursor:data.next_cursor||""});
             setError("");
             if (!older && next.length && AppState.currentState === "active") {
-                await call(`/chat/conversations/${conversation.id}/read`, { method: "POST", body: JSON.stringify({ message_id: next[next.length - 1].id }) });
-                readAcknowledged.current.set(conversation.id, next[next.length - 1].id);
-                if (alive.current && current.current?.id === conversation.id)
-                    void load();
+                acknowledge(conversation.id,next[next.length-1].id);
             }
         }
         catch (err) {
@@ -107,11 +112,12 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
                 setError(err instanceof Error ? err.message : "Please retry");
         }
         finally {
-            if (alive.current && request === threadSequence.current)
+            readFlights.current.delete(flight);if (alive.current && request === threadSequence.current)
                 setChatLoading(false);
         }
-    }, [call, load, token]);
+    }, [call, acknowledge, token]);
     const open = useCallback(async (conversation: Conversation) => {
+        openSequence.current++;
         if(conversation.kind==='town_hall')lastHallRoom.current=conversation.id;
         current.current = conversation;
         setSelected(conversation);
@@ -122,7 +128,8 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         messageRef.current = cached?.messages || [];
         setMessages(messageRef.current);
         setChatCursor(cached?.cursor || "");
-        await loadThread(conversation);
+        if(!cached&&conversation.kind!=='town_hall'){const version=threadSequence.current;void privateChatStore.get(token,conversation.id).then(saved=>{if(saved&&alive.current&&current.current?.id===conversation.id&&!messageRef.current.length){messageRef.current=saved.messages;setMessages(saved.messages);setChatCursor(saved.cursor||'');}});}
+        void loadThread(conversation);
     }, [loadThread, token]);
     useEffect(() => { if (!initialConversationId || openedInitial.current === initialConversationId)
         return; openedInitial.current = initialConversationId; void call(`/chat/inbox?conversation_id=${encodeURIComponent(initialConversationId)}`).then(({ data }) => { if (alive.current && data.items?.[0])
@@ -179,11 +186,11 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     if (!token)
         return <View style={s.panel}><Text>Sign in to use Chats and Town Hall.</Text></View>;
     if (selected)
-        return <ProviderConversation roomStyle={selected.kind==='town_hall'} key={`${token}:${selected.id}`} token={token} title={selected.context?.title || selected.title} provider={selected.title} identity={selected.provider_identity} messages={messages} loading={chatLoading} busy={busy} paused={!canSend} pausedLabel={selected.kind === "town_hall" ? "This room is closed or your paid plan needs renewal." : "This conversation is read-only or blocked."} error={error} bottomInset={bottomInset} hasEarlier={!!chatCursor} onClose={() => { threadSequence.current++; current.current = null; setSelected(null); setError(""); }} onRefresh={() => void loadThread(selected)} onEarlier={() => void loadThread(selected, chatCursor)} onSend={send} toolbar={selected.source === "shared" && selected.kind === "direct" ? <View style={s.toolbar}>{button("Block", () => Alert.alert("Block this person?", "They will no longer be able to send you direct messages.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: () => void act(async () => { await call(`/chat/blocks/${selected.peer_user_id}`, { method: "POST" }); setCanSend(false); }) }]), true)}{button("Report", () => Alert.alert("Report this chat?", "Send this conversation to moderation for review.", [{ text: "Cancel", style: "cancel" }, { text: "Report", onPress: () => void act(async () => { await call(`/chat/conversations/${selected.id}/reports`, { method: "POST", body: JSON.stringify({ reason: "User reported this conversation for inappropriate messages or spam" }) }); Alert.alert("Report received", "Your report has been recorded for review."); }) }]))}</View> : undefined}/>;
+        return <ProviderConversation roomStyle={selected.kind==='town_hall'} key={`${token}:${selected.id}`} token={token} title={selected.context?.title || selected.title} provider={selected.title} identity={selected.actor_role==='provider'?undefined:selected.provider_identity} avatarURL={selected.avatar_url} messages={messages} loading={chatLoading} busy={busy} paused={!canSend} pausedLabel={selected.kind === "town_hall" ? "This room is closed or your paid plan needs renewal." : "This conversation is read-only or blocked."} error={error} bottomInset={bottomInset} hasEarlier={!!chatCursor} onClose={() => { threadSequence.current++; current.current = null; setSelected(null); setError(""); }} onRefresh={() => void loadThread(selected)} onEarlier={() => void loadThread(selected, chatCursor)} onSend={send} toolbar={selected.source === "shared" && selected.kind === "direct" ? <View style={s.toolbar}>{button("Block", () => Alert.alert("Block this person?", "They will no longer be able to send you direct messages.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: () => void act(async () => { await call(`/chat/blocks/${selected.peer_user_id}`, { method: "POST" }); setCanSend(false); }) }]), true)}{button("Report", () => Alert.alert("Report this chat?", "Send this conversation to moderation for review.", [{ text: "Cancel", style: "cancel" }, { text: "Report", onPress: () => void act(async () => { await call(`/chat/conversations/${selected.id}/reports`, { method: "POST", body: JSON.stringify({ reason: "User reported this conversation for inappropriate messages or spam" }) }); Alert.alert("Report received", "Your report has been recorded for review."); }) }]))}</View> : undefined}/>;
     return <KeyboardFrame style={s.fill} behavior="height">{tabs}
  <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + 20 }} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={theme.color("#FF4747")}/>}>
  {!!error && <Pressable onPress={() => void load()}><Text style={s.error}>{error}</Text></Pressable>}
- {mode === "chats" && <>{!inbox.length ? <Text style={s.muted}>{loading ? "Loading conversations..." : error ? "Refresh to load conversations." : "Your conversations appear here. Contact a provider from a product or service to start a chat."}</Text> : inbox.map(item => <Pressable key={item.id} onPress={() => void open(item)} style={[s.panel, item.unread_count > 0 && s.unread]}><View style={s.row}><View style={{ flex: 1 }}>{item.provider_identity ? <ProviderIdentity identity={item.provider_identity}/> : <Text style={s.title}>{item.title}</Text>}<Text style={s.muted}>{item.kind === "business" ? item.context?.title || "Product or service enquiry" : item.kind === "town_hall" ? "Town Hall bargaining" : "Private chat"}</Text></View>{item.unread_count > 0 && <View style={s.count}><Text style={s.countText}>{item.unread_count}</Text></View>}</View></Pressable>)}</>}
+ {mode === 'chats'&&<><View style={{flexDirection:'row',alignItems:'center',gap:8,borderRadius:26,paddingHorizontal:14,backgroundColor:theme.dark?'#202C33':'#E9F0ED',marginBottom:12}}><Ionicons name="search-outline" size={20} color={theme.color('#66736F')}/><TextInput style={{flex:1,minHeight:46,color:theme.dark?'#FFF':'#17251F'}} value={search} onChangeText={setSearch} placeholder="Search recent chats" accessibilityLabel="Search recent chats"/></View>{!inbox.length?<Text style={s.muted}>{loading?'Connecting to your chats…':error?'Unable to sync. Your saved chats are kept.':'Contact a provider from a product or service to start a chat.'}</Text>:inbox.filter(item=>(item.title+' '+(item.last_message||'')+' '+(item.context?.title||'')).toLowerCase().includes(search.toLowerCase())).map(item=>{const identity=item.actor_role==='provider'?undefined:item.provider_identity,avatar=identity?.avatar_url||item.avatar_url;return <Pressable key={item.id} accessibilityLabel={'Open chat with '+item.title} onPress={()=>void open(item)} style={{flexDirection:'row',alignItems:'center',gap:12,paddingVertical:14,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:theme.dark?'#29363D':'#E4EBE7'}}>{avatar&&/^https:\/\//.test(avatar)?<Image source={{uri:avatar}} style={{width:52,height:52,borderRadius:26}}/>:<View style={{width:52,height:52,borderRadius:26,backgroundColor:theme.dark?'#2A3942':'#DCE9E2',alignItems:'center',justifyContent:'center'}}><Text style={{fontSize:22,fontWeight:'600'}}>{item.title.slice(0,1).toUpperCase()}</Text></View>}<View style={{flex:1,gap:6}}><View style={{flexDirection:'row',alignItems:'center',gap:5}}><Text style={{fontSize:16,fontWeight:item.unread_count?'800':'600',flexShrink:1}} numberOfLines={1}>{item.title}</Text>{identity&&<ProviderBadge identity={identity}/>}</View><Text numberOfLines={1} style={{fontSize:13,color:theme.dark?'#AAB6BC':'#66736F'}}>{item.last_message||item.context?.title||'Start a conversation'}</Text></View><View style={{alignItems:'flex-end',gap:8}}><Text style={{fontSize:11,color:item.unread_count?'#159B76':theme.dark?'#86969E':'#66736F'}}>{item.last_message_at?new Date(item.last_message_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):''}</Text>{item.unread_count>0&&<View style={s.count}><Text style={s.countText}>{item.unread_count}</Text></View>}</View></Pressable>;})}</>}
  {!!cursor && mode === "chats" && button(loading ? "Loading..." : "Load more", () => void load(cursor))}
  </ScrollView></KeyboardFrame>;
 }
