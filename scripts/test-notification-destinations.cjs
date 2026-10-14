@@ -1,6 +1,6 @@
 const assert=require("node:assert/strict"),fs=require("node:fs"),vm=require("node:vm"),ts=require("typescript");
 const transpile=code=>ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-const g={exports:{}};vm.runInNewContext(transpile(fs.readFileSync("components/notificationDestination.ts","utf8")),g);
+const g={exports:{},URLSearchParams};vm.runInNewContext(transpile(fs.readFileSync("components/notificationDestination.ts","utf8")),g);
 const route=g.exports.notificationDestination,id="11111111-1111-4111-8111-111111111111";
 assert.equal(route({type:"ticket_reply",data:{ticket_id:id}}).ticketId,id);
 assert.equal(route({notification_type:"marketplace_message",conversation_id:id}).chatRoomId,id);
@@ -8,6 +8,8 @@ assert.equal(route({type:"marketplace_message",data:JSON.stringify({conversation
 assert.equal(route({type:'social_message',data:{chat_room_id:id}}).chatRoomId,id);
 assert.equal(route({type:'friend_request'}).mode,'chats');
 assert.equal(route({data:{town_hall_room_id:id}}).townHallRoomId,id);
+assert.equal(route({data:{provider_event_id:id,provider_view:'messages',conversation_id:id}}).tab,'provider');
+assert.ok(route({data:{provider_event_id:id,provider_view:'messages',conversation_id:id}}).route.includes('event='+id),'provider event is acknowledged in its own workspace');
 assert.equal(route({notification_type:"xp_earned",order_id:id}).tab,"account");assert.equal(route({type:"xp_withdrawal"}).rewards,true);
 assert.equal(route({type:"payment_received",order_id:id}).orderId,id);assert.equal(route({type:"marketplace_request"}).mode,"requests");assert.equal(route({}).tab,"account");
 assert.equal(route({conversation_id:"https://evil.test"}).tab,"account");
