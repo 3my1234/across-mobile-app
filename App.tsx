@@ -150,6 +150,7 @@ function AcrossApp() {
   const [communityHallRoomId,setCommunityHallRoomId]=useState("");
   const [communityInvite,setCommunityInvite]=useState("");
   const [pendingCommunityInvite,setPendingCommunityInvite]=useState("");
+  useEffect(()=>{setCommunityMode('chats');setCommunityConversationId('');setCommunityHallRoomId('');setCommunityInvite('');},[token]);
   const [notificationNavigationKey,setNotificationNavigationKey]=useState(0);
   const notificationNavigationRequest=useRef(0);
   const rewardsOffset=useRef(0);

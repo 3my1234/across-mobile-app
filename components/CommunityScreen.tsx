@@ -11,6 +11,7 @@ import { mergeChatMessages } from "./chatImages";
 import { API_URL } from "./config";
 import { CommunityUpdates } from "./CommunityUpdates";
 import { CommunityTownHall } from "./CommunityTownHall";
+import * as Notifications from "expo-notifications";
 export type CommunityMode = "chats" | "friends" | "updates" | "town-hall";
 type Conversation = {
     id: string;
@@ -57,10 +58,11 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         handle: string;
     }[]>([]);
     const [inbox, setInbox] = useState<Conversation[]>(() => snapshots.get(token, "inbox")?.messages || []), [friends, setFriends] = useState<Friend[]>(() => snapshots.get(token, "friends")?.messages || []);
-    const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(""), [cursor, setCursor] = useState("");
+    const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [cursor, setCursor] = useState("");
     const [selected, setSelected] = useState<Conversation | null>(null), [messages, setMessages] = useState<ProviderMessage[]>([]), [chatCursor, setChatCursor] = useState(""), [chatLoading, setChatLoading] = useState(false), [canSend, setCanSend] = useState(true);
     const alive = useRef(true), sequence = useRef(0), threadSequence = useRef(0), current = useRef<Conversation | null>(null), etags = useRef(new Map<string, string>()), messageRef = useRef<ProviderMessage[]>([]), scroll = useRef<ScrollView>(null);
     const openedInitial = useRef("");
+    const lastHallRoom=useRef(initialHallRoomId);
     const readAcknowledged = useRef(new Map<string, string>());
     useEffect(() => { alive.current = true; return () => { alive.current = false; sequence.current++; threadSequence.current++; }; }, [token]);
     const call = useCallback(async (path: string, options: RequestInit = {}) => communityRequest(token, path, options), [token]);
@@ -99,6 +101,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         }
     }, [call, mode, token]);
     useEffect(() => { void load(); }, [load]);
+    useEffect(()=>{if(selected?.kind==='town_hall')setMode('town-hall');},[selected?.kind]);
     useEffect(() => { void call("/chat/profile").then(({ data }) => { if (alive.current) {
         setProfile(data);
         setHandle(data.handle);
@@ -150,11 +153,13 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         }
     }, [call, load, token]);
     const open = useCallback(async (conversation: Conversation) => {
+        if(conversation.kind==='town_hall')lastHallRoom.current=conversation.id;
         current.current = conversation;
         setSelected(conversation);
         setError("");
         setCanSend(conversation.state === "open");
         const cached = history.get(token, conversation.id);
+        if(!cached)etags.current.delete(conversation.id);
         messageRef.current = cached?.messages || [];
         setMessages(messageRef.current);
         setChatCursor(cached?.cursor || "");
@@ -178,6 +183,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         } });
         return () => { clearInterval(timer); listener.remove(); };
     }, [loadThread, load]);
+    useEffect(()=>{const subscription=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(current.current&&(data.chat_room_id===current.current.id||data.conversation_id===current.current.id))void loadThread(current.current);else if(!current.current&&(mode==='chats'||mode==='friends'))void load();});return()=>subscription.remove();},[loadThread,load,mode]);
     async function act(action: () => Promise<void>) { if (busy)
         return; setBusy(true); setError(""); try {
         await action();
@@ -212,7 +218,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     if (mode === "updates" && !selected)
         return <View style={s.fill}>{tabs}<CommunityUpdates token={token} bottomInset={bottomInset} openChat={openChatID}/></View>;
     if (mode === "town-hall" && !selected)
-        return <View style={s.fill}>{tabs}<CommunityTownHall token={token} bottomInset={bottomInset} initialRoomId={initialHallRoomId} openChat={openChatID}/></View>;
+        return <View style={s.fill}>{tabs}<CommunityTownHall token={token} bottomInset={bottomInset} initialRoomId={lastHallRoom.current} openChat={openChatID}/></View>;
     if (!token)
         return <View style={s.panel}><Text>Sign in to use messages and friends.</Text></View>;
     if (selected)

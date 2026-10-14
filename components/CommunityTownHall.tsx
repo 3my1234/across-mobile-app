@@ -4,6 +4,7 @@ import { ThemedText as Text, ThemedTextInput as TextInput, useThemedStyles } fro
 import { KeyboardFrame } from "./KeyboardFrame";
 import { communityRequest } from "./communityApi";
 import * as Crypto from "expo-crypto";
+import * as Notifications from "expo-notifications";
 type Hall = {
     id: string;
     title: string;
@@ -30,16 +31,18 @@ export function CommunityTownHall({ token, bottomInset, initialRoomId = "", open
     const [form, setForm] = useState({ title: "", description: "", location: "", quantity: "", unit: "", target_unit_price: "" }), [price, setPrice] = useState(""), [terms, setTerms] = useState("");
     const alive = useRef(true), flight = useRef(false), generation = useRef(0);
     const createReference = useRef({ fingerprint: "", id: "" });
+    const offerReference=useRef({fingerprint:"",id:""});
     const call = (path: string, options: RequestInit = {}) => { if (path === "/chat/town-hall" && options.method === "POST") {
         const payload = JSON.parse(String(options.body)), fingerprint = JSON.stringify(payload);
         if (createReference.current.fingerprint !== fingerprint)
             createReference.current = { fingerprint, id: Crypto.randomUUID() };
         options = { ...options, body: JSON.stringify({ ...payload, client_request_id: createReference.current.id }) };
-    } return communityRequest(token, path, options); };
+    }if(path.endsWith('/offers')&&options.method==='POST'){const payload=JSON.parse(String(options.body)),fingerprint=JSON.stringify(payload);if(offerReference.current.fingerprint!==fingerprint)offerReference.current={fingerprint,id:Crypto.randomUUID()};options={...options,body:JSON.stringify({...payload,client_message_id:offerReference.current.id})}} return communityRequest(token, path, options); };
     useEffect(() => { alive.current = true; return () => { alive.current = false; generation.current++; }; }, [token]);
     useEffect(() => { void refresh(); }, [mine]);
     useEffect(() => { if (initialRoomId)
         void detail(initialRoomId); }, [initialRoomId]);
+    useEffect(()=>{if(!room)return;const subscription=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(data.chat_room_id===room.id||data.town_hall_room_id===room.id)void detail(room.id)});return()=>subscription.remove();},[room?.id]);
     async function refresh(older = "") { const seq = ++generation.current; try {
         const { data } = await call(`/chat/town-hall?limit=25&mine=${mine}${older ? `&cursor=${encodeURIComponent(older)}` : ""}`);
         if (!alive.current || seq !== generation.current)

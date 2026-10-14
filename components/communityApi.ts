@@ -4,7 +4,7 @@ export async function communityRequest(token: string, path: string, options: Req
     const response = await fetchWithTimeout(`${API_URL}/api/v1${path}`, { ...options, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...options.headers } });
     if (response.status === 304)
         return { data: null, etag: response.headers.get("ETag") || "", unchanged: true };
-    const data = await response.json().catch(() => ({}));
+    const raw=await response.text();let data:any;try{data=raw?JSON.parse(raw):{}}catch{data={message:response.status>=400&&response.status<500&&raw.length<250?raw:"Could not load community. Please retry."}}
     if (!response.ok)
         throw new Error(data.message || (response.status === 401 ? "Sign in again to continue" : "Could not load community. Please retry."));
     return { data, etag: response.headers.get("ETag") || "", unchanged: false };
