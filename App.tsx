@@ -5,6 +5,7 @@ import { XPWithdrawalPanel } from "./components/XPWithdrawalPanel";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput, ThemeProvider } from "./components/ThemeProvider";
 import { SupportConversation } from "./components/SupportConversation";
 import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
+import { ProviderWorkspace } from "./components/ProviderWorkspace";
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
@@ -32,7 +33,6 @@ import { NAV_ITEMS } from "./components/NavItems";
 import { MarketplaceScreen } from "./components/MarketplaceScreen";
 import {CommunityScreen,CommunityMode} from "./components/CommunityScreen";
 import {TownHallBubble} from "./components/TownHallBubble";
-import {communityInviteUsername} from "./components/communityApi";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
 import { readNotificationSoundEnabled, writeNearbySnapshot, writeNotificationSoundEnabled } from "./components/nearbyCache";
 import { freshCatalogURL, useCatalogFreshness } from "./components/catalogFreshness";
@@ -148,9 +148,7 @@ function AcrossApp() {
   const [communityMode,setCommunityMode]=useState<CommunityMode>("chats");
   const [communityConversationId,setCommunityConversationId]=useState("");
   const [communityHallRoomId,setCommunityHallRoomId]=useState("");
-  const [communityInvite,setCommunityInvite]=useState("");
-  const [pendingCommunityInvite,setPendingCommunityInvite]=useState("");
-  useEffect(()=>{setCommunityMode('chats');setCommunityConversationId('');setCommunityHallRoomId('');setCommunityInvite('');},[token]);
+  useEffect(()=>{setCommunityMode('chats');setCommunityConversationId('');setCommunityHallRoomId('');},[token]);
   const [notificationNavigationKey,setNotificationNavigationKey]=useState(0);
   const notificationNavigationRequest=useRef(0);
   const rewardsOffset=useRef(0);
@@ -177,6 +175,7 @@ function AcrossApp() {
   const paymentPollGeneration = useRef(0);
   const paymentConfirmationIssue = useRef("");
   const [showPaymentHistory,setShowPaymentHistory]=useState(false);
+  const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
   const cartHydrated = useRef(false);
   const cartStorageWrites = useRef(Promise.resolve());
   const restoredPendingPayment = useRef(false);
@@ -330,13 +329,6 @@ function AcrossApp() {
     return Math.max(best, Math.round(((compare - current) / compare) * 100));
   }, 0), [flashSaleProducts]);
 
-  useEffect(()=>{
-    const receive=(url:string)=>{const username=communityInviteUsername(url);if(username)setPendingCommunityInvite(username);};
-    void Linking.getInitialURL().then(url=>{if(url)receive(url);});
-    const subscription=Linking.addEventListener("url",event=>receive(event.url));
-    return()=>subscription.remove();
-  },[]);
-  useEffect(()=>{if(stage!=="app"||!token||!pendingCommunityInvite)return;setCommunityInvite(pendingCommunityInvite);setCommunityMode('friends');setCommunityConversationId('');setCommunityHallRoomId('');setActiveTab('messages');setNotificationNavigationKey(value=>value+1);setPendingCommunityInvite('');},[stage,token,pendingCommunityInvite]);
 
   useEffect(() => {
     void fetch(`${API_URL}/api/v1/buyer-markets`).then(r => r.ok ? r.json() : null).then(data => {
@@ -743,6 +735,7 @@ function AcrossApp() {
     const notificationId = String(notification?.id || notification?.notification_id || "");
     const destination=notificationDestination(notification);
     setShowNotifications(false);
+    if(destination.tab==='provider'){if(notificationId)void markNotificationRead(notificationId);setProviderWorkspaceRoute(destination.route);setProviderWorkspaceVisible(true);return;}
     setActiveTab(destination.tab);
     // Navigate immediately. A slow read acknowledgement must never block a tap.
     if (notificationId) void markNotificationRead(notificationId);
@@ -852,6 +845,7 @@ function AcrossApp() {
   }
 
   async function logout() {
+    setProviderWorkspaceVisible(false);
     if (logoutInProgress.current) return;
     logoutInProgress.current = true;
     const previousToken = token;
@@ -1954,7 +1948,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} />}
-        {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={bottomInset+BOTTOM_NAV_HEIGHT} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId} inviteUsername={communityInvite}/>}
+        {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={bottomInset+BOTTOM_NAV_HEIGHT} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
           <Text style={s.panelTitle}>Contact sellers</Text><Text style={s.muted}>Product payments are arranged directly with sellers. Open a product and tap Message seller. Previous paid orders remain available in Track and payment history.</Text>
@@ -2000,6 +1994,7 @@ function AcrossApp() {
                 </View>
               </View>
             )}
+            <Pressable style={s.quickLinkCard} onPress={()=>{setProviderWorkspaceRoute('');setProviderWorkspaceVisible(true);}}><Ionicons name="storefront-outline" size={24} color={theme.color('#12805F')}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Provider workspace</Text><Text style={s.quickLinkMeta}>Manage your business, listings and customer chats.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
             <View style={s.panel} onLayout={event=>{rewardsOffset.current=event.nativeEvent.layout.y;}}>
               {xpReserved > 0 && <Text style={s.muted}>{xpReserved} XP reserved for pending checkout. Points are spent only after confirmed payment.</Text>}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
@@ -2164,7 +2159,7 @@ function AcrossApp() {
         )}
       </View>
 
-      {!keyboardVisible&&token&&['home','services','track'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setCommunityInvite('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
+      {!keyboardVisible&&token&&['home','services','track'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
       {!keyboardVisible && <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
@@ -2224,6 +2219,7 @@ function AcrossApp() {
       </Modal>
 
       {selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
+      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()}/>}
     </View>
   );
 }

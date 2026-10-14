@@ -1,3 +1,4 @@
+import {TownHallMessage} from './TownHallMessage';
 import {ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {ChatPhotoViewer} from "./ChatPhotoViewer";
 import { KeyboardFrame } from "./KeyboardFrame";
@@ -10,7 +11,7 @@ import { uploadChatImage } from "./chatImages";
 import { Ionicons } from "@expo/vector-icons";
 
 export type ProviderMessage = { id: string; sender_type: "buyer" | "provider"; sender_name?:string; is_mine?:boolean; body: string; media_urls?:string[]; created_at: string };
-type Props = { token:string; title: string; provider: string; identity?:ProviderIdentityData; messages: ProviderMessage[]; toolbar?:React.ReactNode; pausedLabel?:string; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
+type Props = { roomStyle?:boolean; token:string; title: string; provider: string; identity?:ProviderIdentityData; messages: ProviderMessage[]; toolbar?:React.ReactNode; pausedLabel?:string; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
 export function ProviderConversation(props: Props) {
   const theme = useTheme();
   const s = useThemedStyles(baseStyles);
@@ -53,15 +54,15 @@ export function ProviderConversation(props: Props) {
     finally{sending.current=false;}
   };
   return <KeyboardFrame style={s.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
-    <View style={s.header}><Pressable onPress={props.onClose} accessibilityLabel="Back to conversations" style={s.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")}/></Pressable><View style={s.heading}><ProviderIdentity identity={props.identity || {name:props.provider,verified:false}} compact={false}/><Text style={s.meta} numberOfLines={1}>{props.title}</Text></View></View>
+    <View style={s.header}><Pressable onPress={props.onClose} accessibilityLabel="Back to conversations" style={s.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")}/></Pressable><View style={s.heading}>{props.roomStyle?<Text style={s.title}>Town Hall</Text>:<ProviderIdentity identity={props.identity || {name:props.provider,verified:false}} compact={false}/>}<Text style={s.meta} numberOfLines={1}>{props.title}</Text></View></View>
     {props.toolbar}
     {!!props.error && <Pressable onPress={props.onRefresh}><Text style={s.error}>{props.error} · Tap to retry</Text></Pressable>}
-    <FlatList ref={list} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={s.thread} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
+    <FlatList ref={list} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={[s.thread,props.roomStyle&&{backgroundColor:theme.dark?"#142A35":"#EDF4F8",gap:1}]} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
       onScroll={event=>{const {contentOffset,contentSize,layoutMeasurement}=event.nativeEvent;nearBottom.current=contentSize.height-contentOffset.y-layoutMeasurement.height<100;}} scrollEventThrottle={100}
       onContentSizeChange={()=>{if(nearBottom.current)list.current?.scrollToEnd({animated:false});}}
-      ListHeaderComponent={props.hasEarlier ? <Pressable disabled={props.loading} onPress={()=>{nearBottom.current=false;props.onEarlier();}} style={s.earlier}><Text style={s.meta}>{props.loading ? "Loading…" : "Load earlier messages"}</Text></Pressable> : null}
+      ListHeaderComponent={props.hasEarlier ? <Pressable disabled={props.loading} onPress={()=>{nearBottom.current=false;props.onEarlier();}} style={s.earlier}><Text style={s.meta}>{props.loading ? "Loading…" : "Earlier messages"}</Text></Pressable> : props.roomStyle?<Text style={{fontSize:11,textAlign:"center",paddingBottom:12}}>Welcome to the room · {props.title}</Text>:null}
       ListEmptyComponent={props.loading ? <ActivityIndicator color={theme.color("#FF4747")}/> : !props.error ? <Text style={s.meta}>Tell {props.provider} what you need. Your messages will appear here.</Text> : null}
-      renderItem={({item})=><View style={[s.bubble,(item.is_mine ?? item.sender_type==="buyer") ? s.mine : s.theirs]}>{item.sender_name && !item.is_mine && <Text style={s.meta}>{item.sender_name}</Text>}<Text style={s.message}>{item.body}</Text>{(item.media_urls || []).map(uri=><Pressable key={uri} onPress={()=>setViewPhoto(uri)} accessibilityLabel="View chat photo"><Image source={{uri}} style={{width:200,height:180,borderRadius:10,marginTop:6}} resizeMode="cover"/></Pressable>)}<Text style={s.time}>{new Date(item.created_at).toLocaleString()}</Text></View>}/>
+      renderItem={({item})=>props.roomStyle?<TownHallMessage message={item} onPhoto={setViewPhoto}/>:<View style={[s.bubble,(item.is_mine ?? item.sender_type==="buyer") ? s.mine : s.theirs]}>{item.sender_name && !item.is_mine && <Text style={s.meta}>{item.sender_name}</Text>}<Text style={s.message}>{item.body}</Text>{(item.media_urls || []).map(uri=><Pressable key={uri} onPress={()=>setViewPhoto(uri)} accessibilityLabel="View chat photo"><Image source={{uri}} style={{width:200,height:180,borderRadius:10,marginTop:6}} resizeMode="cover"/></Pressable>)}<Text style={s.time}>{new Date(item.created_at).toLocaleString()}</Text></View>}/>
     {props.paused && <Text style={s.error}>{props.pausedLabel || "This provider cannot receive messages right now. Please try again later."}</Text>}
     {!!photos.length && <ScrollView horizontal style={{flexGrow:0,maxHeight:90,backgroundColor: theme.color("#FFF", "backgroundColor")}}>{photos.map(photo=><Pressable key={photo.key} onPress={()=>{if(!props.busy && !uploading)setPhotos(current=>current.filter(item=>item.key!==photo.key));}} accessibilityLabel="Remove attached photo"><Image source={{uri:photo.uri}} style={{width:72,height:72,margin:6,borderRadius:8}}/><Text style={{position:"absolute",right:9,top:6,color: theme.color("#B42318", "color")}}>X</Text></Pressable>)}</ScrollView>}
     <ChatPhotoViewer key={viewPhoto || "closed"} uri={viewPhoto} onClose={()=>setViewPhoto(null)}/>

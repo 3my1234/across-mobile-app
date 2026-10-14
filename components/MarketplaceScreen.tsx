@@ -540,13 +540,6 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     setError("");
     try {
       await refreshSelectedListing(item.id);
-      if (item.direct_booking) {
-        const slotResponse = await fetchWithTimeout(`${API_URL}/api/v1/marketplace/listings/${item.id}/availability`);
-        if (slotResponse.ok) {
-          const body = await slotResponse.json();
-          setSlots(Array.isArray(body.items) ? body.items : []);
-        }
-      }
     } catch {
       // The public-list payload is complete enough to keep the detail usable offline/intermittently.
     }
@@ -691,28 +684,11 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               </View>
             </View>
           )}
-          {selected.direct_booking && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Choose a date and time</Text>
-              {slots.length ? slots.map(slot => (
-                <Pressable key={slot.id} onPress={() => setSlotId(current => current === slot.id ? "" : slot.id)} style={[styles.slot, slotId === slot.id && styles.slotActive]}>
-                  <Ionicons name={slotId === slot.id ? "radio-button-on" : "radio-button-off"} size={20} color={theme.color("#FF4747")} />
-                  <Text style={styles.grow}>{new Date(slot.starts_at).toLocaleString()} · {slot.remaining} booking {slot.remaining === 1 ? "spot" : "spots"} left</Text>
-                </Pressable>
-              )) : <Text style={styles.meta}>The provider has not added fixed times. Write your preferred date and time in the message below.</Text>}
-              <Text style={styles.fieldLabel}>{quantityCopy.label}</Text>
-              <Text style={styles.fieldHelp}>{quantityCopy.help}</Text>
-              <TextInput value={partySize} onChangeText={setPartySize} keyboardType="number-pad" placeholder="Enter a number" accessibilityLabel={quantityCopy.label} style={styles.input} />
-            </View>
-          )}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{selected.direct_booking ? "Request booking" : "Send an enquiry"}</Text>
-            <TextInput value={requestMessage} onChangeText={setRequestMessage} placeholder="Tell the provider what you need" multiline style={[styles.input, styles.textarea]} />
-            <Pressable disabled={loading} style={[styles.primary, loading && styles.disabled]} onPress={submitRequest}>
-              <Text style={styles.primaryText}>{loading ? "Sending…" : selected.direct_booking ? "Request booking" : "Send enquiry"}</Text>
-            </Pressable>
-            <Pressable disabled={openingChat} style={[styles.secondary, openingChat && styles.disabled]} onPress={() => void startConversation()}>
-              <Text style={styles.secondaryText}>{openingChat ? "Opening chat..." : "Message provider"}</Text>
+            <Text style={styles.sectionTitle}>Chat with this provider</Text>
+            <Text style={styles.meta}>Discuss what you need, availability and payment directly in your chat.</Text>
+            <Pressable disabled={openingChat} style={[styles.primary, openingChat && styles.disabled]} onPress={() => void startConversation()}>
+              <Text style={styles.primaryText}>{openingChat ? "Opening chat..." : "Message provider"}</Text>
             </Pressable>
             <Pressable disabled={requiresSafetyAcknowledgement && !safetyAcknowledged} style={[styles.secondary, requiresSafetyAcknowledgement && !safetyAcknowledged && styles.disabled]} onPress={revealContact}>
               <Text style={styles.secondaryText}>View verified provider contact</Text>
@@ -734,7 +710,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     <View style={styles.fill}>
       <View style={styles.modeBar}>
         <Pressable style={[styles.modeButton, mode === "explore" && styles.modeButtonActive]} onPress={() => setMode("explore")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "explore" && styles.modeTextActive]}>Explore</Text></Pressable>
-        <Pressable style={[styles.modeButton, mode === "requests" && styles.modeButtonActive]} onPress={() => setMode("requests")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "requests" && styles.modeTextActive]}>My requests</Text></Pressable>
+
         <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Provider chat</Text></Pressable>
       </View>
       {mode === "explore" ? (
