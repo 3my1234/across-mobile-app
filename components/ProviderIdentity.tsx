@@ -4,7 +4,7 @@ import Svg, {Defs, LinearGradient, Path, Stop} from "react-native-svg";
 import {ThemedText as Text, useTheme} from "./ThemeProvider";
 import {ResilientImage} from "./ResilientImage";
 
-export type ProviderIdentityData = {id?:string; name:string; avatar_url?:string; verified:boolean; paid_active?:boolean; tier?:""|"bronze"|"silver"|"gold"|"diamond"; label?:string};
+export type ProviderIdentityData = {id?:string; name:string; avatar_url?:string; banner_url?:string; verified:boolean; paid_active?:boolean; tier?:""|"bronze"|"silver"|"gold"|"diamond"; label?:string};
 const finishes = {
  bronze:["#713C24","#E8B18D","#A15E3B"], silver:["#657482","#F2F7FC","#9EAAB6"],
  gold:["#96700D","#FFE79A","#DCA82B"], diamond:["#759FC0","#F0FFFF","#CABFF2"],
@@ -36,6 +36,10 @@ export function ProviderBadge({identity,size=18,animate=false}:{identity:Provide
  </Pressable>;
 }
 
+export function ProviderBanner({identity,compact=false}:{identity?:ProviderIdentityData;compact?:boolean}) {
+ if(!identity?.banner_url)return null;
+ return <ResilientImage uri={identity.banner_url} style={{width:'100%',height:compact?44:96,borderRadius:10,marginVertical:5}} resizeMode="cover"/>;
+}
 export function ProviderIdentity({identity,animate=false,compact=true}:{identity?:ProviderIdentityData;animate?:boolean;compact?:boolean}) {
  const theme=useTheme();
  if(!identity?.name)return null;

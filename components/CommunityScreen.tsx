@@ -1,3 +1,4 @@
+import type {ChatLocation} from './chatLocation';
 import {privateChatStore} from './privateChatStore';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -162,11 +163,11 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         if (alive.current)
             setBusy(false);
     } }
-    async function send(text: string, mediaKeys?: string[], clientID?: string) {
+    async function send(text: string, mediaKeys?: string[], clientID?: string,location?:ChatLocation) {
         if (!current.current)
             return;
         const conversation = current.current;
-        const { data } = await call(`/chat/conversations/${conversation.id}/messages`, { method: "POST", body: JSON.stringify({ message: text, media_keys: mediaKeys || [], client_message_id: clientID }) });
+        const { data } = await call(`/chat/conversations/${conversation.id}/messages`, { method: "POST", body: JSON.stringify({ message: text, media_keys: mediaKeys || [], location,client_message_id: clientID }) });
         if (!alive.current || current.current?.id !== conversation.id)
             return;
         const next = mergeChatMessages(messageRef.current, [{ ...data, is_mine: true, sender_type: "buyer" }]);

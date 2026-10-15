@@ -1,3 +1,4 @@
+import type {ChatLocation} from './chatLocation';
 import {providerChatHistory} from "./chatHistoryCache";
 import React,{useEffect,useRef,useState} from "react";
 import {AppState} from "react-native";
@@ -56,17 +57,17 @@ export function ProductSellerChat({product,token,onClose}:{product:Product;token
  // Product/token changes remount this component and discard the private state.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);
- async function send(text:string,mediaKeys:string[]=[],clientID?:string) {
+ async function send(text:string,mediaKeys:string[]=[],clientID?:string,location?:ChatLocation) {
   if(sending.current)return;
   sending.current=true;setBusy(true);setError("");
   try {
    const existing=conversation.current;
    const endpoint=existing?`/marketplace/conversations/${existing}/messages`:`/marketplace/products/${product.id}/conversations`;
-   const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({message:text,media_keys:mediaKeys,client_message_id:clientID})});
+   const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({message:text,media_keys:mediaKeys,location,client_message_id:clientID})});
    if(!response.ok)throw new Error(body.message || "Message could not be sent");
    if(!alive.current)return;
    conversation.current=existing || body.id;
-   merge([{id:existing?body.id:body.message_id,sender_type:"buyer",body:body.body || text,created_at:body.created_at,media_urls:body.media_urls || []}]);
+   merge([{id:existing?body.id:body.message_id,sender_type:"buyer",body:body.body || text,created_at:body.created_at,media_urls:body.media_urls || [],location:body.location||location}]);
   }catch(problem){if(alive.current)setError(problem instanceof Error?problem.message:"Message could not be sent");throw problem;}
   finally{sending.current=false;if(alive.current)setBusy(false);}
  }
