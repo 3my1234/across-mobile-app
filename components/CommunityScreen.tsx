@@ -167,9 +167,11 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         if (!current.current)
             return;
         const conversation = current.current;
+        setError('');
         const { data } = await call(`/chat/conversations/${conversation.id}/messages`, { method: "POST", body: JSON.stringify({ message: text, media_keys: mediaKeys || [], location,client_message_id: clientID }) });
         if (!alive.current || current.current?.id !== conversation.id)
             return;
+        if(!data?.id||!data.created_at)throw new Error('The server did not confirm your message. Please retry.');
         const next = mergeChatMessages(messageRef.current, [{ ...data, is_mine: true, sender_type: "buyer" }]);
         messageRef.current = next;
         setMessages(next);

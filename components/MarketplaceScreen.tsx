@@ -125,7 +125,7 @@ function bookingQuantityCopy(listingType: string) {
   return { label: "Number of people receiving this service", help: "Enter 1 when booking only for yourself. This is not the number of days.", unit: "person" };
 }
 
-export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore",initialConversationId="" }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string }) {
+export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore",initialConversationId="",onConversationVisibilityChange }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;onConversationVisibilityChange?:(visible:boolean)=>void }) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
@@ -149,6 +149,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const threadRequest = useRef(0);
   const threadInFlight = useRef(false);
   const chatActor = useRef(token); chatActor.current = token;
+  useEffect(()=>{onConversationVisibilityChange?.(!!selectedConversation);return()=>onConversationVisibilityChange?.(false);},[!!selectedConversation,onConversationVisibilityChange]);
   const threadLoader = useRef(loadConversationMessages); threadLoader.current = loadConversationMessages;
   const requestsGeneration = useRef(0);
   const conversationsGeneration = useRef(0);
@@ -489,6 +490,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       const endpoint=conversation.id?`/marketplace/conversations/${conversation.id}/messages`:`/marketplace/listings/${conversation.listing_id}/conversations`;
       const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim(),media_keys:mediaKeys,location,client_message_id:clientID})});
       if(!response.ok)throw new Error(apiMessage(body,"Message could not be sent"));
+      if(!(conversation.id?body.id:body.message_id)||!body.created_at)throw new Error('The server did not confirm your message. Please retry.');
       if(actor!==chatActor.current)return;
       if((conversationRef.current?.id || conversationRef.current?.listing_id) !== (conversation.id || conversation.listing_id)){void loadConversations(true);return;}
       const active={...conversation,id:conversation.id || body.id};

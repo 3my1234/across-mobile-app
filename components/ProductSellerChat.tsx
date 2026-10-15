@@ -66,10 +66,11 @@ export function ProductSellerChat({product,token,onClose}:{product:Product;token
    const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({message:text,media_keys:mediaKeys,location,client_message_id:clientID})});
    if(!response.ok)throw new Error(body.message || "Message could not be sent");
    if(!alive.current)return;
-   conversation.current=existing || body.id;
+   if(!(existing?body.id:body.message_id)||!body.created_at)throw new Error('The server did not confirm your message. Please retry.');
+   invalidate();etag.current='';conversation.current=existing || body.id;
    merge([{id:existing?body.id:body.message_id,sender_type:"buyer",body:body.body || text,created_at:body.created_at,media_urls:body.media_urls || [],location:body.location||location}]);
   }catch(problem){if(alive.current)setError(problem instanceof Error?problem.message:"Message could not be sent");throw problem;}
   finally{sending.current=false;if(alive.current)setBusy(false);}
  }
- return <ProviderConversation token={token} title={product.title} provider={product.provider_name || "Seller"} identity={product.provider_identity} messages={messages} busy={busy||loading} loading={loading} paused={paused} error={error} hasEarlier={!!cursor} bottomInset={inset.bottom} onClose={onClose} onSend={send} onEarlier={()=>void load(cursor)} onRefresh={()=>void load()}/>;
+ return <ProviderConversation token={token} title={product.title} provider={product.provider_name || "Seller"} identity={product.provider_identity} messages={messages} busy={busy} loading={loading} paused={paused} error={error} hasEarlier={!!cursor} bottomInset={inset.bottom} onClose={onClose} onSend={send} onEarlier={()=>void load(cursor)} onRefresh={()=>void load()}/>;
 }
