@@ -1,3 +1,4 @@
+import {createSessionStartup} from './components/sessionStartup';
 import {privateChatStore} from './components/privateChatStore';
 import {supportChatHistory,providerChatHistory} from "./components/chatHistoryCache";
 import {notificationDestination} from "./components/notificationDestination";
@@ -209,6 +210,15 @@ function AcrossApp() {
   const notificationRequest = useRef(0);
   const sessionTokenRef = useRef(token);
   sessionTokenRef.current = token;
+  const sessionStartup=useRef<ReturnType<typeof createSessionStartup>|null>(null);
+  if(!sessionStartup.current)sessionStartup.current=createSessionStartup({
+    read:()=>Promise.all([SecureStore.getItemAsync(TOKEN_KEY),SecureStore.getItemAsync(EXPIRY_KEY)]),
+    currentToken:()=>sessionTokenRef.current,
+    open:storedToken=>{if(bootTimer.current)clearTimeout(bootTimer.current);sessionTokenRef.current=storedToken;setToken(storedToken);setStage('app');},
+    missing:async()=>{if(bootTimer.current)clearTimeout(bootTimer.current);setStage('auth');await clearSession();},
+    rejected:async expected=>{if(sessionTokenRef.current!==expected)return;setStage('auth');await clearSession();},
+    validate:(storedToken,signal)=>fetch(API_URL+'/api/v1/auth/session',{headers:{Authorization:'Bearer '+storedToken},signal,cache:'no-store'})
+  });
   const [xpClaimed, setXpClaimed] = useState(false);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>([]);
   const supportTicketsRef = useRef(supportTickets); supportTicketsRef.current = supportTickets;
@@ -344,10 +354,11 @@ function AcrossApp() {
     // than waiting for authentication to finish.
     void loadProducts(true);
     if (Platform.OS === "android") void WebBrowser.warmUpAsync().catch(() => {});
-    restoreSession();
-    bootTimer.current = setTimeout(() => setStage(prev => prev === "booting" ? "auth" : prev), SESSION_TIMEOUT);
+    void restoreSession().catch(()=>{if(!sessionTokenRef.current)setStage('auth');});
+    bootTimer.current = setTimeout(() => {sessionStartup.current?.cancel();setStage(prev=>prev==='booting'?'auth':prev);},SESSION_TIMEOUT);
     return () => {
       if (bootTimer.current) clearTimeout(bootTimer.current);
+      sessionStartup.current?.cancel();
       if (Platform.OS === "android") void WebBrowser.coolDownAsync().catch(() => {});
     };
   }, []);
@@ -554,7 +565,7 @@ function AcrossApp() {
     void loadNotifications(token);
     void loadProfile(token);
     void registerPushNotifications(token);
-    void pollBuyerActivity(token, true);
+    void pollBuyerActivity(token);
     const interval = setInterval(() => { if (AppState.currentState === "active") { void pollBuyerActivity(token); void registerPushNotifications(token); } }, 60000);
     const pushForeground = AppState.addEventListener("change", next => { if (next === "active") void registerPushNotifications(token, undefined, true); });
     const received = Notifications.addNotificationReceivedListener(() => {
@@ -613,30 +624,7 @@ function AcrossApp() {
   }, [stage, token, quote]);
 
   async function restoreSession() {
-    setStage("booting");
-    try {
-      const [storedToken, expiry] = await Promise.all([SecureStore.getItemAsync(TOKEN_KEY), SecureStore.getItemAsync(EXPIRY_KEY)]);
-      if (!storedToken || !expiry || Date.now() >= Number(expiry) * 1000) { await clearSession(); setStage("auth"); return; }
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 5000);
-      const r = await fetch(`${API_URL}/api/v1/auth/session`, { headers: { Authorization: `Bearer ${storedToken}` }, signal: controller.signal });
-      if (r.status === 401 || r.status === 403) {
-        await clearSession(); setStage("auth"); return;
-      }
-      if (!r.ok) throw new Error(`session validation unavailable: ${r.status}`);
-      setToken(storedToken);
-      setStage("app");
-      void loadProducts();
-      loadProfile(storedToken).catch(() => {});
-    } catch {
-      const [storedToken, expiry] = await Promise.all([SecureStore.getItemAsync(TOKEN_KEY), SecureStore.getItemAsync(EXPIRY_KEY)]);
-      if (storedToken && expiry && Date.now() < Number(expiry) * 1000) {
-        setToken(storedToken);
-        setStage("app");
-        return;
-      }
-      await clearSession(); setStage("auth");
-    }
+    await sessionStartup.current?.restore();
   }
 
   async function loadNotifications(authToken: string | null = token) {
@@ -659,6 +647,7 @@ function AcrossApp() {
       const response = await fetchWithTimeout(`${API_URL}/api/v1/notifications/activity`, { cache: "no-store", headers: { Authorization: `Bearer ${authToken}` } });
       if (!response.ok) return;
       const data = await response.json();
+      if(authToken!==sessionTokenRef.current)return;
       const nextToken = String(data.change_token || "");
       const changed = force || (activityTokenRef.current !== "" && nextToken !== activityTokenRef.current);
       activityTokenRef.current = nextToken;
@@ -792,17 +781,22 @@ function AcrossApp() {
   }
 
   async function saveSession(s: any) {
+    sessionStartup.current?.cancel();
+    if(bootTimer.current)clearTimeout(bootTimer.current);
     await SecureStore.setItemAsync(TOKEN_KEY, s.access_token);
     await SecureStore.setItemAsync(EXPIRY_KEY, String(s.expires_at));
+    sessionTokenRef.current=s.access_token;
     setToken(s.access_token);
     setStage("app");
-    void loadProducts();
-    loadProfile(s.access_token).catch(() => {});
+    // The app-stage effects own catalogue/profile loading once.
   }
 
   async function clearSession() {
+    sessionStartup.current?.cancel();
+    sessionTokenRef.current=null;
+    activityTokenRef.current="";
     notificationNavigationRequest.current++;setServiceConversationId("");setNotificationNavigationKey(0);
-    await Promise.all([
+    const storageCleanup=Promise.all([
       SecureStore.deleteItemAsync(TOKEN_KEY),
       SecureStore.deleteItemAsync(EXPIRY_KEY),
       cartStorageWrites.current.catch(() => {}).then(() => AsyncStorage.removeItem(CART_KEY)),
@@ -846,6 +840,7 @@ function AcrossApp() {
     restoredPendingPayment.current = false;
     setCartStorageReady(false);
     stopPaymentPolling();
+    await storageCleanup;
   }
 
   async function logout() {
