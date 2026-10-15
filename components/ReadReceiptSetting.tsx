@@ -1,0 +1,11 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {ActivityIndicator,DeviceEventEmitter,Switch,View} from 'react-native';
+import {communityRequest} from './communityApi';
+import {ThemedText as Text} from './ThemeProvider';
+export function ReadReceiptSetting({token,active}:{token:string;active:boolean}){
+ const identity=useRef({token,active});identity.current={token,active};const saveFlight=useRef(false);
+ const [enabled,setEnabled]=useState(true),[busy,setBusy]=useState(true),[error,setError]=useState(''),[loaded,setLoaded]=useState(false);
+ useEffect(()=>{let alive=true;if(!token||!active)return;setBusy(true);setLoaded(false);void communityRequest(token,'/messaging/preferences').then(({data})=>{if(alive){setEnabled(data.read_receipts_enabled);setLoaded(true);setError('');}}).catch(()=>{if(alive)setError('Read receipt settings could not load. Reopen Settings to retry.');}).finally(()=>{if(alive)setBusy(false);});return()=>{alive=false;};},[token,active]);
+ async function save(value:boolean){if(busy||!loaded||saveFlight.current)return;saveFlight.current=true;const captured=token;const current=()=>identity.current.token===captured&&identity.current.active;setBusy(true);setError('');try{const {data}=await communityRequest(token,'/messaging/preferences',{method:'PATCH',body:JSON.stringify({read_receipts_enabled:value})});if(current()){setEnabled(data.read_receipts_enabled);DeviceEventEmitter.emit('message-receipts-preference');}}catch{if(current())setError('Your setting was not saved. Please try again.');}finally{saveFlight.current=false;if(current())setBusy(false);}}
+ return <View style={{gap:8,paddingVertical:16}}><View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between'}}><Text style={{fontWeight:'700'}}>Read receipts</Text>{busy?<ActivityIndicator/>:<Switch accessibilityLabel="Read receipts" value={enabled} disabled={!loaded} onValueChange={value=>void save(value)}/>}</View><Text style={{fontSize:13}}>Show blue ticks when you read a message. If you turn this off, you also won't see when other people read your messages. Delivery ticks and unread counts still work.</Text>{!!error&&<Text accessibilityRole="alert">{error}</Text>}</View>;
+}

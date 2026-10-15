@@ -1,3 +1,5 @@
+import {useMessageReceipts,ReceiptContext} from './messageReceipts';
+import {MessageReceipt} from './MessageReceipt';
 import {currentForegroundLocation} from './foregroundLocation';
 import {ChatLocation} from './chatLocation';
 import {LocationPin} from './LocationPin';
@@ -14,8 +16,12 @@ import { uploadChatImage } from "./chatImages";
 import { Ionicons } from "@expo/vector-icons";
 
 export type ProviderMessage = { id: string; sender_type: "buyer" | "provider"; sender_name?:string; is_mine?:boolean; body: string; location?:ChatLocation|null; media_urls?:string[]; created_at: string };
-type Props = { roomStyle?:boolean; avatarURL?:string; token:string; title: string; provider: string; identity?:ProviderIdentityData; messages: ProviderMessage[]; toolbar?:React.ReactNode; pausedLabel?:string; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string,location?:ChatLocation) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
+type Props = { receiptContext?:ReceiptContext; roomStyle?:boolean; avatarURL?:string; token:string; title: string; provider: string; identity?:ProviderIdentityData; messages: ProviderMessage[]; toolbar?:React.ReactNode; pausedLabel?:string; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string,location?:ChatLocation) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
 export function ProviderConversation(props: Props) {
+  const [visibleMessages,setVisibleMessages]=useState<string[]>([]);
+  const onVisibleMessages=useRef(({viewableItems}:any)=>setVisibleMessages(viewableItems.filter((entry:any)=>entry.isViewable).map((entry:any)=>entry.item.id))).current;
+  const visibilityConfig=useRef({minimumViewTime:750,itemVisiblePercentThreshold:50}).current;
+  const receipts=useMessageReceipts(props.token,props.receiptContext,props.messages.map(m=>({id:m.id,mine:m.is_mine??m.sender_type==='buyer'})),visibleMessages);
   const theme = useTheme();
   const s = useThemedStyles(baseStyles);
   const {onClose}=props;
@@ -72,12 +78,12 @@ export function ProviderConversation(props: Props) {
     {!props.roomStyle&&<ProviderBanner identity={props.identity} compact/>}
     {props.toolbar}
     {!!props.error&&!sendError && <Pressable onPress={props.onRefresh}><Text style={s.error}>{props.error} · Tap to retry</Text></Pressable>}
-    <FlatList ref={list} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={[s.thread,props.roomStyle&&{backgroundColor:theme.dark?"#142A35":"#EDF4F8",gap:1}]} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
+    <FlatList ref={list} onViewableItemsChanged={onVisibleMessages} viewabilityConfig={visibilityConfig} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={[s.thread,props.roomStyle&&{backgroundColor:theme.dark?"#142A35":"#EDF4F8",gap:1}]} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
       onScroll={event=>{const {contentOffset,contentSize,layoutMeasurement}=event.nativeEvent;nearBottom.current=contentSize.height-contentOffset.y-layoutMeasurement.height<100;}} scrollEventThrottle={100}
       onContentSizeChange={()=>{if(nearBottom.current)list.current?.scrollToEnd({animated:false});}}
       ListHeaderComponent={props.hasEarlier ? <Pressable disabled={props.loading} onPress={()=>{nearBottom.current=false;props.onEarlier();}} style={s.earlier}><Text style={s.meta}>{props.loading ? "Loading…" : "Earlier messages"}</Text></Pressable> : props.roomStyle?<Text style={{fontSize:11,textAlign:"center",paddingBottom:12}}>Welcome to the room · {props.title}</Text>:null}
       ListEmptyComponent={props.loading ? <ActivityIndicator color={theme.color("#FF4747")}/> : !props.error ? <Text style={s.meta}>{props.roomStyle ? "Providers can start replying once admitted. Messages will appear here." : `Message ${props.provider} to get started.`}</Text> : null}
-      renderItem={({item})=>props.roomStyle?<TownHallMessage message={item} onPhoto={setViewPhoto}/>:<View style={[s.bubble,(item.is_mine ?? item.sender_type==="buyer") ? s.mine : s.theirs,{backgroundColor:(item.is_mine ?? item.sender_type==="buyer")?(theme.dark?"#005C4B":"#D9FDD3"):(theme.dark?"#202C33":"#FFF")}]}>{item.sender_name && !item.is_mine && <Text style={s.meta}>{item.sender_name}</Text>}<Text style={s.message}>{item.body}</Text><LocationPin pin={item.location}/>{(item.media_urls || []).map(uri=><Pressable key={uri} onPress={()=>setViewPhoto(uri)} accessibilityLabel="View chat photo"><Image source={{uri}} style={{width:200,height:180,borderRadius:10,marginTop:6}} resizeMode="cover"/></Pressable>)}<Text style={s.time}>{new Date(item.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</Text></View>}/>
+      renderItem={({item})=>props.roomStyle?<TownHallMessage message={item} receipt={receipts[item.id]} onPhoto={setViewPhoto}/>:<View style={[s.bubble,(item.is_mine ?? item.sender_type==="buyer") ? s.mine : s.theirs,{backgroundColor:(item.is_mine ?? item.sender_type==="buyer")?(theme.dark?"#005C4B":"#D9FDD3"):(theme.dark?"#202C33":"#FFF")}]}>{item.sender_name && !item.is_mine && <Text style={s.meta}>{item.sender_name}</Text>}<Text style={s.message}>{item.body}</Text><LocationPin pin={item.location}/>{(item.media_urls || []).map(uri=><Pressable key={uri} onPress={()=>setViewPhoto(uri)} accessibilityLabel="View chat photo"><Image source={{uri}} style={{width:200,height:180,borderRadius:10,marginTop:6}} resizeMode="cover"/></Pressable>)}<View style={{flexDirection:"row",alignItems:"center",justifyContent:"flex-end",gap:5}}><Text style={s.time}>{new Date(item.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</Text>{(item.is_mine??item.sender_type==="buyer")&&<MessageReceipt receipt={receipts[item.id]}/>}</View></View>}/>
     {props.paused && <Text style={s.error}>{props.pausedLabel || "This provider cannot receive messages right now. Please try again later."}</Text>}
     {!!photos.length && <ScrollView horizontal style={{flexGrow:0,maxHeight:90,backgroundColor: theme.color("#FFF", "backgroundColor")}}>{photos.map(photo=><Pressable key={photo.key} onPress={()=>{if(!props.busy && !uploading)setPhotos(current=>current.filter(item=>item.key!==photo.key));}} accessibilityLabel="Remove attached photo"><Image source={{uri:photo.uri}} style={{width:72,height:72,margin:6,borderRadius:8}}/><Text style={{position:"absolute",right:9,top:6,color: theme.color("#B42318", "color")}}>X</Text></Pressable>)}</ScrollView>}
     <ChatPhotoViewer key={viewPhoto || "closed"} uri={viewPhoto} onClose={()=>setViewPhoto(null)}/>

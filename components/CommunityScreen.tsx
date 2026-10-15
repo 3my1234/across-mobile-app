@@ -1,4 +1,5 @@
 import type {ChatLocation} from './chatLocation';
+import {useInboxDeliveryReceipts} from './messageReceipts';
 import {privateChatStore} from './privateChatStore';
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
@@ -18,7 +19,7 @@ type Conversation = {
     kind: string;
     source: "shared" | "legacy";
     title: string;
-    avatar_url?:string;last_message?:string;last_message_at?:string;
+    avatar_url?:string;last_message?:string;last_message_at?:string;last_message_id?:string;last_message_is_mine?:boolean;
     actor_role: string;
     peer_user_id: string;
     state: string;
@@ -37,6 +38,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
 }) {
     const theme = useTheme(), s = useThemedStyles(base), [mode, setMode] = useState<CommunityMode>(initialMode === "town-hall" ? "town-hall" : "chats");
     const [inbox, setInbox] = useState<Conversation[]>(() => snapshots.get(token, "inbox")?.messages || []);
+    useInboxDeliveryReceipts(token,inbox);
     const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [cursor, setCursor] = useState("");
     const [selected, setSelected] = useState<Conversation | null>(null), [messages, setMessages] = useState<ProviderMessage[]>([]), [chatCursor, setChatCursor] = useState(""), [chatLoading, setChatLoading] = useState(false), [canSend, setCanSend] = useState(true);
     const alive = useRef(true), sequence = useRef(0), threadSequence = useRef(0), current = useRef<Conversation | null>(null), etags = useRef(new Map<string, string>()), messageRef = useRef<ProviderMessage[]>([]), scroll = useRef<ScrollView>(null);
@@ -189,7 +191,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     if (!token)
         return <View style={s.panel}><Text>Sign in to use Chats and Town Hall.</Text></View>;
     if (selected)
-        return <ProviderConversation roomStyle={selected.kind==='town_hall'} key={`${token}:${selected.id}`} token={token} title={selected.context?.title || selected.title} provider={selected.title} identity={selected.actor_role==='provider'?undefined:selected.provider_identity} avatarURL={selected.avatar_url} messages={messages} loading={chatLoading} busy={busy} paused={!canSend} pausedLabel={selected.kind === "town_hall" ? "This room is closed or your paid plan needs renewal." : "This conversation is read-only or blocked."} error={error} bottomInset={bottomInset} hasEarlier={!!chatCursor} onClose={() => { threadSequence.current++; current.current = null; setSelected(null); setError(""); }} onRefresh={() => void loadThread(selected)} onEarlier={() => void loadThread(selected, chatCursor)} onSend={send} toolbar={selected.source === "shared" && selected.kind === "direct" ? <View style={s.toolbar}>{button("Block", () => Alert.alert("Block this person?", "They will no longer be able to send you direct messages.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: () => void act(async () => { await call(`/chat/blocks/${selected.peer_user_id}`, { method: "POST" }); setCanSend(false); }) }]), true)}{button("Report", () => Alert.alert("Report this chat?", "Send this conversation to moderation for review.", [{ text: "Cancel", style: "cancel" }, { text: "Report", onPress: () => void act(async () => { await call(`/chat/conversations/${selected.id}/reports`, { method: "POST", body: JSON.stringify({ reason: "User reported this conversation for inappropriate messages or spam" }) }); Alert.alert("Report received", "Your report has been recorded for review."); }) }]))}</View> : undefined}/>;
+        return <ProviderConversation receiptContext={{channel:selected.source==='legacy'?'business':'shared',conversationId:selected.id}} roomStyle={selected.kind==='town_hall'} key={`${token}:${selected.id}`} token={token} title={selected.context?.title || selected.title} provider={selected.title} identity={selected.actor_role==='provider'?undefined:selected.provider_identity} avatarURL={selected.avatar_url} messages={messages} loading={chatLoading} busy={busy} paused={!canSend} pausedLabel={selected.kind === "town_hall" ? "This room is closed or your paid plan needs renewal." : "This conversation is read-only or blocked."} error={error} bottomInset={bottomInset} hasEarlier={!!chatCursor} onClose={() => { threadSequence.current++; current.current = null; setSelected(null); setError(""); }} onRefresh={() => void loadThread(selected)} onEarlier={() => void loadThread(selected, chatCursor)} onSend={send} toolbar={selected.source === "shared" && selected.kind === "direct" ? <View style={s.toolbar}>{button("Block", () => Alert.alert("Block this person?", "They will no longer be able to send you direct messages.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: () => void act(async () => { await call(`/chat/blocks/${selected.peer_user_id}`, { method: "POST" }); setCanSend(false); }) }]), true)}{button("Report", () => Alert.alert("Report this chat?", "Send this conversation to moderation for review.", [{ text: "Cancel", style: "cancel" }, { text: "Report", onPress: () => void act(async () => { await call(`/chat/conversations/${selected.id}/reports`, { method: "POST", body: JSON.stringify({ reason: "User reported this conversation for inappropriate messages or spam" }) }); Alert.alert("Report received", "Your report has been recorded for review."); }) }]))}</View> : undefined}/>;
     return <KeyboardFrame style={s.fill} behavior="height">{tabs}
  <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + 20 }} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={theme.color("#FF4747")}/>}>
  {!!error && <Pressable onPress={() => void load()}><Text style={s.error}>{error}</Text></Pressable>}

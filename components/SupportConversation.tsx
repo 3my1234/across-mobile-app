@@ -1,3 +1,5 @@
+import {useMessageReceipts} from './messageReceipts';
+import {MessageReceipt} from './MessageReceipt';
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import React, { useEffect, useRef, useState } from "react";
@@ -6,9 +8,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { SupportMessage, SupportTicket } from "./types";
 import { LOGO } from "./config";
 
-type Props = { ticket: SupportTicket; messages: SupportMessage[]; error: string; busy: boolean; onClose: () => void; onSend: (text: string) => Promise<void>; onRefresh: () => void; onEarlier: () => void; hasEarlier: boolean; loading: boolean };
+type Props = { token:string; ticket: SupportTicket; messages: SupportMessage[]; error: string; busy: boolean; onClose: () => void; onSend: (text: string) => Promise<void>; onRefresh: () => void; onEarlier: () => void; hasEarlier: boolean; loading: boolean };
 
-export function SupportConversation({ ticket, messages, error, busy, onClose, onSend, onRefresh, onEarlier, hasEarlier, loading }: Props) {
+export function SupportConversation({ token,ticket, messages, error, busy, onClose, onSend, onRefresh, onEarlier, hasEarlier, loading }: Props) {
+  const [visibleMessages,setVisibleMessages]=useState<string[]>([]);
+  const onVisibleMessages=useRef(({viewableItems}:any)=>setVisibleMessages(viewableItems.filter((entry:any)=>entry.isViewable).map((entry:any)=>entry.item.id))).current;
+  const visibilityConfig=useRef({minimumViewTime:750,itemVisiblePercentThreshold:50}).current;
+  const receipts=useMessageReceipts(token,{channel:'support',conversationId:ticket.id},messages.map(m=>({id:m.id||'',mine:m.sender_type!=='admin'})),visibleMessages);
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const list = useRef<FlatList<SupportMessage>>(null);
@@ -21,7 +27,7 @@ export function SupportConversation({ ticket, messages, error, busy, onClose, on
   return <KeyboardFrame style={styles.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <View style={styles.header}><Pressable onPress={onClose} accessibilityLabel="Back to support conversations" style={styles.back}><Ionicons name="chevron-back" size={24} color={theme.color("#191919")} /></Pressable><View style={styles.heading}><Text numberOfLines={1} style={styles.title}>{ticket.subject}</Text><Text style={styles.meta}>Atlantic Express support · {ticket.status}</Text></View></View>
     {!!error && <Pressable onPress={onRefresh}><Text style={styles.error}>{error} · Tap to retry</Text></Pressable>}
-    <FlatList ref={list} data={messages} keyExtractor={(message, index) => message.id || `${message.created_at}:${index}`} style={styles.fill} contentContainerStyle={styles.thread} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+    <FlatList ref={list} onViewableItemsChanged={onVisibleMessages} viewabilityConfig={visibilityConfig} data={messages} keyExtractor={(message, index) => message.id || `${message.created_at}:${index}`} style={styles.fill} contentContainerStyle={styles.thread} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
       onScroll={event => { const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent; nearBottom.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 100; }} scrollEventThrottle={100}
       onContentSizeChange={() => { if (nearBottom.current) list.current?.scrollToEnd({ animated: false }); }}
       maintainVisibleContentPosition={{minIndexForVisible: 0}}
@@ -29,7 +35,7 @@ export function SupportConversation({ ticket, messages, error, busy, onClose, on
       ListEmptyComponent={loading ? <ActivityIndicator color={theme.color("#FF4747")} /> : !error ? <Text style={styles.meta}>No messages yet.</Text> : null}
       renderItem={({item}) => { const mine = item.sender_type !== "admin"; return <View style={[styles.row, mine && styles.mineRow]}>
         {!mine && <Image source={LOGO} style={styles.avatar} />}
-        <View style={[styles.bubble, mine && styles.mineBubble]}><Text style={styles.message}>{item.message}</Text><Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text></View>
+        <View style={[styles.bubble, mine && styles.mineBubble]}><Text style={styles.message}>{item.message}</Text><View style={{flexDirection:"row",alignItems:"center",justifyContent:"flex-end",gap:5}}><Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>{mine&&item.id&&<MessageReceipt receipt={receipts[item.id]}/>}</View></View>
       </View>; }} />
     {ticket.status !== "closed" ? <View style={styles.composer}><TextInput accessibilityLabel="Message Atlantic Express support" value={draft} onChangeText={setDraft} multiline maxLength={5000} placeholder="Write a message…" style={styles.input} editable={!busy}/><Pressable accessibilityLabel="Send message" disabled={busy || !draft.trim()} onPress={() => { void send().catch(() => {}); }} style={[styles.send, (busy || !draft.trim()) && styles.disabled]}>{busy ? <ActivityIndicator color={theme.color("#FFF")} /> : <Ionicons name="arrow-up" size={22} color={theme.color("#FFF")} />}</Pressable></View> : <Text style={styles.closed}>This conversation is closed. Create a new ticket if you need more help.</Text>}
   </KeyboardFrame>;

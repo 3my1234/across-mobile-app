@@ -11,6 +11,7 @@ function render(dark){
  const React={createElement:(type,props,...children)=>{const flattened=children.flat(Infinity).filter(v=>v!==null&&v!==undefined&&typeof v!=='boolean');if(type!=='Text')assert.ok(!flattened.some(v=>typeof v==='string'||typeof v==='number'),`raw native text under ${type}`);const item={type,props:props||{},children:flattened};tree.push(item);return item;}};
  const styles=new Proxy({},{get:()=>({})});
  const context={React,Modal:'Modal',View:'View',Text:'Text',ScrollView:'ScrollView',Pressable:'Pressable',Ionicons:'Icon',showSettings:true,insets:{top:24,bottom:16},s:styles,theme:{dark,preference:dark?'dark':'light',color:v=>v,setPreference:noop},setShowSettings:noop,setShowPaymentHistory:noop,setActiveTab:noop,setEditingProfile:noop,soundEnabled:true,notificationStatus:'',toggleNotificationSound:noop,Linking:{openSettings:noop},Alert:{alert:noop},token:'session',privateChatStore:{clear:noop},logout:noop};
+ context.ReadReceiptSetting='ReadReceiptSetting';
  const code=ts.transpileModule('const result='+settings.getText(ast),{compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}}).outputText;
  vm.runInNewContext(code,context);assert.ok(tree.some(n=>n.type==='Text'&&n.children.includes('Settings')));
 }
