@@ -12,6 +12,7 @@ function render(dark){
  const styles=new Proxy({},{get:()=>({})});
  const context={React,Modal:'Modal',View:'View',Text:'Text',ScrollView:'ScrollView',Pressable:'Pressable',Ionicons:'Icon',showSettings:true,insets:{top:24,bottom:16},s:styles,theme:{dark,preference:dark?'dark':'light',color:v=>v,setPreference:noop},setShowSettings:noop,setShowPaymentHistory:noop,setActiveTab:noop,setEditingProfile:noop,soundEnabled:true,notificationStatus:'',toggleNotificationSound:noop,Linking:{openSettings:noop},Alert:{alert:noop},token:'session',privateChatStore:{clear:noop},logout:noop};
  context.ReadReceiptSetting='ReadReceiptSetting';
+ context.AccountIcon='AccountIcon';context.AccountSectionHeading='AccountSectionHeading';context.Switch='Switch';context.accountColors={dark,text:dark?'#FFF':'#14231E',accent:'#087B58'};context.accountCard={};context.accountDesign=styles;
  const code=ts.transpileModule('const result='+settings.getText(ast),{compilerOptions:{jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020}}).outputText;
  vm.runInNewContext(code,context);assert.ok(tree.some(n=>n.type==='Text'&&n.children.includes('Settings')));
 }

@@ -156,6 +156,11 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const conversationsRead = useRef<{actor: string | null; generation: number} | null>(null);
   const conversationRef = useRef(selectedConversation); conversationRef.current = selectedConversation;
   const [selected, setSelected] = useState<Listing | null>(null);
+ const [relatedServices,setRelatedServices]=useState<Listing[]>([]);
+ const [relatedState,setRelatedState]=useState<"loading"|"ready"|"error">("loading");
+ const [relatedRetry,setRelatedRetry]=useState(0);
+ useEffect(()=>{let active=true;setRelatedServices([]);if(!selected)return;if(!selected.category.trim()&&selected.listing_type==='artisan'){setRelatedState("ready");return;}setRelatedState("loading");const query=new URLSearchParams({limit:"8",exclude:selected.id,type:selected.listing_type});if(selected.category.trim())query.set("category",selected.category.trim());
+ void fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings?${query}`).then(({response,body})=>{if(!response.ok)throw Error();if(active){setRelatedServices(body.items||[]);setRelatedState("ready");}}).catch(()=>{if(active)setRelatedState("error");});return()=>{active=false;};},[selected?.id,selected?.category,selected?.listing_type,relatedRetry]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [type, setType] = useState("");
   const [search, setSearch] = useState("");
@@ -647,6 +652,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     return (
       <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.fill}>
         <ScrollView
+          key={selected.id}
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets
           contentContainerStyle={{ paddingBottom: detailBottomPadding }}
@@ -707,6 +713,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               </View>
             )}
           </View>
+          <View style={styles.section}><Text style={styles.sectionTitle}>Recommended for you</Text><Text style={styles.meta}>Similar services in this category.</Text>
+            {relatedState==="loading"?<ActivityIndicator accessibilityLabel="Loading related services"/>:relatedState==="error"?<Pressable onPress={()=>setRelatedRetry(n=>n+1)}><Text style={styles.link}>Could not load similar services. Tap to retry.</Text></Pressable>:!relatedServices.length?<Text style={styles.meta}>No similar services available yet.</Text>:relatedServices.map(item=><Pressable key={item.id} accessibilityLabel={"View "+item.title} style={styles.relatedCard} onPress={()=>void openListing(item)}><ResilientImage uri={item.media_urls?.[0]} style={{width:72,height:72,borderRadius:12}} resizeMode="cover"/><View style={{flex:1}}><Text style={styles.cardTitle} numberOfLines={3}>{item.title}</Text><ProviderIdentity identity={item.provider_identity}/><Text style={styles.meta}>{servicePriceLabel(item)}</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>)}
+          </View>
         </ScrollView>
       </KeyboardFrame>
     );
@@ -751,9 +760,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                     {item.media_urls?.length>4 && <Text style={styles.morePhotos}>+{item.media_urls.length-4} photos</Text>}
                   </View>
                   <View style={styles.cardBody}>
-                    <Text numberOfLines={2} style={styles.cardTitle}>{item.title}</Text>
+                    <Text numberOfLines={4} style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardPrice}>{servicePriceLabel(item)}</Text>
-                    <Text numberOfLines={1} style={styles.meta}>{item.city}</Text><ProviderBanner identity={item.provider_identity} compact/><ProviderIdentity identity={item.provider_identity}/>{item.provider_identity?.verified && item.provider_identity.paid_active && <Text style={styles.meta}>Promoted</Text>}
+                    <Text numberOfLines={1} style={styles.meta}>{item.city}</Text><ProviderIdentity identity={item.provider_identity}/>{!!item.description && <Text numberOfLines={3} style={styles.cardDescription}>{item.description}</Text>}{item.provider_identity?.verified && item.provider_identity.paid_active && <Text style={styles.meta}>Promoted</Text>}
                     {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
                     <View style={styles.ratingRow}><ReviewStars rating={item.average_rating || 0} size={10} /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
                   </View>
@@ -866,7 +875,9 @@ const baseStyles = StyleSheet.create({
   morePhotos: {position:"absolute",right:4,bottom:4,backgroundColor:"#102C25",color:"#FFF",padding:4,borderRadius:4,fontSize:10},
   cardImage: { width: "100%", aspectRatio: 1.35, backgroundColor: "#EEE" },
   cardBody: { padding: 8 },
-  cardTitle: { fontSize: 13, lineHeight: 17, fontWeight: "800", color: "#191919" },
+  relatedCard:{flexDirection:"row",gap:12,alignItems:"center",paddingVertical:12,borderBottomWidth:1,borderColor:"#E8E8E8"},
+  cardDescription:{fontSize:11,lineHeight:16,color:"#66736F",marginTop:3},
+  cardTitle: { fontSize: 12, lineHeight: 17, fontWeight: "800", color: "#191919" },
   cardPrice: { fontSize: 15, fontWeight: "900", color: "#FF4747", marginTop: 3 },
   meta: { color: "#777", fontSize: 12, marginTop: 3 },
   empty: { alignItems: "center", padding: 50, gap: 8 },
