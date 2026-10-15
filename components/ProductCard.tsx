@@ -1,4 +1,4 @@
-import {ProviderIdentity} from "./ProviderIdentity";
+import {ProviderBanner, ProviderIdentity} from "./ProviderIdentity";
 import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React from "react";
 import {View,  Pressable, StyleSheet} from "react-native";
@@ -33,7 +33,7 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
       />
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>{product.title}</Text>
-        <ProviderIdentity identity={product.provider_identity}/>{product.provider_identity?.verified && product.provider_identity.paid_active && <Text style={styles.metaText}>Promoted</Text>}
+        <ProviderBanner identity={product.provider_identity} compact/><ProviderIdentity identity={product.provider_identity}/>{product.provider_identity?.verified && product.provider_identity.paid_active && <Text style={styles.metaText}>Promoted</Text>}
         {!!product.category_path?.length && <Text style={styles.category} numberOfLines={1}>{product.category_path[product.category_path.length-1]}</Text>}
         <View style={styles.ratingRow}>
           <ReviewStars rating={product.average_rating} size={12} />

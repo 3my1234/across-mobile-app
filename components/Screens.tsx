@@ -1,4 +1,4 @@
-import {ProviderIdentity} from "./ProviderIdentity";
+import {ProviderBanner, ProviderIdentity} from "./ProviderIdentity";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import {ProductSellerChat} from "./ProductSellerChat";
@@ -474,7 +474,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
             <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally from seller" : isCrossBorderMerchantProduct ? "International seller" : "Seller fulfilment unavailable"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
-              <ProviderIdentity identity={product.provider_identity} compact={false} animate/>
+              <ProviderBanner identity={product.provider_identity}/><ProviderIdentity identity={product.provider_identity} compact={false} animate/>
             <View style={styles.productSocialRow}><Text style={styles.productSocialText}>{Number(product.sold_count || 0).toLocaleString()} sold</Text><Pressable accessibilityLabel="Read customer reviews" onPress={()=>scrollToSection("reviews")} style={styles.productRating}><Text style={styles.productSocialText}>{product.review_count>0 ? product.average_rating.toFixed(1) : "New"}</Text><ReviewStars rating={product.average_rating} size={13}/><Text style={styles.productSocialText}>({product.review_count})</Text></Pressable></View>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price, product.currency)}</Text>

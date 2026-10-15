@@ -1,4 +1,6 @@
-import {ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
+import {NearbyDrivers} from './NearbyDrivers';
+import type {ChatLocation} from './chatLocation';
+import {ProviderBanner, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {providerChatHistory} from "./chatHistoryCache";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -87,6 +89,7 @@ type Conversation = {
   subscription_active: boolean;
 };
 type ConversationMessage = {
+  location?:ChatLocation|null;
   id: string;
   sender_type: "buyer" | "provider";
   body: string;
@@ -126,6 +129,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
+  const [showDrivers,setShowDrivers]=useState(false);
   const [mode, setMode] = useState<"explore" | "requests" | "messages">(initialMode);
   const [items, setItems] = useState<Listing[]>([]);
   const [requests, setRequests] = useState<BuyerRequest[]>([]);
@@ -477,20 +481,20 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     if(conversation.id)await loadConversationMessages(conversation);
   }
 
-  async function sendConversationMessage(text: string,mediaKeys:string[]=[],clientID?:string) {
+  async function sendConversationMessage(text: string,mediaKeys:string[]=[],clientID?:string,location?:ChatLocation) {
     const conversation=conversationRef.current, actor=token;
-    if(!conversation || (!text.trim() && !mediaKeys.length) || chatBusy.current)return;
+    if(!conversation || (!text.trim() && !mediaKeys.length && !location) || chatBusy.current)return;
     chatBusy.current=true;setChatSending(true);setChatError("");
     try {
       const endpoint=conversation.id?`/marketplace/conversations/${conversation.id}/messages`:`/marketplace/listings/${conversation.listing_id}/conversations`;
-      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim(),media_keys:mediaKeys,client_message_id:clientID})});
+      const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...authHeaders,"Content-Type":"application/json"},body:JSON.stringify({message:text.trim(),media_keys:mediaKeys,location,client_message_id:clientID})});
       if(!response.ok)throw new Error(apiMessage(body,"Message could not be sent"));
       if(actor!==chatActor.current)return;
       if((conversationRef.current?.id || conversationRef.current?.listing_id) !== (conversation.id || conversation.listing_id)){void loadConversations(true);return;}
       const active={...conversation,id:conversation.id || body.id};
       conversationRef.current=active;setSelectedConversation(active);
       if(body.created_at && (conversation.id ? body.id : body.message_id)) {
-        const saved:ConversationMessage={id:conversation.id?body.id:body.message_id,sender_type:"buyer",body:body.body || text,created_at:body.created_at,media_urls:body.media_urls || []};
+        const saved:ConversationMessage={id:conversation.id?body.id:body.message_id,sender_type:"buyer",body:body.body || text,created_at:body.created_at,media_urls:body.media_urls || [],location:body.location||location};
         setConversationMessages(current=>mergeChatMessages(current,[saved]));
         void loadConversationMessages(active,"",true);
       } else await loadConversationMessages(active);
@@ -660,7 +664,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           <View style={styles.section}>
             <Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
             <Text style={styles.title}>{selected.title}</Text>
-            <ProviderIdentity identity={selected.provider_identity} compact={false} animate/>
+            <ProviderBanner identity={selected.provider_identity}/><ProviderIdentity identity={selected.provider_identity} compact={false} animate/>
             <Text style={styles.price}>{servicePriceLabel(selected)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
             {!!selected.attributes?.price_notes && <Text style={styles.meta}>{selected.attributes.price_notes}</Text>}
             <Text style={styles.meta}>{selected.provider_name} · {selected.city}, {selected.state}</Text>
@@ -706,6 +710,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     );
   }
 
+  if(showDrivers)return <NearbyDrivers token={token||''} onClose={()=>setShowDrivers(false)} onOpen={id=>{setShowDrivers(false);void (async()=>{try{const response=await fetchWithTimeout(API_URL+'/api/v1/marketplace/listings/'+id);if(!response.ok)throw Error('This driver service is no longer available.');await openListing(await response.json());}catch(error){Alert.alert('Driver unavailable',error instanceof Error?error.message:'Please refresh.');}})();}}/>;
   return (
     <View style={styles.fill}>
       <View style={styles.modeBar}>
@@ -715,6 +720,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       </View>
       {mode === "explore" ? (
         <>
+          <Pressable accessibilityLabel="Find available drivers nearby" onPress={()=>{if(!token){Alert.alert("Sign in","Sign in to find nearby drivers.");return;}setShowDrivers(true);}} style={{padding:12,backgroundColor:theme.dark?"#173E32":"#D9F2E8",borderRadius:16,marginHorizontal:12,marginTop:8}}><Text style={{fontWeight:"700"}}>🚗 Drivers nearby · Find a ride</Text></Pressable>
           <View style={styles.searchTools}>
             <View style={styles.search}><Ionicons name="search" size={18} color={theme.color("#777")} /><TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" /></View>
             <Pressable hitSlop={4} accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={theme.color(nearby ? "#FFFFFF" : "#FF4747")} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>Near me</Text></Pressable>
@@ -745,7 +751,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
                   <View style={styles.cardBody}>
                     <Text numberOfLines={2} style={styles.cardTitle}>{item.title}</Text>
                     <Text style={styles.cardPrice}>{servicePriceLabel(item)}</Text>
-                    <Text numberOfLines={1} style={styles.meta}>{item.city}</Text><ProviderIdentity identity={item.provider_identity}/>{item.provider_identity?.verified && item.provider_identity.paid_active && <Text style={styles.meta}>Promoted</Text>}
+                    <Text numberOfLines={1} style={styles.meta}>{item.city}</Text><ProviderBanner identity={item.provider_identity} compact/><ProviderIdentity identity={item.provider_identity}/>{item.provider_identity?.verified && item.provider_identity.paid_active && <Text style={styles.meta}>Promoted</Text>}
                     {typeof item.distance_km === "number" && <Text numberOfLines={1} style={styles.distance}>{item.distance_km.toFixed(1)} km away{item.is_available_now ? " · Available now" : ""}</Text>}
                     <View style={styles.ratingRow}><ReviewStars rating={item.average_rating || 0} size={10} /><Text style={styles.rating}>{item.review_count ? `${item.average_rating?.toFixed(1)} (${item.review_count})` : "New · no reviews"}</Text></View>
                   </View>
