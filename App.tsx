@@ -1,3 +1,4 @@
+import {acknowledgeNotificationDelivery} from './components/messageReceipts';
 import {ReadReceiptSetting} from './components/ReadReceiptSetting';
 import {createSessionStartup} from './components/sessionStartup';
 import {privateChatStore} from './components/privateChatStore';
@@ -570,7 +571,8 @@ function AcrossApp() {
     void pollBuyerActivity(token);
     const interval = setInterval(() => { if (AppState.currentState === "active") { void pollBuyerActivity(token); void registerPushNotifications(token); } }, 60000);
     const pushForeground = AppState.addEventListener("change", next => { if (next === "active") void registerPushNotifications(token, undefined, true); });
-    const received = Notifications.addNotificationReceivedListener(() => {
+    const received = Notifications.addNotificationReceivedListener(notification => {
+      void acknowledgeNotificationDelivery(token,notification.request.content.data || {});
       void Promise.all([loadNotifications(token), loadOrders(token)]);
     });
     const responded = Notifications.addNotificationResponseReceivedListener(response => {

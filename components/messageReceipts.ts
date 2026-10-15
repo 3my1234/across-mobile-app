@@ -4,6 +4,20 @@ import {communityRequest} from './communityApi';
 export type ReceiptContext={channel:'business'|'shared'|'support';conversationId:string};
 export type MessageReceipt={status:'sent'|'delivered'|'read';delivered_count:number;read_count:number};
 const uuid=/^[a-f0-9-]{36}$/i;
+const notificationFlights=new Map<string,Promise<void>>();
+export async function acknowledgeNotificationDelivery(token:string,payload:Record<string,unknown>){
+ if(!token||AppState.currentState!=='active')return;
+ const ticket=typeof payload.ticket_id==='string'&&uuid.test(payload.ticket_id)?payload.ticket_id:'';
+ const conversation=[payload.chat_room_id,payload.conversation_id].find(value=>typeof value==='string'&&uuid.test(value)) as string|undefined;
+ if(!ticket&&!conversation)return;
+ const path=ticket?`/support/tickets/${ticket}/messages?limit=40`:`/chat/conversations/${conversation}/messages?limit=40&mark_read=false`,key=token+':'+path;
+ if(notificationFlights.has(key))return notificationFlights.get(key);
+ if(notificationFlights.size>=4)return;
+ const flight=(async()=>{try{const {data}=await communityRequest(token,path);const messages=(data?.messages||data?.items||[]).filter((m:any)=>uuid.test(m.id||'')).slice(0,100);if(!messages.length)return;
+  await communityRequest(token,'/messaging/deliveries',{method:'POST',body:JSON.stringify({messages:messages.map((m:any)=>({channel:ticket?'support':data.kind?'shared':'business',conversation_id:ticket||conversation,message_id:m.id}))})});
+ }catch{/* A later inbox/thread synchronization can acknowledge delivery. */}})();notificationFlights.set(key,flight);
+ try{await flight;}finally{if(notificationFlights.get(key)===flight)notificationFlights.delete(key);}
+}
 export type ReceiptInboxItem={id:string;source:'legacy'|'shared';last_message_id?:string;last_message_is_mine?:boolean;last_message?:string};
 // A fetched inbox preview is delivery of that message, not proof it was read.
 export function useInboxDeliveryReceipts(token:string,items:ReceiptInboxItem[]){

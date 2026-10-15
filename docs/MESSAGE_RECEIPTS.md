@@ -22,6 +22,9 @@ late responses. Unchanged metadata preserves component state.
 Delivery is based on receiving-app synchronization, not an accepted push ticket.
 An older client or a closed app that has not synchronized can remain at one tick.
 This does not add background execution or require new native permissions.
+Foreground message notifications also acknowledge actual fetched message data
+while the person is on Home/another page, without marking it read. Duplicate
+notification fetches coalesce and at most four such jobs run concurrently.
 
 Deploy backend migration091 before releasing clients (pending090 also fixes
 provider message rollback). Deploy admin and standalone provider PWA separately;

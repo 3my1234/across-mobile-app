@@ -33,6 +33,11 @@ async function main(){
  const sent=ui.MessageReceipt({receipt:{status:'sent'}}),delivered=ui.MessageReceipt({receipt:{status:'delivered'}}),read=ui.MessageReceipt({receipt:{status:'read'}});
  assert.equal(sent.children[0].props.name,'checkmark');assert.equal(delivered.children[0].props.name,'checkmark-done');assert.equal(read.children[0].props.name,'checkmark-done');assert.notEqual(delivered.children[0].props.color,read.children[0].props.color);assert.equal(read.props.accessibilityLabel,'Read');
  assert.match(ui.MessageReceipt({receipt:{status:'read',read_count:3,delivered_count:4},group:true}).props.accessibilityLabel,/seen by 3/);
+ const homeCalls=[];let releaseHome;native.AppState.currentState='active';
+ const notificationModule=load('components/messageReceipts.ts',{'react':react,'react-native':native,'./communityApi':{communityRequest:async(_token,path,options={})=>{homeCalls.push({path,options});if(options.method)return {data:{}};return new Promise(resolve=>releaseHome=resolve);}}});
+ const home=notificationModule.acknowledgeNotificationDelivery('buyer',{conversation_id:room}),duplicate=notificationModule.acknowledgeNotificationDelivery('buyer',{conversation_id:room});assert.equal(homeCalls.length,1,'foreground notification burst shares one history fetch');assert.match(homeCalls[0].path,/mark_read=false/);
+ releaseHome({data:{items:[{id:incoming},{id:'invalid'}]}});await Promise.all([home,duplicate]);assert.equal(homeCalls.length,2);assert.equal(homeCalls[1].path,'/messaging/deliveries');const homeBody=JSON.parse(homeCalls[1].options.body);assert.equal(homeBody.messages.length,1);assert.equal(homeBody.read,undefined,'Home delivery never publishes a read');
+ native.AppState.currentState='background';await notificationModule.acknowledgeNotificationDelivery('buyer',{conversation_id:room});assert.equal(homeCalls.length,2,'closed/background app does not fake delivery');native.AppState.currentState='active';
  console.log('Message receipts passed: explicit device ack, viewport-only read, deduplication, ticks, group counts, opt-out race, account isolation and foreground-only polling.');
 }
 main().catch(error=>{console.error(error,calls);process.exitCode=1;});
