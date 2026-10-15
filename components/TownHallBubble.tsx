@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, AppState, PanResponder, Pressable, StyleSheet, useWindowDimensions, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { TownHallIcon } from "./TownHallIcon";
 import { ThemedText as Text } from "./ThemeProvider";
 import { communityRequest } from "./communityApi";
 export function TownHallBubble({ token, bottomInset, onOpen }: {
@@ -22,6 +22,6 @@ export function TownHallBubble({ token, bottomInset, onOpen }: {
     }
     catch { } }; void load(); const timer = setInterval(() => void load(), 60000); return () => { active = false; clearInterval(timer); }; }, [token]);
     return <Animated.View {...responder.panHandlers} style={[styles.floating, { transform: position.getTranslateTransform() }]}><Pressable accessibilityLabel={count ? `Town Hall, ${count} new activities` : "Open Town Hall"} onPress={() => { if (!dragged.current)
-        onOpen(); }} style={styles.button}><Ionicons name="people" size={22} color="#FFF"/><Text style={styles.label}>Hall</Text></Pressable>{count > 0 && <View style={styles.badge}><Text style={styles.count}>{count > 99 ? "99+" : count}</Text></View>}</Animated.View>;
+        onOpen(); }} style={styles.button}><TownHallIcon size={34}/><Text style={styles.label}>Hall</Text></Pressable>{count > 0 && <View style={styles.badge}><Text style={styles.count}>{count > 99 ? "99+" : count}</Text></View>}</Animated.View>;
 }
 const styles = StyleSheet.create({ floating: { position: "absolute", left: 0, top: 0, zIndex: 20 }, button: { width: 48, height: 48, borderRadius: 24, backgroundColor: "#12805F", justifyContent: "center", alignItems: "center", elevation: 5, shadowColor: "#000", shadowOpacity: .15, shadowRadius: 4 }, label: { fontSize: 9, color: "#FFF", fontWeight: "700" }, badge: { position: "absolute", right: -4, top: -4, borderRadius: 10, backgroundColor: "#FF4747", minWidth: 20, padding: 3 }, count: { fontSize: 10, color: "#FFF", textAlign: "center" } });

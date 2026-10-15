@@ -1,102 +1,84 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { ThemedText as Text, ThemedTextInput as TextInput, useThemedStyles } from "./ThemeProvider";
-import { KeyboardFrame } from "./KeyboardFrame";
-import { communityRequest } from "./communityApi";
+import React,{useEffect,useRef,useState} from "react";
+import {AccessibilityInfo,ActivityIndicator,Alert,Animated,AppState,FlatList,Image,Pressable,ScrollView,StyleSheet,View} from "react-native";
+import {Ionicons} from "@expo/vector-icons";
+import {ThemedText as Text,ThemedTextInput as TextInput,useTheme,useThemedStyles} from "./ThemeProvider";
+import {KeyboardFrame} from "./KeyboardFrame";
+import {communityRequest} from "./communityApi";
+import {TownHallIcon} from "./TownHallIcon";
+import {ProviderBadge,ProviderIdentityData} from "./ProviderIdentity";
 import * as Crypto from "expo-crypto";
 import * as Notifications from "expo-notifications";
-type Hall = {
-    id: string;
-    message_only?: boolean;
-    buyer_name?: string;
-    created_at: string;
-    title: string;
-    description: string;
-    location: string;
-    quantity: number;
-    unit: string;
-    target_unit_price: number;
-    state: string;
-    is_owner: boolean;
-    admitted: boolean;
-    seats: number;
-    application_state: string;
-    offers: any[];
-    applications?: any[];
-};
-export function CommunityTownHall({ token, bottomInset, initialRoomId = "", openChat }: {
-    token: string;
-    bottomInset: number;
-    initialRoomId?: string;
-    openChat: (id: string) => Promise<void>;
-}) {
-    const s = useThemedStyles(styles), [items, setItems] = useState<Hall[]>([]), [room, setRoom] = useState<Hall | null>(null), [mine, setMine] = useState(false), [cursor, setCursor] = useState(""), [error, setError] = useState(""), [busy, setBusy] = useState(false), [creating, setCreating] = useState(false);
-    const [form, setForm] = useState({ message: "" }), [price, setPrice] = useState(""), [terms, setTerms] = useState("");
-    const alive = useRef(true), flight = useRef(false), generation = useRef(0);
-    const createReference = useRef({ fingerprint: "", id: "" });
-    const offerReference=useRef({fingerprint:"",id:""});
-    const call = (path: string, options: RequestInit = {}) => { if (path === "/chat/town-hall" && options.method === "POST") {
-        const payload = JSON.parse(String(options.body)), fingerprint = JSON.stringify(payload);
-        if (createReference.current.fingerprint !== fingerprint)
-            createReference.current = { fingerprint, id: Crypto.randomUUID() };
-        options = { ...options, body: JSON.stringify({ ...payload, client_request_id: createReference.current.id }) };
-    }if(path.endsWith('/offers')&&options.method==='POST'){const payload=JSON.parse(String(options.body)),fingerprint=JSON.stringify(payload);if(offerReference.current.fingerprint!==fingerprint)offerReference.current={fingerprint,id:Crypto.randomUUID()};options={...options,body:JSON.stringify({...payload,client_message_id:offerReference.current.id})}} return communityRequest(token, path, options); };
-    useEffect(() => { alive.current = true; return () => { alive.current = false; generation.current++; }; }, [token]);
-    useEffect(() => { void refresh(); }, [mine]);
-    useEffect(() => { if (initialRoomId)
-        void detail(initialRoomId); }, [initialRoomId]);
-    useEffect(()=>{if(!room)return;const subscription=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(data.chat_room_id===room.id||data.town_hall_room_id===room.id)void detail(room.id)});return()=>subscription.remove();},[room?.id]);
-    async function refresh(older = "") { const seq = ++generation.current; try {
-        const { data } = await call(`/chat/town-hall?limit=25&mine=${mine}${older ? `&cursor=${encodeURIComponent(older)}` : ""}`);
-        if (!alive.current || seq !== generation.current)
-            return;
-        setItems(previous => older ? [...previous, ...data.items.filter((item: Hall) => !previous.some(old => old.id === item.id))] : data.items);
-        setCursor(data.next_cursor || "");
-        setError("");
-    }
-    catch (e) {
-        if (alive.current)
-            setError(e instanceof Error ? e.message : "Please retry");
-    } }
-    async function detail(id: string) { const seq = ++generation.current; try {
-        const { data } = await call(`/chat/town-hall/${id}`);
-        if (alive.current && seq === generation.current) {
-            setRoom(data);
-            setError("");
-        }
-    }
-    catch (e) {
-        if (alive.current)
-            setError(e instanceof Error ? e.message : "Please retry");
-    } }
-    async function act(action: () => Promise<void>) { if (flight.current)
-        return; flight.current = true; setBusy(true); setError(""); try {
-        await action();
-    }
-    catch (e) {
-        if (alive.current)
-            setError(e instanceof Error ? e.message : "Please retry");
-    }
-    finally {
-        flight.current = false;
-        if (alive.current)
-            setBusy(false);
-    } }
-    const button = (label: string, onPress: () => void) => <Pressable style={s.button} disabled={busy} onPress={onPress}><Text style={s.buttonText}>{label}</Text></Pressable>;
-    async function membership(provider: string, action: string) { if (!room)
-        return; await call(`/chat/town-hall/${room.id}/providers/${provider}`, { method: "POST", body: JSON.stringify({ action }) }); await detail(room.id); }
-    return <KeyboardFrame style={s.fill} behavior="height"><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + 20 }}>
- {!!error && <Text style={s.error}>{error}</Text>}
- {room ? <><View style={s.row}>{button("Back to requests", () => { generation.current++; setRoom(null); void refresh(); })}{button("Refresh", () => void detail(room.id))}</View><View style={s.card}>{!room.message_only&&room.title!==room.description&&<Text style={s.title}>{room.title}</Text>}<Text style={s.requestMessage}>{room.description}</Text>{!room.message_only && <Text style={s.note}>{room.location} · {room.quantity} {room.unit} · Target ₦{room.target_unit_price} per {room.unit}</Text>}<Text style={s.note}>{room.state === "closed" ? "Closed request" : `${room.seats}/10 provider places occupied`}</Text>
- {room.state === "open" && (room.is_owner || room.admitted) && button("Open bargaining chat", () => void act(() => openChat(room.id)))}
- {room.state === "closed" && room.is_owner && button("View chat record", () => void act(() => openChat(room.id)))}
- {room.state === "open" && !room.is_owner && !room.admitted && (room.seats >= 10 ? <Text style={s.note}>Full · A place opens when the buyer removes a provider.</Text> : room.application_state === "pending" ? <Text style={s.note}>Waiting for buyer approval.</Text> : button("Request to join", () => void act(async () => { await call(`/chat/town-hall/${room.id}/apply`, { method: "POST" }); await detail(room.id); })))}</View>
- {room.is_owner && room.state === "open" && <View style={s.card}><Text style={s.title}>Provider requests</Text>{room.applications?.map(app => <View key={app.provider_id} style={s.card}><Text>{app.name} · {app.state}</Text><View style={s.row}>{app.state === "pending" ? <>{button("Approve", () => void act(() => membership(app.provider_id, "approve")))}{button("Decline", () => void act(() => membership(app.provider_id, "decline")))}</> : app.state === "admitted" ? button("Remove", () => void act(() => membership(app.provider_id, "remove"))) : null}</View></View>)}{button("End this request", () => Alert.alert("End this request?", "It will disappear publicly. You retain the record and your private chats stay open.", [{ text: "Cancel", style: "cancel" }, { text: "End request", style: "destructive", onPress: () => void act(async () => { await call(`/chat/town-hall/${room.id}/close`, { method: "POST" }); await detail(room.id); }) }]))}</View>}
- <View style={s.card}><Text style={s.title}>Offer previews</Text><Text style={s.note}>These offers are visible to other people. Bargaining messages remain inside the admitted chat.</Text>{room.offers.map(offer => <View key={offer.id} style={s.card}><Text style={s.title}>{offer.provider_name}</Text><Text style={s.offerPrice}>₦{offer.unit_price}{!room.message_only ? ` per ${room.unit} · Total ₦${(Number(offer.unit_price) * Number(room.quantity)).toLocaleString()}` : ""}</Text><Text>{offer.terms}</Text>{room.is_owner && room.state === "open" && button("Continue privately", () => Alert.alert("Choose this offer?", "Open a private chat and close this Town Hall request?", [{ text: "Cancel", style: "cancel" }, { text: "Choose and close", onPress: () => void act(async () => { const { data } = await call(`/chat/town-hall/${room.id}/choose`, { method: "POST", body: JSON.stringify({ offer_id: offer.id, close_room: true }) }); await openChat(data.id); }) }]))}</View>)}</View>
- {room.admitted && !room.is_owner && room.state === "open" && <View style={s.card}><Text style={s.title}>Make or update an offer</Text><TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" accessibilityLabel="Offer unit price" placeholder={room.message_only?"Offer amount, NGN":"Price per unit, NGN"} style={s.input}/><TextInput value={terms} onChangeText={setTerms} maxLength={1000} multiline accessibilityLabel="Public offer terms" placeholder="Public offer terms" style={s.input}/>{button("Publish offer", () => void act(async () => { await call(`/chat/town-hall/${room.id}/offers`, { method: "POST", body: JSON.stringify({ unit_price: Number(price), terms }) }); await detail(room.id); }))}<Text style={s.note}>An active paid plan is required to send offers and messages.</Text></View>}</> :
-            <><View style={s.hero}><Text style={s.heroLabel}>● TOWN HALL</Text><Text style={s.heroTitle}>Ask. Meet. Make a deal.</Text><Text style={s.heroNote}>Post what you need, hear from providers and take your favourite offer into a private chat.</Text><Text style={s.heroLabel}>UP TO 10 PROVIDERS PER CONVERSATION</Text></View><View style={s.row}>{button(mine ? "Browse open requests" : "My requests", () => setMine(!mine))}{button(creating ? "Cancel" : "Create a request", () => setCreating(!creating))}{button("Refresh", () => void refresh())}</View>
- {creating && <View style={s.card}><Text style={s.title}>What are you looking for?</Text><TextInput value={form.message} onChangeText={message=>setForm({message})} maxLength={2000} multiline accessibilityLabel="Your Town Hall request" placeholder="I need 50 bags of rice in Abuja. My budget is ₦48,500 per bag. Who can help?" style={[s.input,{minHeight:120,textAlignVertical:'top'}]}/><Text style={s.note}>Write it in your own words.</Text>{button("Start a conversation ↗", () => void act(async () => { const { data } = await call("/chat/town-hall", { method: "POST", body: JSON.stringify({message:form.message.trim()}) }); setCreating(false);setForm({message:''}); await detail(data.id); }))}</View>}
- <Text style={s.note}>Verified providers with an active paid plan may request entry. The buyer approves up to ten providers.</Text>{items.map(item => <Pressable key={item.id} onPress={() => void detail(item.id)} style={s.card}><View style={s.requestTop}><View style={s.avatar}><Text style={s.avatarText}>{(item.buyer_name||item.title).slice(0,1).toUpperCase()}</Text></View><View style={{flex:1}}><Text style={s.title}>{item.buyer_name||'Looking for providers'}</Text><Text style={s.note}>{new Date(item.created_at).toLocaleString()}</Text></View><Text style={s.seats}>{item.seats}/10</Text></View><Text style={s.requestMessage}>{item.description}</Text>{!item.message_only&&<Text style={s.note}>{item.location} · {item.quantity} {item.unit} · ₦{item.target_unit_price} per {item.unit}</Text>}<View style={s.requestTop}><Text style={[s.note,{flex:1}]}>{item.offers.length} offers · {item.seats>=10?'Room full':'Places available'}</Text><Text style={s.enter}>Enter →</Text></View></Pressable>)}{!items.length && <Text style={s.note}>No requests to show yet.</Text>}{!!cursor && button("Load more", () => void refresh(cursor))}</>}
- </ScrollView></KeyboardFrame>;
+
+type Offer={id:string;provider_id:string;provider_name:string;provider_identity?:ProviderIdentityData;unit_price:number;terms:string};
+type Hall={id:string;message_only?:boolean;buyer_name?:string;buyer_avatar_url?:string;created_at:string;title:string;description:string;location:string;quantity:number;unit:string;target_unit_price:number;state:string;is_owner:boolean;admitted:boolean;seats:number;application_state:string;offers:Offer[];applications?:{provider_id:string;name:string;state:string}[];expired?:boolean;provider_engaged?:boolean;expires_at?:string};
+const money=(value:number)=>'₦'+Number(value).toLocaleString('en-NG',{maximumFractionDigits:2});
+function Avatar({name,uri}:{name:string;uri?:string}){const [failed,setFailed]=useState(false);useEffect(()=>setFailed(false),[uri]);return <View style={styles.avatar}>{uri&&!failed?<Image source={{uri}} onError={()=>setFailed(true)} style={styles.avatarPhoto}/>:<Text style={styles.avatarText}>{name.slice(0,1).toUpperCase()}</Text>}</View>}
+function Arrival({children,animate,reduced}:{children:React.ReactNode;animate:boolean;reduced:boolean}){const progress=useRef(new Animated.Value(animate&&!reduced?0:1)).current;useEffect(()=>{if(!animate||reduced){progress.setValue(1);return;}const run=Animated.timing(progress,{toValue:1,duration:220,useNativeDriver:true});run.start();return()=>run.stop();},[animate,reduced]);return <Animated.View style={{opacity:progress,transform:[{translateY:progress.interpolate({inputRange:[0,1],outputRange:[10,0]})}]}}>{children}</Animated.View>}
+
+export function CommunityTownHall({token,bottomInset,initialRoomId='',openChat}:{token:string;bottomInset:number;initialRoomId?:string;openChat:(id:string)=>Promise<void>}){
+ const s=useThemedStyles(styles),theme=useTheme();
+ const [loading,setLoading]=useState(true),[items,setItems]=useState<Hall[]>([]),[room,setRoom]=useState<Hall|null>(null),[mine,setMine]=useState(false),[cursor,setCursor]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[creating,setCreating]=useState(false),[message,setMessage]=useState(''),[price,setPrice]=useState(''),[terms,setTerms]=useState(''),[pending,setPending]=useState<{items:Hall[];next_cursor:string}|null>(null),[arrivalIDs,setArrivalIDs]=useState<string[]>([]),[reduced,setReduced]=useState(true);
+ const alive=useRef(true),flight=useRef(false),generation=useRef(0),listFlight=useRef<{sequence:number;key:symbol}|null>(null),headETag=useRef(''),known=useRef(new Set<string>()),atTop=useRef(true),list=useRef<FlatList<Hall>>(null),roomRef=useRef<Hall|null>(null),creatingRef=useRef(false),itemsRef=useRef<Hall[]>([]);
+ roomRef.current=room;creatingRef.current=creating;itemsRef.current=items;
+ const createReference=useRef({fingerprint:'',id:''}),offerReference=useRef({fingerprint:'',id:''});
+ const call=(path:string,options:RequestInit={})=>{
+  if((path==='/chat/town-hall'||path.endsWith('/offers'))&&options.method==='POST'){
+   const payload=JSON.parse(String(options.body)),ref=path.endsWith('/offers')?offerReference:createReference,fingerprint=JSON.stringify(payload);
+   if(ref.current.fingerprint!==fingerprint)ref.current={fingerprint,id:Crypto.randomUUID()};
+   options={...options,body:JSON.stringify({...payload,[path.endsWith('/offers')?'client_message_id':'client_request_id']:ref.current.id})};
+  }return communityRequest(token,path,options);
+ };
+ useEffect(()=>{alive.current=true;return()=>{alive.current=false;generation.current++;};},[token]);
+ useEffect(()=>{let active=true;AccessibilityInfo.isReduceMotionEnabled().then(value=>{if(active)setReduced(value)}).catch(()=>{});const sub=AccessibilityInfo.addEventListener('reduceMotionChanged',setReduced);return()=>{active=false;sub.remove();};},[]);
+ useEffect(()=>{headETag.current='';setPending(null);known.current.clear();void refresh();},[mine]);
+ useEffect(()=>{if(initialRoomId)void detail(initialRoomId);},[initialRoomId]);
+ useEffect(()=>{const timer=setInterval(()=>{if(AppState.currentState==='active'&&!roomRef.current&&!creatingRef.current&&!flight.current)void refresh('',true);},30000);return()=>clearInterval(timer);},[token,mine]);
+ useEffect(()=>{const subscription=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(roomRef.current&&(data.chat_room_id===roomRef.current.id||data.town_hall_room_id===roomRef.current.id))void detail(roomRef.current.id);else if(!roomRef.current&&!creatingRef.current)void refresh('',true);});return()=>subscription.remove();},[token,mine]);
+ function acceptHead(data:{items:Hall[];next_cursor?:string},animate:boolean){
+  const fresh=known.current.size?data.items.filter(item=>!known.current.has(item.id)).map(item=>item.id):[];
+  setArrivalIDs(animate?fresh:[]);data.items.forEach(item=>known.current.add(item.id));if(known.current.size>500)known.current=new Set(data.items.map(item=>item.id));setItems(data.items);setCursor(data.next_cursor||'');setPending(null);
+ }
+ async function refresh(older='',background=false){
+  const seq=generation.current,currentMine=mine;if(listFlight.current?.sequence===seq)return;const key=Symbol();listFlight.current={sequence:seq,key};
+  try{const response=await call(`/chat/town-hall?limit=25&mine=${currentMine}${older?'&cursor='+encodeURIComponent(older):''}`,background&&headETag.current?{headers:{'If-None-Match':headETag.current}}:{});
+   if(!alive.current||seq!==generation.current||roomRef.current||response.unchanged)return;
+   const data=response.data;if(!older)headETag.current=response.etag;
+   if(older){data.items.forEach((item:Hall)=>known.current.add(item.id));setItems(previous=>[...previous,...data.items.filter((item:Hall)=>!previous.some(old=>old.id===item.id))]);setCursor(data.next_cursor||'');}
+   else if(background&&(!atTop.current||creatingRef.current)){const next=new Map<string,Hall>(data.items.map((item:Hall)=>[item.id,item]));setItems(previous=>previous.map(item=>next.get(item.id)||item));setPending({items:data.items,next_cursor:data.next_cursor||''});}
+   else acceptHead(data,background);
+   setError('');
+  }catch(e){if(alive.current&&seq===generation.current)setError(e instanceof Error?e.message:'Please retry');}finally{if(listFlight.current?.key===key)listFlight.current=null;if(alive.current&&seq===generation.current)setLoading(false);}
+ }
+ async function detail(id:string){const seq=++generation.current;try{const {data}=await call(`/chat/town-hall/${id}`);if(alive.current&&seq===generation.current){setRoom(data);setPrice('');setTerms('');setError('');setPending(null);}}catch(e){if(alive.current&&seq===generation.current)setError(e instanceof Error?e.message:'Please retry');}}
+ async function act(fn:()=>Promise<void>){if(flight.current)return;flight.current=true;setBusy(true);setError('');try{await fn();}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Please retry');}finally{flight.current=false;if(alive.current)setBusy(false);}}
+ const action=(label:string,fn:()=>void,icon:keyof typeof Ionicons.glyphMap='arrow-forward-outline',soft=false)=><Pressable accessibilityRole="button" disabled={busy} onPress={fn} style={[s.button,soft&&s.softButton,soft&&theme.dark&&{backgroundColor:"#254239"}]}><Ionicons name={icon} size={17} color={soft?(theme.dark?'#B8E7D4':'#175B49'):'#FFF'}/><Text style={[s.buttonText,soft&&s.softButtonText,soft&&theme.dark&&{color:"#B8E7D4"}]}>{label}</Text></Pressable>;
+ function metadata(item:Hall){return <View style={s.chips}>{!item.message_only&&item.target_unit_price>0&&<Text style={s.chip}>◉ {money(item.target_unit_price)} budget</Text>}{!!item.location&&<Text style={[s.chip,s.locationChip]}>⌖ {item.location}</Text>}{item.expired?<Text style={s.statusChip}>Expired · no provider response</Text>:item.state==='closed'?<Text style={s.statusChip}>Closed request</Text>:item.provider_engaged?<Text style={s.chip}>Provider engaged</Text>:<Text style={s.statusChip}>5-minute response window</Text>}</View>}
+ function buyer(item:Hall){const name=item.buyer_name||'ATL member';return <View style={s.identity}><Avatar name={name} uri={item.buyer_avatar_url}/><View style={{flex:1}}><Text style={s.name}>{name}</Text><Text style={s.note}>{new Date(item.created_at).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</Text></View></View>}
+ async function membership(provider:string,value:string){if(!room)return;await call(`/chat/town-hall/${room.id}/providers/${provider}`,{method:'POST',body:JSON.stringify({action:value})});await detail(room.id);}
+ function repost(){if(!room)return;setMessage(room.description);setMine(false);setCreating(true);setRoom(null);createReference.current={fingerprint:'',id:''};headETag.current='';setPending(null);generation.current++;}
+ const hero=<View style={[s.hero,theme.dark&&{backgroundColor:"#153F33"}]}><View style={{flex:1}}><Text style={[s.heroTitle,theme.dark&&{color:"#D9F4E9"}]}>Ask. Meet. Make a deal.</Text><Text style={[s.heroNote,theme.dark&&{color:"#C3DED2"}]}>Post what you need. Connect with providers.</Text></View><TownHallIcon size={70}/></View>;
+ const composer=creating&&<View style={s.card}><Text style={s.sectionTitle}>What are you looking for?</Text><TextInput value={message} onChangeText={setMessage} multiline maxLength={2000} accessibilityLabel="Your Town Hall request" placeholder="I need a ride from Bwari to Central Area. My budget is ₦10,000." style={s.input}/><Text style={s.note}>Unanswered requests leave the feed after 5 minutes. You keep the record and can repost.</Text>{action('Post request',()=>void act(async()=>{const {data}=await call('/chat/town-hall',{method:'POST',body:JSON.stringify({message:message.trim()})});createReference.current={fingerprint:'',id:''};setMessage('');setCreating(false);headETag.current='';await detail(data.id);}), 'paper-plane-outline')}</View>;
+ const header=<>{hero}<View style={s.actions}>{action(mine?'Browse open requests':'My requests',()=>{generation.current++;setMine(!mine);},'albums-outline',true)}{action(creating?'Cancel':'Create a request',()=>setCreating(!creating),creating?'close-outline':'add-circle-outline')}</View><View style={s.actions}>{action('Refresh',()=>{headETag.current='';void refresh();},'refresh-outline',true)}</View>{composer}<View style={s.notice}><Ionicons name="shield-checkmark" size={21} color="#12805F"/><Text style={[s.note,{flex:1}]}>Verified providers with an active paid plan can request entry. You approve up to 10.</Text></View>{pending&&<View style={s.queue}>{action(`${pending.items.filter(item=>!itemsRef.current.some(old=>old.id===item.id)).length||'Feed'} updates · Show latest`,()=>{acceptHead(pending,true);atTop.current=true;list.current?.scrollToOffset({offset:0,animated:!reduced});},'arrow-up-outline',true)}</View>}</>;
+ return <KeyboardFrame style={s.fill} behavior="height">
+ {!!error&&<Text accessibilityRole="alert" style={s.error}>{error}</Text>}
+ {room?<ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:12,paddingBottom:bottomInset+20}}>
+  <View style={s.actions}>{action('Back to requests',()=>{generation.current++;roomRef.current=null;setRoom(null);setError('');headETag.current='';void refresh();},'arrow-back-outline',true)}{action('Refresh',()=>void detail(room.id),'refresh-outline',true)}</View>
+  <View style={s.card}>{buyer(room)}<Text style={s.requestMessage}>{room.description}</Text>{metadata(room)}<Text style={s.note}>{room.seats}/10 provider places occupied</Text>
+   {room.state==='open'&&(room.is_owner||room.admitted)&&action('Open bargaining chat',()=>void act(()=>openChat(room.id)),'chatbubbles-outline')}
+   {room.state==='closed'&&room.is_owner&&action('View chat record',()=>void act(()=>openChat(room.id)),'document-text-outline')}
+   {room.expired&&room.is_owner&&action('Repost request',repost,'repeat-outline',true)}
+   {room.state==='open'&&!room.is_owner&&!room.admitted&&(room.seats>=10?<Text style={s.note}>Full · A place opens when the buyer removes a provider.</Text>:room.application_state==='pending'?<Text style={s.note}>Waiting for buyer approval.</Text>:action('Ask to join',()=>void act(async()=>{await call(`/chat/town-hall/${room.id}/apply`,{method:'POST'});await detail(room.id);}), 'enter-outline'))}
+  </View>
+  {room.is_owner&&room.state==='open'&&<View style={s.card}><Text style={s.sectionTitle}>Provider requests</Text>{!room.applications?.length&&<Text style={s.note}>Provider requests to join appear here.</Text>}{room.applications?.map(app=><View key={app.provider_id} style={s.application}><Text style={s.name}>{app.name}</Text><Text style={s.note}>{app.state}</Text><View style={s.actions}>{app.state==='pending'?<>{action('Approve',()=>void act(()=>membership(app.provider_id,'approve')),'checkmark-outline')}{action('Decline',()=>void act(()=>membership(app.provider_id,'decline')),'close-outline',true)}</>:app.state==='admitted'&&action('Remove',()=>void act(()=>membership(app.provider_id,'remove')),'remove-circle-outline',true)}</View></View>)}{action('End this request',()=>Alert.alert('End this request?','It disappears publicly. You retain the record and private chats stay open.',[{text:'Cancel',style:'cancel'},{text:'End request',style:'destructive',onPress:()=>void act(async()=>{await call(`/chat/town-hall/${room.id}/close`,{method:'POST'});await detail(room.id);})}]),'lock-closed-outline',true)}</View>}
+  <Text style={s.sectionTitle}>Offer previews</Text><Text style={s.note}>Offers are public. Bargaining stays inside the admitted chat.</Text>
+  {!room.offers.length&&<View style={s.empty}><Ionicons name="chatbubbles-outline" size={26} color="#12805F"/><Text style={s.note}>Offers appear here when providers join and respond.</Text></View>}
+  {room.offers.map(offer=><View key={offer.id} style={s.card}><View style={s.identity}><Avatar name={offer.provider_name} uri={offer.provider_identity?.avatar_url}/><View style={{flex:1}}><View style={s.nameRow}><Text style={s.name}>{offer.provider_name}</Text>{offer.provider_identity&&<ProviderBadge identity={offer.provider_identity}/>}</View><Text style={s.note}>Provider offer</Text></View></View><Text style={[s.offerPrice,theme.dark&&{color:"#B8E7D4"}]}>{money(offer.unit_price)}{!room.message_only?' per '+room.unit:''}</Text>{!!offer.terms&&<Text style={s.offerTerms}>{offer.terms}</Text>}{room.is_owner&&room.state==='open'&&action('Continue privately',()=>Alert.alert('Choose this offer?','Open a private chat and close this Town Hall request?',[{text:'Cancel',style:'cancel'},{text:'Choose and close',onPress:()=>void act(async()=>{const {data}=await call(`/chat/town-hall/${room.id}/choose`,{method:'POST',body:JSON.stringify({offer_id:offer.id,close_room:true})});await openChat(data.id);})}]),'chatbubble-ellipses-outline')}</View>)}
+  {room.admitted&&!room.is_owner&&room.state==='open'&&<View style={s.card}><Text style={s.sectionTitle}>Make an offer</Text><TextInput value={price} onChangeText={setPrice} keyboardType="decimal-pad" accessibilityLabel="Offer unit price" placeholder={room.message_only?'Offer amount, NGN':'Price per unit, NGN'} style={s.smallInput}/><TextInput value={terms} onChangeText={setTerms} maxLength={1000} multiline accessibilityLabel="Public offer terms" placeholder="Tell the buyer what you can offer" style={s.input}/>{action('Publish offer',()=>void act(async()=>{await call(`/chat/town-hall/${room.id}/offers`,{method:'POST',body:JSON.stringify({unit_price:Number(price),terms})});await detail(room.id);}), 'paper-plane-outline')}<Text style={s.note}>An active paid plan is required to send offers and messages.</Text></View>}
+ </ScrollView>:<FlatList ref={list} data={items} keyExtractor={item=>item.id} keyboardShouldPersistTaps="handled" contentContainerStyle={{padding:12,paddingBottom:bottomInset+20}} ListHeaderComponent={header} onScroll={event=>{atTop.current=event.nativeEvent.contentOffset.y<40}} scrollEventThrottle={150} maintainVisibleContentPosition={{minIndexForVisible:0}} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={7}
+  renderItem={({item})=><Arrival animate={arrivalIDs.includes(item.id)} reduced={reduced}><View style={s.card}>{buyer(item)}<Text numberOfLines={4} style={s.requestMessage}>{item.description}</Text>{metadata(item)}<View style={s.footer}><Text style={[s.note,{flex:1}]}>{item.offers.length} offers · {item.seats>=10?'Full':'Places available'} · {item.seats}/10</Text>{action('Enter',()=>void detail(item.id),'arrow-forward-outline')}</View></View></Arrival>}
+  ListEmptyComponent={loading?<ActivityIndicator color="#12805F" style={{padding:30}}/>:<View style={s.empty}><TownHallIcon size={50}/><Text style={s.sectionTitle}>{mine?'Your requests will appear here':'Start a conversation'}</Text><Text style={s.note}>Post what you need and let providers come to you.</Text></View>}
+  ListFooterComponent={cursor?action('More requests',()=>void refresh(cursor),'chevron-down-outline',true):null}/>}
+ </KeyboardFrame>;
 }
-const styles = StyleSheet.create({ fill: { flex: 1, backgroundColor: "#F3F4F4" }, card: { padding: 18, marginVertical: 8, borderRadius: 20, backgroundColor: "#FFF", borderWidth:1,borderColor:"#DDE7E1" }, hero:{padding:22,borderRadius:22,backgroundColor:"#126958",marginBottom:14},heroLabel:{fontSize:10,fontWeight:"800",letterSpacing:1.2,color:"#CBEEDF"},heroTitle:{fontSize:27,lineHeight:33,fontWeight:"800",color:"#FFF",marginVertical:12},heroNote:{fontSize:13,lineHeight:21,color:"#E1F3EB",marginBottom:18},requestTop:{flexDirection:"row",alignItems:"center",gap:10},avatar:{width:38,height:38,borderRadius:14,backgroundColor:"#E4F2EA",alignItems:"center",justifyContent:"center"},avatarText:{fontSize:17,fontWeight:"800",color:"#126958"},seats:{fontSize:11,fontWeight:"700",color:"#126958"},requestMessage:{fontSize:15,lineHeight:24,marginVertical:18},enter:{fontSize:12,fontWeight:"700",color:"#12805F"},offerPrice:{fontSize:18,fontWeight:"700"},title: { fontSize: 14, fontWeight: "700", marginBottom: 6 }, note: { fontSize: 12, lineHeight: 18, color: "#66736F" }, row: { flexDirection: "row", gap: 8, flexWrap: "wrap", marginVertical: 6 }, button: { minHeight: 44, padding: 12, borderRadius: 8, backgroundColor: "#12805F", justifyContent: "center" }, buttonText: { fontSize: 12, fontWeight: "700", color: "#FFF" }, input: { padding: 12, minHeight: 44, maxHeight: 180, marginVertical: 8, borderRadius: 10, backgroundColor: "#F3F4F4" }, error: { fontSize: 12, color: "#B42318", paddingVertical: 8 } });
+
+const styles=StyleSheet.create({fill:{flex:1,backgroundColor:'#F5F7F6'},hero:{padding:18,borderRadius:20,backgroundColor:'#D9F4E9',flexDirection:'row',alignItems:'center',gap:8,marginBottom:12},heroTitle:{fontSize:23,lineHeight:29,fontWeight:'800',color:'#113E32'},heroNote:{fontSize:12,lineHeight:19,color:'#295D4B',marginTop:7},actions:{flexDirection:'row',alignItems:'center',flexWrap:'wrap',gap:8,marginBottom:10},button:{minHeight:42,paddingHorizontal:14,paddingVertical:10,borderRadius:14,backgroundColor:'#087A61',flexDirection:'row',alignItems:'center',justifyContent:'center',gap:7,marginTop:6},buttonText:{fontSize:12,fontWeight:'700',color:'#FFF'},softButton:{backgroundColor:'#E4F3EC'},softButtonText:{color:'#175B49'},card:{padding:16,borderRadius:20,backgroundColor:'#FFF',borderWidth:1,borderColor:'#DDE7E1',marginBottom:12},identity:{flexDirection:'row',alignItems:'center',gap:10},avatar:{width:42,height:42,borderRadius:21,backgroundColor:'#DCEFE6',alignItems:'center',justifyContent:'center',overflow:'hidden'},avatarPhoto:{width:42,height:42},avatarText:{fontSize:18,fontWeight:'700',color:'#135D48'},name:{fontSize:14,fontWeight:'800'},nameRow:{flexDirection:'row',alignItems:'center',gap:6},note:{fontSize:11,lineHeight:17,color:'#66736F',marginTop:3},requestMessage:{fontSize:15,lineHeight:23,marginVertical:14},chips:{flexDirection:'row',flexWrap:'wrap',gap:6,marginBottom:12},chip:{fontSize:10,fontWeight:'700',backgroundColor:'#DDF5E9',color:'#175B49',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},locationChip:{backgroundColor:'#EDF0F2',color:'#41535D'},statusChip:{fontSize:10,backgroundColor:'#EDF0F2',color:'#55615D',paddingHorizontal:10,paddingVertical:6,borderRadius:15,overflow:'hidden'},footer:{flexDirection:'row',alignItems:'center',gap:8,borderTopWidth:1,borderColor:'#E2E7E4',paddingTop:8},notice:{flexDirection:'row',gap:10,alignItems:'center',backgroundColor:'#EAF1ED',padding:12,borderRadius:16,marginVertical:10},queue:{marginBottom:10},sectionTitle:{fontSize:17,fontWeight:'800',marginVertical:8},offerPrice:{fontSize:25,fontWeight:'800',color:'#103D30',marginVertical:12},offerTerms:{color:"#175B49",fontSize:13,lineHeight:21,backgroundColor:'#E4F3EC',padding:12,borderRadius:12},application:{borderTopWidth:1,borderColor:'#E2E7E4',paddingTop:12,marginTop:12},input:{minHeight:100,maxHeight:180,textAlignVertical:'top',borderWidth:1,borderColor:'#D9E0DD',padding:12,borderRadius:14,backgroundColor:'#F5F7F6',marginVertical:8},smallInput:{minHeight:44,borderWidth:1,borderColor:'#D9E0DD',padding:12,borderRadius:14,marginVertical:8},empty:{padding:24,alignItems:'center',gap:10},error:{padding:12,color:'#B42318'}});
