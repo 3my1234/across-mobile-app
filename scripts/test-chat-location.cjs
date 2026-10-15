@@ -1,7 +1,17 @@
 const assert=require('node:assert/strict'),fs=require('fs'),ts=require('typescript'),vm=require('vm');
 const context={exports:{},Number};vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/chatLocation.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,context);
-const {validLocation,locationMapURL}=context.exports;
+const {validLocation,locationMapURL,locationDirectionsURL}=context.exports;
 for(const pin of [{latitude:91,longitude:0},{latitude:9,longitude:Infinity},{latitude:'9',longitude:7},null])assert.equal(validLocation(pin),false);
 assert.equal(locationMapURL({latitude:9.08,longitude:7.45}),'https://www.google.com/maps/search/?api=1&query=9.08,7.45');
 assert.equal(locationMapURL({latitude:NaN,longitude:7}), '');
+assert.equal(locationDirectionsURL({latitude:9.08,longitude:7.45}),'https://www.google.com/maps/dir/?api=1&destination=9.08%2C7.45');
+assert.equal(locationDirectionsURL({latitude:91,longitude:7}), '');
+const opened=[];const ui={exports:{},require:name=>name==='react'?{createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)})}:name==='react-native'?{View:'View',Pressable:'Pressable',Linking:{openURL:async url=>opened.push(url)},Alert:{alert:()=>{}}}:name==='./ThemeProvider'?{ThemedText:'Text'}:context.exports};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/LocationPin.tsx','utf8'),{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,ui);
+const find=(tree,test)=>tree&&typeof tree==='object'&&(test(tree)?tree:tree.children?.map(n=>find(n,test)).find(Boolean));
+const text=tree=>typeof tree==='string'?tree:tree?.children?.map(text).join('')||'';
+const pin={latitude:9.08,longitude:7.45};const draft=ui.exports.LocationPin({pin,draft:true}),received=ui.exports.LocationPin({pin});
+assert.match(text(draft),/Not sent yet. Tap Send/);assert.doesNotMatch(text(draft),/Shared location/);assert.equal(find(draft,n=>n.props.accessibilityLabel==='Get directions to shared location'),undefined);
+find(received,n=>n.props.accessibilityLabel==='Get directions to shared location').props.onPress();assert.equal(opened[0],locationDirectionsURL(pin));
+assert.match(text(received),/Shared location/);assert.equal(ui.exports.LocationPin({pin:null}),null);
 console.log('Chat location checks passed: bounded numeric coordinates and generated static map links.');
