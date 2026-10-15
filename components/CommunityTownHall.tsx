@@ -82,12 +82,12 @@ export function CommunityTownHall({ token, bottomInset, initialRoomId = "", open
         if (alive.current)
             setBusy(false);
     } }
-    const button = (label: string, onPress: () => void) => <Pressable style={[s.button, busy && { opacity: .5 }]} disabled={busy} onPress={onPress}><Text style={s.buttonText}>{label}</Text></Pressable>;
+    const button = (label: string, onPress: () => void) => <Pressable style={s.button} disabled={busy} onPress={onPress}><Text style={s.buttonText}>{label}</Text></Pressable>;
     async function membership(provider: string, action: string) { if (!room)
         return; await call(`/chat/town-hall/${room.id}/providers/${provider}`, { method: "POST", body: JSON.stringify({ action }) }); await detail(room.id); }
     return <KeyboardFrame style={s.fill} behavior="height"><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + 20 }}>
  {!!error && <Text style={s.error}>{error}</Text>}
- {room ? <><View style={s.row}>{button("Back to requests", () => { generation.current++; setRoom(null); void refresh(); })}{button("Refresh", () => void detail(room.id))}</View><View style={s.card}><Text style={s.title}>{room.title}</Text><Text>{room.description}</Text>{!room.message_only && <Text style={s.note}>{room.location} · {room.quantity} {room.unit} · Target ₦{room.target_unit_price} per {room.unit}</Text>}<Text style={s.note}>{room.state === "closed" ? "Closed request" : `${room.seats}/10 provider places occupied`}</Text>
+ {room ? <><View style={s.row}>{button("Back to requests", () => { generation.current++; setRoom(null); void refresh(); })}{button("Refresh", () => void detail(room.id))}</View><View style={s.card}>{!room.message_only&&room.title!==room.description&&<Text style={s.title}>{room.title}</Text>}<Text style={s.requestMessage}>{room.description}</Text>{!room.message_only && <Text style={s.note}>{room.location} · {room.quantity} {room.unit} · Target ₦{room.target_unit_price} per {room.unit}</Text>}<Text style={s.note}>{room.state === "closed" ? "Closed request" : `${room.seats}/10 provider places occupied`}</Text>
  {room.state === "open" && (room.is_owner || room.admitted) && button("Open bargaining chat", () => void act(() => openChat(room.id)))}
  {room.state === "closed" && room.is_owner && button("View chat record", () => void act(() => openChat(room.id)))}
  {room.state === "open" && !room.is_owner && !room.admitted && (room.seats >= 10 ? <Text style={s.note}>Full · A place opens when the buyer removes a provider.</Text> : room.application_state === "pending" ? <Text style={s.note}>Waiting for buyer approval.</Text> : button("Request to join", () => void act(async () => { await call(`/chat/town-hall/${room.id}/apply`, { method: "POST" }); await detail(room.id); })))}</View>

@@ -1837,7 +1837,6 @@ function AcrossApp() {
 
       {/* Notification Bell */}
       <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100,flexDirection:'row',alignItems:'center' }}>
-        <Pressable onPress={()=>setShowSettings(true)} accessibilityLabel="Open settings" style={{padding:10}}><Ionicons name="settings-outline" size={23} color={theme.color("#191919")}/></Pressable>
         <Pressable onPress={() => setShowNotifications(v => !v)} style={{ padding: 6 }}>
           <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color={theme.color("#191919")} />
           {unreadCount > 0 && (
@@ -1954,7 +1953,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} />}
-        {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={bottomInset+BOTTOM_NAV_HEIGHT} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
+        {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
           <Text style={s.panelTitle}>Contact sellers</Text><Text style={s.muted}>Product payments are arranged directly with sellers. Open a product and tap Message seller. Previous paid orders remain available in Track and payment history.</Text>
@@ -2005,14 +2004,14 @@ function AcrossApp() {
               {xpReserved > 0 && <Text style={s.muted}>{xpReserved} XP reserved for pending checkout. Points are spent only after confirmed payment.</Text>}
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                 <View><Text style={s.kicker}>XP Rewards</Text><Text style={{ fontSize: 24, fontWeight: "900", color: theme.color("#FF4747", "color") }}>{xpBalance} XP</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 13, fontWeight: "700" }}>NGN {xpBalance} available as XP</Text></View>
-                <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && s.disabled]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={s.primaryButtonText}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
+                <Pressable style={[s.primaryButtonSmall, { minWidth: 100 }, xpClaimed && {backgroundColor:theme.dark?"#254C40":"#E0F3E9"}]} onPress={() => { void claimDailyXP(); }} disabled={xpClaimed || busy}><Text style={[s.primaryButtonText,xpClaimed&&{color:theme.dark?"#A8E9CA":"#186344"}]}>{xpClaimed ? "Claimed" : busy ? "..." : "Claim 1 XP"}</Text></Pressable>
               </View>
               <Text style={{ marginTop: 12, color: theme.color("#66736F", "color"), fontSize: 12, lineHeight: 18 }}>1 XP = NGN 1. Withdraw from 1,000 XP after admin review. New accounts earn 5 XP. Daily login: 1 XP. First verified review: 1 XP. Completed NGN purchases earn 1 XP per NGN 1,000, capped at 25 per order. XP cannot be used at checkout.</Text>
             </View>
             {withdrawalEnabled && token && <View style={s.panel}><XPWithdrawalPanel key={token} token={token} balance={xpBalance} onRefresh={()=>loadXPBalance(token)}/></View>}
             <View style={s.quickLinks}>
               <Pressable style={s.quickLinkCard} onPress={()=>setShowPaymentHistory(true)}><Ionicons name="receipt-outline" size={22} color={theme.color("#FF4747")}/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Payment history</Text><Text style={s.quickLinkMeta}>Payments and transaction references</Text></View><Ionicons name="chevron-forward" size={18} color={theme.color("#BFBFBF")}/></Pressable>
-              {[{ tab: "track" as Tab, label: "Track", icon: "airplane-outline" as const, meta: "Your orders" },
+              {[...(orders.length ? [{ tab: "track" as Tab, label: "Past orders", icon: "receipt-outline" as const, meta: "Existing order records" }] : []),
                 { tab: "support" as Tab, label: "Support", icon: "chatbubble-ellipses-outline" as const, meta: "Contact us" }
               ].map(link => (
                 <Pressable key={link.tab} style={s.quickLinkCard} onPress={() => setActiveTab(link.tab)}>
@@ -2146,16 +2145,16 @@ function AcrossApp() {
         )}
       </View>
 
-      {!keyboardVisible&&token&&['home','services','track'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
+      {!keyboardVisible&&token&&['home','services','account'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
       {!keyboardVisible && <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.bottomNav}>
+        <View style={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
 			<Pressable key={item.key} style={s.bottomNavItem} onPress={() => { setShowFlashSale(false); setActiveTab(item.key); }}>
               <View style={s.bottomNavIconWrap}>{item.key === "account" && profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 24, height: 24, borderRadius: 12, borderWidth: active ? 2 : 0, borderColor: theme.color("#FF4747", "borderColor"), backgroundColor: theme.color("#F0F0F0", "backgroundColor") }} /> : <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={theme.color(active ? "#FF4747" : "#8C8C8C")} />}{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
               <Text style={[s.bottomNavLabel, active && s.bottomNavLabelActive]}>{item.label}</Text>
             </Pressable>
           ); })}
-        </ScrollView>
+        </View>
       </View>}
 
       {/* Delivery Confirm Modal */}
@@ -2206,7 +2205,8 @@ function AcrossApp() {
       </Modal>
 
       {selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
-      <Modal visible={showSettings} animationType="slide" onRequestClose={()=>setShowSettings(false)}><View style={{flex:1,paddingTop:insets.top,backgroundColor:theme.dark?'#111B21':'#F6F8F7'}}><View style={{flexDirection:'row',alignItems:'center',padding:12,gap:12}}><Pressable onPress={()=>setShowSettings(false)} accessibilityLabel="Close settings" style={{padding:10}}><Ionicons name="arrow-back" size={24} color={theme.dark?'#FFF':'#17251F'}/></Pressable><Ionicons name="settings-outline" size={24} color="#12805F"/><Text style={{fontSize:22,fontWeight:'700'}}>Settings</Text></View><ScrollView contentContainerStyle={{padding:16,paddingBottom:insets.bottom+24}}><Pressable style={s.quickLinkCard} onPress={()=>{setShowSettings(false);setShowPaymentHistory(false);setActiveTab('account');setEditingProfile(true);}}><Ionicons name="person-outline" size={24}/><Text>Edit profile and contact details</Text></Pressable>            <View style={s.panel}>
+      <Modal visible={showSettings} animationType="slide" onRequestClose={()=>setShowSettings(false)}><View style={{flex:1,paddingTop:insets.top,backgroundColor:theme.dark?'#111B21':'#F6F8F7'}}><View style={{flexDirection:'row',alignItems:'center',padding:12,gap:12}}><Pressable onPress={()=>setShowSettings(false)} accessibilityLabel="Close settings" style={{padding:10}}><Ionicons name="arrow-back" size={24} color={theme.dark?'#FFF':'#17251F'}/></Pressable><Ionicons name="settings-outline" size={24} color="#12805F"/><Text style={{fontSize:22,fontWeight:'700'}}>Settings</Text></View><ScrollView contentContainerStyle={{padding:16,paddingBottom:insets.bottom+24}}><Pressable style={s.quickLinkCard} onPress={()=>{setShowSettings(false);setShowPaymentHistory(false);setActiveTab('account');setEditingProfile(true);}}><Ionicons name="person-outline" size={24}/><Text>Edit profile and contact details</Text></Pressable>
+            <View style={s.panel}>
               <Text style={s.panelTitle}>Appearance</Text>
               <Text style={s.muted}>Choose a theme or follow your phone settings.</Text>
               <View style={{flexDirection:"row",gap:8,marginTop:12}}>

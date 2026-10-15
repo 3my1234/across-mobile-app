@@ -113,7 +113,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
 
   return (
     <ImageBackground source={MOBILE_AUTH_BACKGROUND} resizeMode="cover" blurRadius={2} style={s.authBg} imageStyle={s.authBgImage}>
-      <View pointerEvents="none" style={s.authBackdrop} />
+      <View pointerEvents="none" style={[s.authBackdrop,{backgroundColor:theme.dark?"rgba(5,15,13,0.32)":"rgba(255,248,241,0.28)"}]} />
       <StatusBar style={theme.dark ? "light" : "dark"} />
       <View style={[s.authSafe, { paddingTop: authInsets.top, paddingBottom: authInsets.bottom, paddingLeft: authInsets.left, paddingRight: authInsets.right }]}>
         <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={s.authKeyboard}>
