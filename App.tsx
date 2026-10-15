@@ -286,6 +286,7 @@ function AcrossApp() {
   const selectedProductRef = useRef(selectedProduct);
   selectedProductRef.current = selectedProduct;
   const catalogRequestKeyRef = useRef("");
+  const [serviceChatVisible,setServiceChatVisible]=useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [showDiscountOffer, setShowDiscountOffer] = useState(false);
   const discountPromptSeen = useRef(false);
@@ -1947,7 +1948,7 @@ function AcrossApp() {
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
-        {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} />}
+        {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />}
         {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
@@ -2140,7 +2141,7 @@ function AcrossApp() {
         )}
       </View>
 
-      {!keyboardVisible&&token&&['home','services','account'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
+      {!keyboardVisible&&!serviceChatVisible&&token&&['home','services','account'].includes(activeTab)&&!selectedProduct&&<TownHallBubble token={token} bottomInset={bottomInset} onOpen={()=>{setCommunityMode('town-hall');setCommunityConversationId('');setCommunityHallRoomId('');setNotificationNavigationKey(value=>value+1);setActiveTab('messages')}}/>}
       {!keyboardVisible && <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
         <View style={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
