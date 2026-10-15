@@ -636,7 +636,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
   if (selectedConversation) {
-    return <ProviderConversation token={token || ""} key={`${token}:${selectedConversation.id || selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} identity={selectedConversation.provider_identity} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active || selectedConversation.status!=="open"} error={chatError} hasEarlier={!!conversationCursor} bottomInset={0}
+    return <ProviderConversation receiptContext={{channel:'business',conversationId:selectedConversation.id}} token={token || ""} key={`${token}:${selectedConversation.id || selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} identity={selectedConversation.provider_identity} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active || selectedConversation.status!=="open"} error={chatError} hasEarlier={!!conversationCursor} bottomInset={0}
       onClose={()=>{threadRequest.current++;threadInFlight.current=false;conversationRef.current=null;setSelectedConversation(null);void loadConversations(true);}}
       onSend={sendConversationMessage} onEarlier={()=>{if(conversationCursor&&!threadInFlight.current)void loadConversationMessages(selectedConversation,conversationCursor);}} onRefresh={()=>void loadConversationMessages(selectedConversation)}/>;
   }

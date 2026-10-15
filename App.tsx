@@ -1,3 +1,4 @@
+import {ReadReceiptSetting} from './components/ReadReceiptSetting';
 import {createSessionStartup} from './components/sessionStartup';
 import {privateChatStore} from './components/privateChatStore';
 import {supportChatHistory,providerChatHistory} from "./components/chatHistoryCache";
@@ -2089,7 +2090,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "support" && (
-          selectedTicket ? <SupportConversation ticket={selectedTicket} messages={ticketMessages} error={supportError} busy={busy} loading={messageLoading} hasEarlier={!!supportCursor} onEarlier={() => { if (!messageLoading) void loadTicketMessages(selectedTicket.id, supportCursor); }} onClose={() => { supportMessageRequest.current++; setSelectedTicket(null); setTicketMessages([]); setSupportCursor(""); }} onSend={replyToSupportTicket} onRefresh={() => { void loadTicketMessages(selectedTicket.id); }} /> : <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          selectedTicket ? <SupportConversation token={token || ""} ticket={selectedTicket} messages={ticketMessages} error={supportError} busy={busy} loading={messageLoading} hasEarlier={!!supportCursor} onEarlier={() => { if (!messageLoading) void loadTicketMessages(selectedTicket.id, supportCursor); }} onClose={() => { supportMessageRequest.current++; setSelectedTicket(null); setTicketMessages([]); setSupportCursor(""); }} onSend={replyToSupportTicket} onRefresh={() => { void loadTicketMessages(selectedTicket.id); }} /> : <KeyboardFrame behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
           <ScrollView
             ref={supportScrollRef}
             alwaysBounceVertical
@@ -2220,7 +2221,7 @@ function AcrossApp() {
               </View>
               <Text style={{color: theme.color("#66736F", "color"),fontSize:12,lineHeight:18,marginTop:10}}>For sound, allow Atl notifications, enable sound for Messages and updates, and check your notification volume and Do Not Disturb setting.</Text>
             </View>
-<View style={s.panel}><Text style={s.panelTitle}>Privacy and storage</Text><Text style={s.muted}>Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy.</Text><Pressable style={s.secondaryButton} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Text style={s.secondaryButtonText}>Clear local chat history</Text></Pressable></View><Pressable style={s.secondaryButton} onPress={()=>{setShowSettings(false);void logout();}}><Text style={s.secondaryButtonText}>Sign out</Text></Pressable></ScrollView></View></Modal>
+<View style={s.panel}><Text style={s.panelTitle}>Privacy and storage</Text>{token&&<ReadReceiptSetting token={token} active={showSettings}/>}<Text style={s.muted}>Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy.</Text><Pressable style={s.secondaryButton} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Text style={s.secondaryButtonText}>Clear local chat history</Text></Pressable></View><Pressable style={s.secondaryButton} onPress={()=>{setShowSettings(false);void logout();}}><Text style={s.secondaryButtonText}>Sign out</Text></Pressable></ScrollView></View></Modal>
       {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()}/>}
     </View>
   );
