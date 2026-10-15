@@ -19,7 +19,7 @@ async function main(){
  uuidFails=true;labeled('Message provider').props.onChangeText('Again');send().props.onPress();await flush();assert.equal(send().props.disabled,false,'UUID exception cannot leave send locked');uuidFails=false;
  send().props.onPress();requests[2].resolve();await flush();
  // A regular product chat, without any driver role, can send a standalone pin.
- labeled('Share location pin').props.onPress();await flush();assert.ok(find(render(),n=>n.type==='Pin'));assert.equal(send().props.disabled,false);
+ labeled('Share location pin').props.onPress();await flush();assert.equal(requests.length,3,'capturing a pin does not send before confirmation');assert.equal(find(render(),n=>n.type==='Pin').props.draft,true);assert.equal(send().props.disabled,false);
  send().props.onPress();assert.equal(requests[3].args[0],'');assert.equal(requests[3].args[3].latitude,9.07);requests[3].resolve();await flush();assert.equal(find(render(),n=>n.type==='Pin'),undefined);
  console.log('Chat composer passed: pending history, duplicate taps, visible progress/error, retained draft, same-reference retry, UUID failure recovery and universal location-only sending.');
 }
