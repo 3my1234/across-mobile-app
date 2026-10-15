@@ -1,3 +1,4 @@
+import {AccountSectionHeading,useAccountDesign} from './AccountDesign';
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -7,7 +8,7 @@ import { fetchJSONWithTimeout, money } from "./utils";
 
 type Withdrawal = {id:string; points:number; status:string; bank_name:string; account_number:string; admin_note:string};
 export function XPWithdrawalPanel({token,balance,onRefresh}:{token:string;balance:number;onRefresh:()=>Promise<void>}) {
- const s=useThemedStyles(styles);
+ const s=useThemedStyles(styles);const colors=useAccountDesign();
  const [items,setItems]=useState<Withdrawal[]>([]),[error,setError]=useState(""),[busy,setBusy]=useState(false);
  const [bank,setBank]=useState(""),[number,setNumber]=useState(""),[name,setName]=useState(""),[points,setPoints]=useState("1000");
  const [form,setForm]=useState(false),[message,setMessage]=useState("");
@@ -31,10 +32,10 @@ export function XPWithdrawalPanel({token,balance,onRefresh}:{token:string;balanc
  }
  const pending=items.some(item=>item.status==="pending"||item.status==="processing");
  return <View style={s.box}>
-  <Text style={s.title}>Withdraw XP</Text><Text style={s.body}>1,000 XP = NGN 1,000. Minimum withdrawal: 1,000 XP. Existing points count too. Payment is reviewed by an admin; it is not instant.</Text>
+  <AccountSectionHeading icon="wallet-outline" title="Withdraw XP" subtitle="Minimum: 1,000 XP = ₦1,000."/><Text style={s.body}>Existing points count. Payment requires admin review and is not instant.</Text>
   {!!message&&<Text accessibilityRole="alert" style={s.body}>{message}</Text>}
   {!!error&&<View><Text accessibilityRole="alert" style={s.body}>{error}</Text><Pressable onPress={()=>void load()}><Text style={s.title}>Retry history</Text></Pressable></View>}
-  {!form&&<Pressable disabled={balance<1000||pending} onPress={()=>setForm(true)} style={[s.button,(balance<1000||pending)&&s.waiting]}><Text style={balance<1000||pending?s.waitingText:s.buttonText}>{pending?"Withdrawal being reviewed":balance<1000?`${1000-balance} more XP needed`:"Request withdrawal"}</Text></Pressable>}
+  {!form&&<Pressable disabled={balance<1000||pending} onPress={()=>setForm(true)} style={[s.button,{backgroundColor:"#087B58"},(balance<1000||pending)&&{backgroundColor:colors.soft,borderColor:colors.line,borderWidth:1}]}><Text style={balance<1000||pending?[s.waitingText,{color:colors.text}]:s.buttonText}>{pending?"Withdrawal being reviewed":balance<1000?`${1000-balance} more XP needed`:"Request withdrawal"}</Text></Pressable>}
   {form&&<View style={{gap:10}}>
    <Text style={s.body}>XP to withdraw</Text><TextInput accessibilityLabel="XP to withdraw" value={points} onChangeText={setPoints} keyboardType="number-pad" style={s.input} editable={!busy}/>
    <Text style={s.body}>Your bank name</Text><TextInput accessibilityLabel="Bank name" value={bank} onChangeText={setBank} style={s.input} editable={!busy}/>
@@ -46,4 +47,4 @@ export function XPWithdrawalPanel({token,balance,onRefresh}:{token:string;balanc
   {items.map(item=><View key={item.id} style={s.history}><Text style={s.title}>{money(item.points,"NGN")} · {item.status}</Text><Text style={s.body}>{item.bank_name} · ending {item.account_number.slice(-4)}</Text>{!!item.admin_note&&<Text style={s.body}>{item.admin_note}</Text>}</View>)}
  </View>;
 }
-const styles={box:{gap:12,marginTop:16},title:{fontSize:14,fontWeight:"700" as const,color:"#191919"},body:{fontSize:13,lineHeight:19,color:"#66736F"},input:{borderWidth:1,borderColor:"#D0D5DD",borderRadius:8,padding:12,color:"#191919",backgroundColor:"#FFFFFF"},button:{backgroundColor:"#FF4747",padding:13,borderRadius:10,alignItems:"center" as const},waiting:{backgroundColor:"#EAF8F2",borderWidth:1,borderColor:"#CBEBDD"},waitingText:{color:"#315B3B",fontWeight:"700" as const},buttonText:{color:"#FFFFFF",fontWeight:"700" as const},history:{borderTopWidth:1,borderColor:"#D0D5DD",paddingTop:10}};
+const styles={box:{gap:12,marginTop:0},title:{fontSize:14,fontWeight:"700" as const,color:"#191919"},body:{fontSize:13,lineHeight:19,color:"#66736F"},input:{borderWidth:1,borderColor:"#D0D5DD",borderRadius:8,padding:12,color:"#191919",backgroundColor:"#FFFFFF"},button:{backgroundColor:"#087B58",padding:13,borderRadius:10,alignItems:"center" as const},waiting:{backgroundColor:"#EAF8F2",borderWidth:1,borderColor:"#CBEBDD"},waitingText:{color:"#315B3B",fontWeight:"700" as const},buttonText:{color:"#FFFFFF",fontWeight:"700" as const},history:{borderTopWidth:1,borderColor:"#D0D5DD",paddingTop:10}};
