@@ -6,6 +6,5 @@ export const NAV_ITEMS: { key: Tab; label: string; icon: keyof typeof Ionicons.g
   { key: "services", label: "Services", icon: "business-outline", activeIcon: "business" },
   { key: "messages", label: "Chat", icon: "chatbubbles-outline", activeIcon: "chatbubbles" },
   { key: "account", label: "Account", icon: "person-outline", activeIcon: "person" },
-  { key: "track", label: "Track", icon: "airplane-outline", activeIcon: "airplane" },
   { key: "support", label: "Support", icon: "chatbubble-ellipses-outline", activeIcon: "chatbubble-ellipses" }
 ];
