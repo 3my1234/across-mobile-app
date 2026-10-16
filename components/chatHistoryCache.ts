@@ -1,4 +1,5 @@
-// Private history lives only in this process. It is never persisted or shared.
+// This synchronous layer is process-only. Encrypted device snapshots are
+// handled separately by privateChatStore; neither layer is a cloud backup.
 export function createChatHistoryCache<T>(limit=10,ttl=5*60*1000,maxMessages=200) {
  let owner="";
  const entries=new Map<string,{messages:T[];cursor:string;saved:number}>();
