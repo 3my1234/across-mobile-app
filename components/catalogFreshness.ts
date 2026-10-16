@@ -13,29 +13,36 @@ let subscription: ReturnType<typeof AppState.addEventListener> | null = null;
 let polling = false;
 let token = "";
 let lastSuccessAt = 0;
-let lastFallbackAt = 0;
+let failures = 0;
+let retryAt = 0;
 
 function notify() {
   for (const listener of listeners) void Promise.resolve().then(listener).catch(() => {});
 }
 
-async function poll() {
-  if (polling || (AppState.currentState && AppState.currentState !== "active")) return;
+async function poll(force = false) {
+  if (polling || (!force && Date.now() < retryAt) || (AppState.currentState && AppState.currentState !== "active")) return;
   polling = true;
   try {
     const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/catalog/version`), { headers: { "Cache-Control": "no-cache" } });
-    if (!response.ok) throw new Error("catalog version unavailable");
+    if (!response.ok) {
+      const retry = Number(response.headers?.get?.("Retry-After"));
+      if ((response.status === 429 || response.status === 503) && Number.isFinite(retry) && retry > 0) retryAt = Date.now() + Math.min(3600, retry) * 1000;
+      throw new Error("catalog version unavailable");
+    }
     const body = await response.json();
     if (typeof body.change_token !== "string") throw new Error("invalid catalog version");
     const changed = token !== "" && token !== body.change_token;
     const reconnected = lastSuccessAt > 0 && Date.now() - lastSuccessAt > 30000;
     token = body.change_token;
     lastSuccessAt = Date.now();
+    failures = 0; retryAt = 0;
     if (changed || reconnected) notify();
   } catch {
-    // Rolling deployments and temporary connection failures must not leave a
-    // screen stale indefinitely. Screens retain their offline data on failure.
-    if (Date.now() - lastFallbackAt >= 30000) { lastFallbackAt = Date.now(); notify(); }
+    // Do not turn a failed tiny heartbeat into a full-catalogue request storm.
+    // Keep existing content, back off, and invalidate after a successful recovery.
+    failures = Math.min(failures + 1, 4);
+    retryAt = Math.max(retryAt, Date.now() + Math.min(120000, 15000 * 2 ** (failures - 1)));
   } finally { polling = false; }
 }
 
@@ -50,9 +57,9 @@ export function useCatalogFreshness(refresh: () => void | Promise<unknown>, enab
     listeners.add(listener);
     if (!timer) {
       void poll();
-      timer = setInterval(() => { void poll(); }, 5000);
+      timer = setInterval(() => { void poll(); }, 15000 + Math.floor(Math.random() * 3000));
       subscription = AppState.addEventListener("change", state => {
-        if (state === "active") { notify(); void poll(); }
+        if (state === "active") { notify(); void poll(true); }
       });
     }
     return () => {
