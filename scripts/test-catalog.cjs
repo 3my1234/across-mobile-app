@@ -30,7 +30,7 @@ async function main() {
   assert.equal(state.reconcileCart(cart, new Map(), new Set(["watch"])).length, 1);
   assert.equal(state.cartOfferFingerprint(cart), state.cartOfferFingerprint([{ ...cart[0], product: { ...old, title: "New description" } }, cart[1]]), "cosmetic edits must not discard an agreed quote");
 
-  let version = "1", requests = 0, stateListener;
+  let version = "1", requests = 0, stateListener, failureStatus = 0;
   const cleanups = [], timers = new Set();
   const appState = { currentState: "active", addEventListener: (_, callback) => {
     stateListener = callback; return { remove: () => { stateListener = null; } };
@@ -43,7 +43,7 @@ async function main() {
       requests += 1;
       assert.match(url, /\/catalog\/version\?refresh=/);
       assert.equal(options.headers["Cache-Control"], "no-cache");
-      return { ok: true, json: async () => ({ change_token: version }) };
+      return { ok: !failureStatus, status: failureStatus || 200, headers: {get: () => failureStatus ? '60' : null}, json: async () => ({ change_token: version }) };
     } }
   }, { setInterval: callback => { timers.add(callback); return callback; }, clearInterval: callback => timers.delete(callback) });
   const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -70,6 +70,17 @@ async function main() {
   await flush();
   assert.equal(home, 2);
   assert.equal(detail, 2, "foreground resume must revalidate immediately");
+  failureStatus = 503;
+  const unchangedHome = home;
+  await vm.runInContext("poll()", freshness);
+  const afterBusy = requests;
+  await vm.runInContext("poll()", freshness);
+  assert.equal(requests, afterBusy, "busy response must suppress automatic retry until cooldown");
+  assert.equal(home, unchangedHome, "failed heartbeat must not fan out full catalogue requests");
+  assert.ok(vm.runInContext("retryAt - Date.now()", freshness) > 58000, "server Retry-After must be honored");
+  failureStatus = 0;
+  await vm.runInContext("poll(true)", freshness);
+  assert.equal(requests, afterBusy + 1, "explicit foreground revalidation can recover immediately");
   cleanups.forEach(cleanup => cleanup());
   assert.equal(timers.size, 0);
   assert.equal(stateListener, null);

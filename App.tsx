@@ -1056,7 +1056,8 @@ function AcrossApp() {
       } finally { inFlight = false; }
     };
     void refreshPage();
-    const timer = setInterval(() => { void refreshPage(); }, 12000);
+    // Support stays responsive; static account/order pages need no 12s heartbeat.
+    const timer = setInterval(() => { void refreshPage(); }, activeTab === "support" ? 12000 : 60000);
     const foreground = AppState.addEventListener("change", state => { if (state === "active") void refreshPage(); });
     // eslint-disable-next-line react-hooks/exhaustive-deps
     return () => { clearInterval(timer); foreground.remove(); supportTicketRequest.current++; supportMessageRequest.current++; };
