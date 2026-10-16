@@ -1629,16 +1629,20 @@ function AcrossApp() {
     const seq = ++supportTicketRequest.current;
     supportReads.current.set(key, seq);
     if (!supportTicketsRef.current.length || cursor) setSupportLoading(true);
+    let networkApplied=false,hydrated=false;
+    if(!cursor&&!supportTicketsRef.current.length)void privateChatStore.get(token,"support:inbox").then(saved=>{if(!networkApplied&&seq===supportTicketRequest.current&&token===sessionTokenRef.current&&!supportTicketsRef.current.length&&Array.isArray(saved?.tickets)){hydrated=true;setSupportTickets(saved.tickets);setTicketListCursor(saved.cursor||"");}});
     try {
       const {response:r,body:d} = await fetchHistoryJSON(`${API_URL}/api/v1/support/tickets?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) throw new Error(d.message || "Support history unavailable");
       if (seq !== supportTicketRequest.current || token !== sessionTokenRef.current) return;
+      networkApplied=true;
+      if(!cursor)privateChatStore.put(token,"support:inbox",{tickets:d.tickets||[],cursor:d.next_cursor||""});
       const hadHistory = supportTicketsRef.current.length > 0;
       setSupportTickets(current => {
         const merged = new Map<string, SupportTicket>(); [...current, ...(d.tickets || [])].forEach((ticket: SupportTicket) => merged.set(ticket.id,ticket));
         return [...merged.values()].sort((a,b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id));
       });
-      if (cursor || !hadHistory) setTicketListCursor(d.next_cursor || "");
+      if (cursor || !hadHistory || hydrated) setTicketListCursor(d.next_cursor || "");
       setSupportError("");
       setSelectedTicket(current => current ? (d.tickets || []).find((ticket: SupportTicket) => ticket.id === current.id) || current : null);
     } catch (error) { if (seq === supportTicketRequest.current && token === sessionTokenRef.current) setSupportError(error instanceof Error ? error.message : "Support history unavailable. Pull to retry."); }
@@ -1669,10 +1673,14 @@ function AcrossApp() {
     const seq = ++supportMessageRequest.current;
     supportReads.current.set(key, seq);
     setMessageLoading(true);
+    let networkApplied=false,hydrated=false;
+    if(!cursor&&!ticketMessagesRef.current.length)void privateChatStore.get(token,"support:"+ticketId).then(saved=>{if(!networkApplied&&seq===supportMessageRequest.current&&token===sessionTokenRef.current&&visibleSupport.current.ticket===ticketId&&!ticketMessagesRef.current.length&&Array.isArray(saved?.messages)){hydrated=true;supportChatHistory.get(token,ticketId);supportChatHistory.put(token,ticketId,saved.messages,saved.cursor||"");setTicketMessages(saved.messages);setSupportCursor(saved.cursor||"");if(saved.status)setSelectedTicket(current=>current?.id===ticketId?{...current,status:saved.status}:current);}});
     try {
       const {response:r,body:d} = await fetchHistoryJSON(`${API_URL}/api/v1/support/tickets/${ticketId}/messages?limit=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, {cache: "no-store", headers: { Authorization: `Bearer ${token}` } });
       if (!r.ok) throw new Error(d.message || "Conversation unavailable");
       if (seq !== supportMessageRequest.current || token !== sessionTokenRef.current) return;
+      networkApplied=true;
+      if(!cursor)privateChatStore.put(token,"support:"+ticketId,{messages:d.messages||[],cursor:d.next_cursor||"",status:d.ticket_status});
       if (d.ticket_status) setSelectedTicket(current => current?.id === ticketId ? {...current,status:d.ticket_status} : current);
       setTicketMessages(current => {
         if(token!==sessionTokenRef.current || seq!==supportMessageRequest.current)return current;
@@ -1684,7 +1692,7 @@ function AcrossApp() {
         return merged;
       });
       if (cursor) setSupportCursor(d.next_cursor || "");
-      else if (!ticketMessagesRef.current.length) setSupportCursor(d.next_cursor || "");
+      else if (!ticketMessagesRef.current.length || hydrated) setSupportCursor(d.next_cursor || "");
       const newest = (d.messages || []).at(-1);
       setMessageLoading(false);
       if (newest?.id && visibleSupport.current.tab === "support" && visibleSupport.current.ticket === ticketId && AppState.currentState === "active") {

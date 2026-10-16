@@ -26,7 +26,7 @@ async function main() {
   cleanup(); assert.equal(tick,null); assert.equal(foreground,null);
 
   const pending=[]; let tickets=[], error="", loading=false;
-  const state = {token:"buyer", sessionTokenRef:{current:"buyer"}, supportTicketRequest:{current:0}, supportReads:{current:new Map()}, supportTickets:[], supportTicketsRef:{current:[]}, setTicketListCursor:()=>{},
+  const state = {privateChatStore:{get:async()=>null,put(){}},token:"buyer", sessionTokenRef:{current:"buyer"}, supportTicketRequest:{current:0}, supportReads:{current:new Map()}, supportTickets:[], supportTicketsRef:{current:[]}, setTicketListCursor:()=>{},
     fetchHistoryJSON: async () => {const response=await new Promise(resolve => pending.push(resolve));return {response,body:await response.json()};},
     setSupportTickets: value => {tickets=typeof value === "function" ? value(tickets) : value;},setSelectedTicket: update => update(null),
     setSupportLoading: value => {loading=value;}, setSupportError:value=>{error=value;}, API_URL:"https://example.test"};
