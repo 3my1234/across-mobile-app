@@ -104,6 +104,7 @@ export function mapProduct(raw: any): import("./types").Product {
     id: raw.id, sku: raw.sku, title: raw.title, description: raw.description ?? "",
     category_path: raw.category_path ?? [], image_urls: normalizeMediaUrls(raw.image_urls ?? []),
     currency: raw.currency ?? "NGN", price: raw.price ?? raw.local_selling_price ?? 0,
+    video_urls: raw.video_urls || raw.factory_details?.video_urls || [],
     updated_at: raw.updated_at ?? raw.factory_details?.catalog_updated_at,
     catalog_version: raw.catalog_version ?? raw.factory_details?.catalog_version,
     delivery_fee: Number(raw.delivery_fee || 0),

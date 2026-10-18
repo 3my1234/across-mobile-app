@@ -1,0 +1,27 @@
+name: Mobile launch checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  typecheck-and-regressions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - name: Verify catalogue, Town Hall and chat behaviour
+        run: |
+          node scripts/test-provider-workspace.cjs
+          node scripts/test-community-api.cjs
+          node scripts/test-chat-unread.cjs
+          node scripts/test-town-hall-feed.cjs
+          node scripts/test-catalog.cjs
+          node scripts/test-account-design.cjs

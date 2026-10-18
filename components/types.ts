@@ -6,6 +6,7 @@ export type Product = {
   description: string;
   category_path: string[];
   image_urls: string[];
+  video_urls?: string[];
   currency: string;
   price: number;
   updated_at?: string;
