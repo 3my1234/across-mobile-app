@@ -1,3 +1,4 @@
+import {PostVideos} from "./PostVideos";
 import {ProviderBanner, ProviderIdentity} from "./ProviderIdentity";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -103,6 +104,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
   }, []);
 
   async function submit() {
+    if(mode==='signup'&&(password.length<8||password.length>72||!/[A-Z]/.test(password)||!/[a-z]/.test(password)||!/[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/.test(password))){Alert.alert('Choose a stronger password','Use at least 8 characters, including an uppercase letter, a lowercase letter and a special character such as !@#$.');return;}
     if (mode === "signin") await onSubmit("/api/v1/auth/login", { email, password });
     else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password });
   }
@@ -175,7 +177,8 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
+                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" autoCapitalize="none" autoCorrect={false} secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable accessibilityRole="button" accessibilityLabel={showPassword?'Hide password':'Show password'} style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
+                {mode==='signup'&&<Text style={s.authFormCopy}>At least 8 characters, with uppercase, lowercase and a special character such as !@#$.</Text>}
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
@@ -470,7 +473,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             ))}
           </ScrollView>
           <View style={[styles.galleryCount,{top:windowWidth-40}]}><Text style={styles.galleryCountText}>{Math.min(heroIndex,images.length-1) + 1}/{images.length}</Text></View>
-          <View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
+          <PostVideos urls={product.video_urls}/><View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
             {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
             <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally from seller" : isCrossBorderMerchantProduct ? "International seller" : "Seller fulfilment unavailable"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>

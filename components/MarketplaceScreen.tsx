@@ -1,3 +1,4 @@
+import {PostVideos} from "./PostVideos";
 import {NearbyDrivers} from './NearbyDrivers';
 import type {ChatLocation} from './chatLocation';
 import {ProviderBanner, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
@@ -48,7 +49,7 @@ type Listing = {
   provider_identity?: ProviderIdentityData;
   media_urls: string[];
   contact_available?: boolean;
-  attributes?: { price_mode?: string; price_notes?: string };
+  attributes?: { video_urls?: string[]; price_mode?: string; price_notes?: string };
   direct_booking: boolean;
   safety_warning?: string;
   distance_km?: number;
@@ -670,7 +671,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           </ScrollView>
           {(selected.media_urls?.length || 0) > 1 && <Text style={styles.meta}>Swipe to view all {selected.media_urls.length} photos</Text>}
           <View style={styles.section}>
-            <Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
+            <PostVideos urls={selected.attributes?.video_urls}/><Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
             <Text style={styles.title}>{selected.title}</Text>
             <ProviderBanner identity={selected.provider_identity}/><ProviderIdentity identity={selected.provider_identity} compact={false} animate/>
             <Text style={styles.price}>{servicePriceLabel(selected)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
