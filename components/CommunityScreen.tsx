@@ -166,12 +166,12 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         if (alive.current)
             setBusy(false);
     } }
-    async function send(text: string, mediaKeys?: string[], clientID?: string,location?:ChatLocation) {
+    async function send(text: string, mediaKeys?: string[], clientID?: string,location?:ChatLocation,replyToID?:string) {
         if (!current.current)
             return;
         const conversation = current.current;
         setError('');
-        const { data } = await call(`/chat/conversations/${conversation.id}/messages`, { method: "POST", body: JSON.stringify({ message: text, media_keys: mediaKeys || [], location,client_message_id: clientID }) });
+        const { data } = await call(`/chat/conversations/${conversation.id}/messages`, { method: "POST", body: JSON.stringify({ message: text, media_keys: mediaKeys || [], location,reply_to_id:conversation.kind==="town_hall"?replyToID:undefined,client_message_id: clientID }) });
         if (!alive.current || current.current?.id !== conversation.id)
             return;
         if(!data?.id||!data.created_at)throw new Error('The server did not confirm your message. Please retry.');
