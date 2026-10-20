@@ -5,7 +5,7 @@ import {currentForegroundLocation} from './foregroundLocation';
 import {ChatLocation} from './chatLocation';
 import {LocationPin} from './LocationPin';
 import {TownHallMessage} from './TownHallMessage';
-import {ProviderBanner, ProviderIdentity, ProviderBadge, ProviderIdentityData} from "./ProviderIdentity";
+import {ProviderProfileHeader, ProviderIdentity, ProviderBadge, ProviderIdentityData} from "./ProviderIdentity";
 import {ChatPhotoViewer} from "./ChatPhotoViewer";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -78,7 +78,7 @@ export function ProviderConversation(props: Props) {
   };
   return <KeyboardFrame style={s.fill} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <View style={s.header}><Pressable onPress={props.onClose} accessibilityLabel="Back to conversations" style={s.back}><Ionicons name="arrow-back" size={24} color={theme.dark?'#FFF':'#17251F'}/></Pressable>{props.roomStyle||props.townHallOrigin?<View style={{marginRight:10}}><TownHallIcon size={40}/></View>:<View style={{width:40,height:40,borderRadius:20,backgroundColor:theme.dark?'#2A3942':'#DCE9E2',alignItems:'center',justifyContent:'center',marginRight:10}}>{(props.identity?.avatar_url||props.avatarURL)?<Image source={{uri:props.identity?.avatar_url||props.avatarURL}} style={{width:40,height:40,borderRadius:20}}/>:<Text style={{fontSize:19,fontWeight:'700'}}>{props.provider.slice(0,1).toUpperCase()}</Text>}</View>}<View style={s.heading}><View style={{flexDirection:'row',alignItems:'center',gap:6}}><Text style={s.title} numberOfLines={1}>{props.roomStyle?'Town Hall':props.provider}</Text>{props.identity&&<ProviderBadge identity={props.identity}/>}</View><Text style={s.meta} numberOfLines={1}>{props.roomStyle?'Bargaining room':props.title===props.provider?'Private conversation':props.title}</Text></View></View>
-    {!props.roomStyle&&<ProviderBanner identity={props.identity} compact/>}
+    {!props.roomStyle&&<ProviderProfileHeader identity={props.identity} compact showName={false}/>}
     {props.toolbar}
     {!!props.error&&!sendError && <Pressable onPress={props.onRefresh}><Text style={s.error}>{props.error} · Tap to retry</Text></Pressable>}
     <FlatList ref={list} onViewableItemsChanged={onVisibleMessages} viewabilityConfig={visibilityConfig} data={props.messages} keyExtractor={message=>message.id} style={s.fill} contentContainerStyle={[s.thread,props.roomStyle&&{backgroundColor:theme.dark?"#142A35":"#EDF4F8",gap:1}]} keyboardShouldPersistTaps="handled" maintainVisibleContentPosition={{minIndexForVisible:0}}
