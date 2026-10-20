@@ -1,7 +1,7 @@
 import {PostVideos} from "./PostVideos";
 import {NearbyDrivers} from './NearbyDrivers';
 import type {ChatLocation} from './chatLocation';
-import {ProviderBanner, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
+import {ProviderProfileHeader, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {providerChatHistory} from "./chatHistoryCache";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -673,7 +673,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           <View style={styles.section}>
             <PostVideos urls={selected.attributes?.video_urls}/><Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
             <Text style={styles.title}>{selected.title}</Text>
-            <ProviderBanner identity={selected.provider_identity}/><ProviderIdentity identity={selected.provider_identity} compact={false} animate/>
+            <ProviderProfileHeader identity={selected.provider_identity} animate/>
             <Text style={styles.price}>{servicePriceLabel(selected)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>
             {!!selected.attributes?.price_notes && <Text style={styles.meta}>{selected.attributes.price_notes}</Text>}
             <Text style={styles.meta}>{selected.provider_name} · {selected.city}, {selected.state}</Text>
