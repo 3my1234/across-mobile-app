@@ -1090,7 +1090,7 @@ function AcrossApp() {
       const d = await readResponseBody(r);
       if (d.requires_email_verification) {
         setAuthMode("signin");
-        Alert.alert("Verify your email", "Your verification email is queued. Delivery is usually quick, but can take several minutes. Confirm it before signing in and avoid requesting duplicates immediately.");
+        Alert.alert("Verify your email", "Your verification email is queued. Delivery is usually quick, but can take several minutes. Check your inbox and Spam/Junk folder. Confirm it before signing in and avoid requesting duplicates immediately.");
         return;
       }
       if (r.status === 409) {
@@ -1123,11 +1123,11 @@ function AcrossApp() {
       if (r.status === 429) {
         const seconds = Math.max(1, Number(d?.retry_after_seconds || r.headers.get("Retry-After") || 60));
         const minutes = Math.max(1, Math.ceil(seconds / 60));
-        Alert.alert("Email still being delivered", `Please wait about ${minutes} minute${minutes === 1 ? "" : "s"} before requesting another copy. Check the inbox again first.`);
+        Alert.alert("Email still being delivered", `Please wait about ${minutes} minute${minutes === 1 ? "" : "s"} before requesting another copy. Check your inbox and Spam/Junk folder first.`);
         return;
       }
       if (!r.ok) throw new Error(formatHttpError(r, d, "Could not resend verification"));
-      Alert.alert("Verification email", d?.message || "If the account exists, a verification email has been sent.");
+      Alert.alert("Verification email", d?.message || "If the account exists, a verification email has been sent. Check your inbox and Spam/Junk folder.");
     } catch (e) {
       Alert.alert("Failed", e instanceof Error ? e.message : "Could not resend verification");
     } finally {
@@ -1211,7 +1211,7 @@ function AcrossApp() {
       });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Could not request password reset"));
-      Alert.alert("Check your email", d?.message || "If an account exists for that email, a password reset link has been sent.");
+      Alert.alert("Check your email", d?.message || "If an account exists for that email, a password reset link has been sent. Check your inbox and Spam/Junk folder.");
     } catch (e) {
       Alert.alert("Failed", e instanceof Error ? e.message : "Could not request password reset");
     } finally {
