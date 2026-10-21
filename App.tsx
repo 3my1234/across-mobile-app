@@ -732,6 +732,11 @@ function AcrossApp() {
     setShowSettings(false);
     if (!token || token!==sessionTokenRef.current) return;
     const actor=token,request=++notificationNavigationRequest.current;
+    // Product details are an absolute overlay. Changing the tab underneath it
+    // leaves a notification's conversation invisible until the overlay closes.
+    setSelectedProduct(null);
+    setProviderWorkspaceVisible(false);
+    setShowPaymentHistory(false);
     const notificationId = String(notification?.id || notification?.notification_id || "");
     const destination=notificationDestination(notification);
     setShowNotifications(false);

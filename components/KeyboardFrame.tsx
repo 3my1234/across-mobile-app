@@ -4,7 +4,7 @@ import {keyboardOverlap,type KeyboardBounds} from './keyboardGeometry';
 
 // Current native geometry accommodates adjustResize, edge-to-edge IME overlap
 // and disappearing navigation without subtracting the keyboard twice.
-export function KeyboardFrame({children,style,behavior:_behavior,keyboardVerticalOffset=0,enabled=true,contentContainerStyle,onLayout,...props}:KeyboardAvoidingViewProps){
+export function KeyboardFrame({children,style,behavior:_behavior,keyboardVerticalOffset=0,enabled=true,bottomInset=0,contentContainerStyle,onLayout,...props}:KeyboardAvoidingViewProps & {bottomInset?:number}){
  const frame=useRef<View>(null),keyboard=useRef<KeyboardBounds|null>(null),alive=useRef(true),raf=useRef<number|null>(null),version=useRef(0);
  const [overlap,setOverlap]=useState(0);
  const settings=useRef({enabled,keyboardVerticalOffset});settings.current={enabled,keyboardVerticalOffset};
@@ -25,5 +25,5 @@ export function KeyboardFrame({children,style,behavior:_behavior,keyboardVertica
   return()=>{alive.current=false;version.current++;if(raf.current!==null)cancelAnimationFrame(raf.current);subscriptions.forEach(item=>item.remove());};
  },[]);
  useEffect(()=>{measure();},[enabled,keyboardVerticalOffset]);
- return <View {...props} ref={frame} collapsable={false} style={style} onLayout={event=>{onLayout?.(event);measure();}}><View style={[{flex:1,minHeight:0,paddingBottom:enabled?overlap:0},contentContainerStyle]}>{children}</View></View>;
+ return <View {...props} ref={frame} collapsable={false} style={style} onLayout={event=>{onLayout?.(event);measure();}}><View style={[{flex:1,minHeight:0,paddingBottom:enabled?Math.max(overlap,keyboard.current?0:bottomInset):bottomInset},contentContainerStyle]}>{children}</View></View>;
 }
