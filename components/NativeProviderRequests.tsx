@@ -9,6 +9,7 @@ import {bookingActions, bookingFilters, bookingTransition, ProviderBooking} from
 
 export function NativeProviderRequests({token, onClose, requestID = ''}: {token: string; onClose: () => void; requestID?: string}) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
+  const [target, setTarget] = useState(requestID);
   const [items, setItems] = useState<ProviderBooking[]>([]), [cursor, setCursor] = useState('');
   const [status, setStatus] = useState(''), [search, setSearch] = useState(''), [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -20,14 +21,14 @@ export function NativeProviderRequests({token, onClose, requestID = ''}: {token:
     paging.current = true; const version = ++generation.current; setLoading(true); setError('');
     try {
       const params = new URLSearchParams({limit: '25'}); if (status) params.set('status', status); if (query.trim()) params.set('search', query.trim()); if (next) params.set('cursor', next);
-      if (requestID) {params.set('request_id', requestID); params.delete('status'); params.delete('search');}
+      if (target) {params.set('request_id', target); params.delete('status'); params.delete('search');}
       const data = await providerRequest(token, `/providers/me/requests?${params}`);
-      const rows = requestID ? (data.items || []).filter((item: ProviderBooking) => item.id === requestID) : data.items || [];
-      if (requestID && !rows.length) throw Error('This request is unavailable or you no longer have access.');
-      if (alive.current && version === generation.current) {setItems(old => next ? [...old, ...rows.filter((item: ProviderBooking) => !old.some(existing => existing.id === item.id))] : rows); setCursor(requestID ? '' : data.next_cursor || '');}
+      const rows = target ? (data.items || []).filter((item: ProviderBooking) => item.id === target) : data.items || [];
+      if (target && !rows.length) throw Error('This request is unavailable or you no longer have access.');
+      if (alive.current && version === generation.current) {setItems(old => next ? [...old, ...rows.filter((item: ProviderBooking) => !old.some(existing => existing.id === item.id))] : rows); setCursor(target ? '' : data.next_cursor || '');}
     } catch (failure) {if (alive.current && version === generation.current) setError(failure instanceof Error ? failure.message : 'Requests could not load. Retry.');}
     finally {if (version === generation.current) {paging.current = false; if (alive.current) setLoading(false);}}
-  }, [token, status, query, requestID]);
+  }, [token, status, query, target]);
   useEffect(() => {setItems([]); setCursor(''); void load(); return invalidate;}, [load, invalidate]);
   const update = (item: ProviderBooking, next: string) => {
     if (mutation.current) return;
@@ -45,9 +46,9 @@ export function NativeProviderRequests({token, onClose, requestID = ''}: {token:
   return <Modal animationType="slide" onRequestClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, paddingTop: insets.top, backgroundColor: c.background}}>
     <View style={{padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center'}}>{button('Back', onClose)}<Text style={{fontSize: 20, fontWeight: '700'}}>Bookings & enquiries</Text></View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding: 16, gap: 12}}>
-      <Input accessibilityLabel="Search bookings and enquiries" value={search} editable={!busy} onChangeText={setSearch} placeholder="Customer or service" style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/>
+      {target ? <>{button('All bookings and enquiries', () => setTarget(''))}<Text>Request opened from your notification</Text></> : <><Input accessibilityLabel="Search bookings and enquiries" value={search} editable={!busy} onChangeText={setSearch} placeholder="Customer or service" style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/>
       {button('Search', () => {if (query === search) void load(); else setQuery(search);}, loading)}
-      <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{bookingFilters.map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{checked: status === value, disabled: busy}} disabled={busy} onPress={() => setStatus(value)} style={{padding: 10, borderRadius: 12, backgroundColor: status === value ? c.soft : c.surface}}><Text>{value || 'All statuses'}</Text></Pressable>)}</View>
+      <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 6}}>{bookingFilters.map(value => <Pressable key={value} accessibilityRole="radio" accessibilityState={{checked: status === value, disabled: busy}} disabled={busy} onPress={() => setStatus(value)} style={{padding: 10, borderRadius: 12, backgroundColor: status === value ? c.soft : c.surface}}><Text>{value || 'All statuses'}</Text></Pressable>)}</View></>}
       {(loading || busy) && <ActivityIndicator/>}{!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
       {items.map(item => <View key={item.id} style={{padding: 16, gap: 8, borderWidth: 1, borderColor: c.line, borderRadius: 16, backgroundColor: c.surface}}>
         <Text style={{fontSize: 18, fontWeight: '700'}}>{item.listing_title}</Text><Text>{item.request_type} · {item.status} · Party size: {item.party_size}</Text>

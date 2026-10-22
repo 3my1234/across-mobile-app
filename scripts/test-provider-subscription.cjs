@@ -7,7 +7,9 @@ assert.equal(policy.providerCheckoutPayload(plan,12,'card',redirect).plan_id,id)
 assert.equal(policy.providerPeriodPrice(plan,12),5400,'use backend quote, never recalculate a payment');
 for(const [months,method] of [[3,'card'],[6,'card'],[2,'card'],[3,'banktransfer'],[1,'cash']])assert.throws(()=>policy.providerCheckoutPayload(plan,months,method,redirect));
 assert.throws(()=>policy.providerCheckoutPayload(plan,1,'card','https://other.test'));
-for(const url of ['http://checkout.flutterwave.com/x','https://checkout.flutterwave.com.evil.test/x','https://user:secret@checkout.flutterwave.com/x','javascript:alert(1)'])assert.throws(()=>policy.providerCheckoutLink(url));
+assert.throws(()=>policy.providerCheckoutPayload({...plan,card_available:false},1,'card',redirect));
+assert.equal(policy.providerCheckoutPayload({...plan,card_available:false},12,'card',redirect).duration_months,12,'annual prepaid card does not depend on a monthly gateway plan');
+for(const url of ['http://checkout.flutterwave.com/x','https://checkout.flutterwave.com:8443/x','https://checkout.flutterwave.com.evil.test/x','https://user:secret@checkout.flutterwave.com/x','javascript:alert(1)'])assert.throws(()=>policy.providerCheckoutLink(url));
 const marker={provider_id:id,created_at:'2026-10-23T10:00:00Z'},saved={...marker,tx_ref:'PROVIDER-'+id,checkout_link:'https://checkout.flutterwave.com/v3/hosted/pay/test'};
 assert.equal(policy.pendingProviderCheckout(JSON.stringify(marker),id).provider_id,id,'uncertain checkout marker must survive restart');
 assert.throws(()=>policy.pendingProviderCheckout(JSON.stringify(saved),other),'a different provider cannot resume this checkout');
