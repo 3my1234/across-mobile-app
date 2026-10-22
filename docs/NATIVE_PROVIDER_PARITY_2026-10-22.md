@@ -39,6 +39,18 @@ This is a reviewable first slice, not completion of the provider migration. No d
 | Driver availability/location | Existing portal retained | Native permission, background/foreground policy and safety acceptance |
 | Notifications/settings | Current app plus portal retained | Native provider notification registration/route/device coverage |
 
+## Publishing follow-on slice
+
+The same candidate feature flag now also selects native Products and Services screens. `NativeProviderCatalog.tsx` loads 25 records per page, supports search/pagination and provides draft creation, review submission and archive confirmation. Existing conversations are not removed by archive. The server remains authoritative for publishing, permissions and the combined listing limit.
+
+- Product creation starts with seller-managed local stock and requires explicit delivery areas, primary item price, stock location and location confirmation. Full existing product payloads are cloned when editing: sale fields, SKU, categories, delivery offers, videos, fulfillment and stock data are preserved. Existing cross-border products keep their route; creating a cross-border route and editing advanced sale/delivery terms still require the existing tools.
+- Service creation includes every Go `listingPayload` field, pricing modes/notes, location, contact information, capacity and availability flags. Existing service editing is deliberately guarded if the deployed list response omits contact fields: `UpdateListing` would otherwise overwrite them with blanks. It will become available as soon as an owner-scoped read returns complete contacts; until then use existing tools rather than risk data loss.
+- All retained and newly selected images/videos count toward freshly fetched server policy. MP4 videos require at most 50 MB and 60 seconds each and are registered only after `/videos/complete` verifies them. Expo ImagePicker's installed type definition confirms duration is expressed in milliseconds. Free/paid caps come from `/providers/me/post-policy`, not a second client-side pricing table.
+- Location can come from the existing bounded foreground-location helper or manual coordinates; changing coordinates clears confirmation. A Maps link lets the provider check the pin before confirming. Native map search/dragging remains future parity work.
+- Shared JSON reading now handles successful 204/205 responses without trying to parse a nonexistent JSON body. Existing edit/submit/archive endpoints return 204; successful operations must not appear as connection failures.
+
+Publishing validation passed: full nested payload preservation, service missing-contact guard, location confirmation, tier media caps, delivery-time validation and real shared JSON-reader behavior for HTTP 204. `node scripts/test-provider-publishing.cjs`, TypeScript, targeted ESLint, existing marketplace, notification and workspace policy tests passed locally. Device and backend-integrated acceptance remain pending. No live server was called.
+
 ## Security and limitations
 
 The native UI is not the authorization boundary. Document registration permissions are owner/manager in the Go handler; renewal management is owner-only. A suspended provider may receive 403/404 from existing backend access rules; native code does not interpret that as permission to reactivate or create an account. A missing profile displays a neutral setup/access message and preserves existing tools.

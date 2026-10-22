@@ -19,7 +19,8 @@ function load(path, dependencies = {}, globals = {}) {
   assert.equal(policy.verificationImageError('image/jpeg', 10 * 1024 * 1024), '');
   for (const [mime, bytes] of [['application/pdf', 500], ['image/jpeg', 0], ['image/jpeg', 10 * 1024 * 1024 + 1]]) assert.ok(policy.verificationImageError(mime, bytes));
   assert.equal(policy.nativeProviderView('view=subscription'), 'subscription');
-  for (const route of ['view=products', 'view=listings', 'view=messages&conversation=abc', 'view=overview&event=abc', 'view=profile']) assert.equal(policy.nativeProviderView(route), 'legacy');
+  for (const view of ['products', 'listings']) assert.equal(policy.nativeProviderView('view='+view), view);
+  for (const route of ['view=messages&conversation=abc', 'view=overview&event=abc', 'view=profile']) assert.equal(policy.nativeProviderView(route), 'legacy');
   let calls = [], next = {response: {ok: true}, body: {status: 'stopped'}};
   const api = load('components/nativeProviderApi.ts', {
     './config': {API_URL: 'https://api.example.test'},
