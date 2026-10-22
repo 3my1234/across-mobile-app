@@ -14,7 +14,15 @@ export function notificationDestination(notification: any): NotificationDestinat
   const type = String(data.notification_type || data.type || "").toLowerCase();
   const id = (key: string) => typeof data[key] === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(data[key]) ? data[key] : undefined;
   const conversationId = id("conversation_id"), ticketId = id("ticket_id"), orderId = id("order_id");
-  if(id('provider_event_id')){const query=new URLSearchParams({view:String(data.provider_view||'overview'),event:id('provider_event_id')!});if(conversationId)query.set('conversation',conversationId);return {tab:'provider',route:query.toString()};}
+  if(id('provider_event_id')){
+    const views=['overview','profile','verification','subscription','products','listings','messages','support','driver','requests','merchant-orders'];
+    const view=views.includes(data.provider_view)?data.provider_view:'overview';
+    const query=new URLSearchParams({view,event:id('provider_event_id')!});
+    if(view==='messages'&&conversationId)query.set('conversation',conversationId);
+    if(view==='requests'&&id('request_id'))query.set('request',id('request_id')!);
+    if(view==='support'&&ticketId)query.set('ticket',ticketId);
+    return {tab:'provider',route:query.toString()};
+  }
   if(id("town_hall_room_id"))return {tab:"messages",mode:"town-hall",townHallRoomId:id("town_hall_room_id")};
   if(id("chat_room_id") || type==="social_message")return {tab:"messages",mode:"chats",chatRoomId:id("chat_room_id")};
   if(type==="friend_request")return {tab:"messages",mode:"chats"};

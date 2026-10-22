@@ -11,6 +11,7 @@ import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextI
 import { SupportConversation } from "./components/SupportConversation";
 import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
 import { ProviderWorkspace } from "./components/ProviderWorkspace";
+import {isProviderSubscriptionReturn} from './components/providerSubscriptionPolicy';
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
@@ -185,6 +186,17 @@ function AcrossApp() {
   const [showSettings,setShowSettings]=useState(false);
   const chatCacheOwner=useRef(token);useEffect(()=>{const previous=chatCacheOwner.current;if(previous&&previous!==token){void privateChatStore.clear(previous);setShowSettings(false);}chatCacheOwner.current=token;},[token]);
   const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
+  const [pendingProviderReturn,setPendingProviderReturn]=useState(false);
+  useEffect(()=>{
+    let mounted=true;
+    const receive=(url:string|null)=>{if(mounted&&url&&isProviderSubscriptionReturn(url))setPendingProviderReturn(true);};
+    void Linking.getInitialURL().then(receive).catch(()=>{});
+    const listener=Linking.addEventListener('url',event=>receive(event.url));
+    return ()=>{mounted=false;listener.remove();};
+  },[]);
+  useEffect(()=>{
+    if(token&&pendingProviderReturn){setProviderWorkspaceRoute('view=subscription');setProviderWorkspaceVisible(true);setPendingProviderReturn(false);}
+  },[token,pendingProviderReturn]);
   const cartHydrated = useRef(false);
   const cartStorageWrites = useRef(Promise.resolve());
   const restoredPendingPayment = useRef(false);
@@ -2225,7 +2237,7 @@ function AcrossApp() {
           <View style={accountCard}><AccountSectionHeading icon="shield-checkmark-outline" title="Privacy and storage" subtitle="Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy."/>{token&&<ReadReceiptSetting token={token} active={showSettings}/>}<Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Ionicons name="trash-outline" size={20} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Clear local chat history</Text></Pressable></View>
           <Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{setShowSettings(false);void logout();}}><Ionicons name="log-out-outline" size={21} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Sign out</Text></Pressable>
         </ScrollView></View></Modal>
-      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSupport={ticketId=>{void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
     </View>
   );
 }

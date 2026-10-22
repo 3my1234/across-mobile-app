@@ -32,7 +32,10 @@ function load(path, dependencies = {}, globals = {}) {
   assert.equal(policy.nativeProviderView('view=support&ticket='+supportTicket), 'support');
   assert.equal(policy.providerSupportTicket('view=support&ticket='+supportTicket), supportTicket);
   assert.equal(policy.providerSupportTicket('view=support'), undefined);
-  for (const route of ['view=support&ticket=invalid', 'view=overview&ticket='+supportTicket, 'view=support&ticket='+supportTicket+'&conversation='+supportTicket, 'view=support&event='+supportTicket]) {
+  assert.equal(policy.nativeProviderView('view=support&event='+supportTicket), 'support');
+  assert.equal(policy.nativeProviderView('view=requests&request='+supportTicket+'&event='+supportTicket), 'requests');
+  assert.equal(policy.providerRouteContext('request='+supportTicket).request, supportTicket);
+  for (const route of ['view=support&ticket=invalid', 'view=overview&ticket='+supportTicket, 'view=support&ticket='+supportTicket+'&conversation='+supportTicket, 'view=requests&request=bad', 'view=overview&request='+supportTicket]) {
     assert.equal(policy.nativeProviderView(route), 'legacy', 'ambiguous/unmigrated context must not be silently discarded');
     assert.equal(policy.providerSupportTicket(route), undefined);
   }

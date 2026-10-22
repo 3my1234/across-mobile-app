@@ -6,14 +6,16 @@ import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {KeyboardFrame} from './KeyboardFrame';
 import {providerRequest} from './nativeProviderApi';
-import {ProviderOrder, providerOrderActions, providerOrderUpdate, TrackingDraft} from './providerOrderPolicy';
+import {ProviderOrder, providerETADraft, providerOrderActions, providerOrderUpdate, TrackingDraft} from './providerOrderPolicy';
+import {NativeProviderFulfillmentTools} from './NativeProviderFulfillmentTools';
 
 export function NativeProviderOrders({token, onClose}: {token: string; onClose: () => void}) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
   const [items, setItems] = useState<ProviderOrder[]>([]), [cursor, setCursor] = useState('');
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [editor, setEditor] = useState<{order: ProviderOrder; next: string; key: string} | null>(null);
-  const [draft, setDraft] = useState<TrackingDraft>({notes: '', location: '', carrier: '', tracking_number: '', tracking_url: ''});
+  const [tools, setTools] = useState(false);
+  const [draft, setDraft] = useState<TrackingDraft>({notes: '', location: '', carrier: '', tracking_number: '', tracking_url: '', delivery_date: '', delivery_time: ''});
   const alive = useRef(true), epoch = useRef(0), mutation = useRef(false), paging = useRef(false);
   const invalidate = useCallback(() => {epoch.current++;}, []);
   useEffect(() => {alive.current = true; return () => {alive.current = false; invalidate();};}, [invalidate]);
@@ -27,7 +29,7 @@ export function NativeProviderOrders({token, onClose}: {token: string; onClose: 
     finally {if (version === epoch.current) {paging.current = false; if (alive.current) setLoading(false);}}
   }, [token]);
   useEffect(() => {void load(); return invalidate;}, [load, invalidate]);
-  const edit = (order: ProviderOrder, next: string) => {const f = order.fulfillment; setError(''); setNotice(''); setDraft({notes: '', location: f?.current_location || '', carrier: f?.carrier || '', tracking_number: f?.tracking_number || '', tracking_url: f?.tracking_url || ''}); setEditor({order, next, key: Crypto.randomUUID()});};
+  const edit = (order: ProviderOrder, next: string) => {const f = order.fulfillment; setError(''); setNotice(''); setDraft({notes: '', location: f?.current_location || '', carrier: f?.carrier || '', tracking_number: f?.tracking_number || '', tracking_url: f?.tracking_url || '', ...providerETADraft(f?.estimated_delivery_at)}); setEditor({order, next, key: Crypto.randomUUID()});};
   const save = () => {
     if (!editor || mutation.current) return;
     let payload: ReturnType<typeof providerOrderUpdate>;
@@ -41,12 +43,13 @@ export function NativeProviderOrders({token, onClose}: {token: string; onClose: 
     })();}}]);
   };
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled || busy} accessibilityState={{disabled: disabled || busy}} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled || busy ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  if (tools) return <NativeProviderFulfillmentTools token={token} onClose={() => {setTools(false); void load();}}/>;
   return <Modal animationType="slide" onRequestClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, paddingTop: insets.top, backgroundColor: c.background}}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding: 16, gap: 12}}>
     {button(editor ? 'Cancel update' : 'Back to provider', () => editor ? setEditor(null) : onClose())}<Text style={{fontSize: 20, fontWeight: '700'}}>Previous paid orders</Text>
     <Text>New product purchases are arranged directly with sellers. Existing paid orders and their tracking remain available here.</Text>
     {(loading || busy) && <ActivityIndicator/>}{!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
-    {editor ? <><Text style={{fontWeight: '700'}}>{editor.next.replace(/_/g, ' ')}</Text>{Object.keys(draft).map(key => <View key={key} style={{gap: 6}}><Text>{key.replace(/_/g, ' ')}</Text><Input accessibilityLabel={key.replace(/_/g, ' ')} editable={!busy} value={draft[key as keyof TrackingDraft]} onChangeText={value => setDraft(old => ({...old, [key]: value}))} autoCapitalize={key === 'tracking_url' ? 'none' : 'sentences'} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/></View>)}{button('Review and publish update', save)}</> : <>
-      {items.map(order => <View key={order.id} style={{padding: 16, gap: 8, borderWidth: 1, borderColor: c.line, borderRadius: 16, backgroundColor: c.surface}}>
+    {editor ? <><Text style={{fontWeight: '700'}}>{editor.next.replace(/_/g, ' ')}</Text>{Object.keys(draft).map(key => <View key={key} style={{gap: 6}}><Text>{key.replace(/_/g, ' ')}</Text><Input accessibilityLabel={key.replace(/_/g, ' ')} editable={!busy} value={draft[key as keyof TrackingDraft] || ''} onChangeText={value => setDraft(old => ({...old, [key]: value}))} autoCapitalize={key === 'tracking_url' ? 'none' : 'sentences'} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/></View>)}{button('Review and publish update', save)}</> : <>
+      {button('Bulk orders and manifests', () => setTools(true), loading)}<Text>Estimated delivery dates use YYYY-MM-DD and your phone?s local time (HH:MM).</Text>{items.map(order => <View key={order.id} style={{padding: 16, gap: 8, borderWidth: 1, borderColor: c.line, borderRadius: 16, backgroundColor: c.surface}}>
         <Text style={{fontSize: 17, fontWeight: '700'}}>{order.package_label || order.id}</Text><Text>{order.fulfillment?.status || order.status} · {order.currency_code} {order.total_amount}</Text>
         {(order.items || []).map((item, index) => <Text key={index}>{item.title} · {item.quantity} × {order.currency_code} {item.unit_price}</Text>)}
         <Text>{order.fulfillment_contact?.full_name} · {order.fulfillment_contact?.phone}</Text><Text>{[order.fulfillment_contact?.address, order.fulfillment_contact?.city, order.fulfillment_contact?.state].filter(Boolean).join(', ')}</Text>

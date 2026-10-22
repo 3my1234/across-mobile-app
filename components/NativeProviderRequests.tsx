@@ -7,7 +7,7 @@ import {KeyboardFrame} from './KeyboardFrame';
 import {providerRequest} from './nativeProviderApi';
 import {bookingActions, bookingFilters, bookingTransition, ProviderBooking} from './providerBookingPolicy';
 
-export function NativeProviderRequests({token, onClose}: {token: string; onClose: () => void}) {
+export function NativeProviderRequests({token, onClose, requestID = ''}: {token: string; onClose: () => void; requestID?: string}) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
   const [items, setItems] = useState<ProviderBooking[]>([]), [cursor, setCursor] = useState('');
   const [status, setStatus] = useState(''), [search, setSearch] = useState(''), [query, setQuery] = useState('');
@@ -20,11 +20,14 @@ export function NativeProviderRequests({token, onClose}: {token: string; onClose
     paging.current = true; const version = ++generation.current; setLoading(true); setError('');
     try {
       const params = new URLSearchParams({limit: '25'}); if (status) params.set('status', status); if (query.trim()) params.set('search', query.trim()); if (next) params.set('cursor', next);
+      if (requestID) {params.set('request_id', requestID); params.delete('status'); params.delete('search');}
       const data = await providerRequest(token, `/providers/me/requests?${params}`);
-      if (alive.current && version === generation.current) {setItems(old => next ? [...old, ...(data.items || []).filter((item: ProviderBooking) => !old.some(existing => existing.id === item.id))] : data.items || []); setCursor(data.next_cursor || '');}
+      const rows = requestID ? (data.items || []).filter((item: ProviderBooking) => item.id === requestID) : data.items || [];
+      if (requestID && !rows.length) throw Error('This request is unavailable or you no longer have access.');
+      if (alive.current && version === generation.current) {setItems(old => next ? [...old, ...rows.filter((item: ProviderBooking) => !old.some(existing => existing.id === item.id))] : rows); setCursor(requestID ? '' : data.next_cursor || '');}
     } catch (failure) {if (alive.current && version === generation.current) setError(failure instanceof Error ? failure.message : 'Requests could not load. Retry.');}
     finally {if (version === generation.current) {paging.current = false; if (alive.current) setLoading(false);}}
-  }, [token, status, query]);
+  }, [token, status, query, requestID]);
   useEffect(() => {setItems([]); setCursor(''); void load(); return invalidate;}, [load, invalidate]);
   const update = (item: ProviderBooking, next: string) => {
     if (mutation.current) return;

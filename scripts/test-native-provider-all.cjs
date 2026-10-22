@@ -3,7 +3,7 @@ const suites = [
   'test-native-provider', 'test-provider-workspace', 'test-provider-onboarding',
   'test-provider-profile', 'test-provider-publishing', 'test-provider-driver',
   'test-provider-bookings', 'test-provider-booking-screen', 'test-provider-orders', 'test-notification-destinations',
-  'test-town-hall-feed',
+  'test-town-hall-feed', 'test-provider-subscription', 'test-provider-subscription-screen', 'test-provider-fulfillment-screen',
 ];
 for (const suite of suites) {
   const result = spawnSync(process.execPath, [`scripts/${suite}.cjs`], {stdio: 'inherit'});
