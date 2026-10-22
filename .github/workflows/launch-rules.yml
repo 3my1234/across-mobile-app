@@ -17,6 +17,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
+      - name: Verify native provider migration policies and lifecycle
+        run: npm run test:provider-native
       - name: Verify catalogue, Town Hall and chat behaviour
         run: |
           node scripts/test-provider-workspace.cjs

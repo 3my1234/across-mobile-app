@@ -17,10 +17,35 @@ function load(path, dependencies = {}, globals = {}) {
   assert.equal(policy.hasPaidProviderAccess({subscription: {...provider.subscription, status: 'cancelled'}}, now), false);
   for (const kind of ['drivers_license', 'driver_vehicle', 'driver_plate']) assert.ok(policy.verificationKinds.some(([key]) => key === kind));
   assert.equal(policy.verificationImageError('image/jpeg', 10 * 1024 * 1024), '');
+  assert.equal(policy.verificationFileError('business_registration', 'application/pdf', 1024), '');
+  for (const kind of ['drivers_license', 'driver_vehicle', 'driver_plate']) assert.ok(policy.verificationFileError(kind, 'application/pdf', 1024));
+  for (const bytes of [0, -1, NaN, 10 * 1024 * 1024 + 1]) assert.ok(policy.verificationFileError('government_id', 'application/pdf', bytes));
+  assert.ok(policy.verificationFileError('government_id', 'text/html', 1024));
+  assert.equal(policy.privateDocumentPreviewURL('https://storage.example.test/private?signature=synthetic'), 'https://storage.example.test/private?signature=synthetic');
+  for (const url of ['http://storage.example.test/private', 'https://user:password@example.test/private', 'javascript:alert(1)', '/relative']) assert.throws(() => policy.privateDocumentPreviewURL(url));
   for (const [mime, bytes] of [['application/pdf', 500], ['image/jpeg', 0], ['image/jpeg', 10 * 1024 * 1024 + 1]]) assert.ok(policy.verificationImageError(mime, bytes));
   assert.equal(policy.nativeProviderView('view=subscription'), 'subscription');
+  assert.equal(policy.nativeProviderView('view=driver'), 'driver');
+  assert.equal(policy.nativeProviderView('view=driver&ticket=invalid'), 'legacy');
+  assert.equal(policy.nativeProviderView('view=support'), 'support');
+  const supportTicket = '33333333-3333-4333-8333-333333333333';
+  assert.equal(policy.nativeProviderView('view=support&ticket='+supportTicket), 'support');
+  assert.equal(policy.providerSupportTicket('view=support&ticket='+supportTicket), supportTicket);
+  assert.equal(policy.providerSupportTicket('view=support'), undefined);
+  for (const route of ['view=support&ticket=invalid', 'view=overview&ticket='+supportTicket, 'view=support&ticket='+supportTicket+'&conversation='+supportTicket, 'view=support&event='+supportTicket]) {
+    assert.equal(policy.nativeProviderView(route), 'legacy', 'ambiguous/unmigrated context must not be silently discarded');
+    assert.equal(policy.providerSupportTicket(route), undefined);
+  }
   for (const view of ['products', 'listings', 'profile']) assert.equal(policy.nativeProviderView('view='+view), view);
   for (const route of ['view=messages&conversation=abc', 'view=overview&event=abc']) assert.equal(policy.nativeProviderView(route), 'legacy');
+  const conversation = '11111111-1111-4111-8111-111111111111', hall = '22222222-2222-4222-8222-222222222222';
+  assert.equal(policy.nativeProviderView('view=messages&conversation='+conversation), 'messages');
+  assert.equal(policy.providerMessageDestination('view=messages&conversation='+conversation).conversation, conversation);
+  assert.equal(policy.providerMessageDestination('view=messages&shared='+conversation).conversation, conversation);
+  assert.equal(policy.providerMessageDestination('view=messages&hall='+hall).mode, 'town-hall');
+  assert.equal(policy.providerMessageDestination('view=messages&mode=town-hall').mode, 'town-hall');
+  assert.equal(policy.providerMessageDestination('event='+conversation).event, conversation);
+  assert.equal(policy.providerMessageDestination('conversation=invalid&event=invalid').event, '');
   let calls = [], next = {response: {ok: true}, body: {status: 'stopped'}};
   const api = load('components/nativeProviderApi.ts', {
     './config': {API_URL: 'https://api.example.test'},

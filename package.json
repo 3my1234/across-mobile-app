@@ -10,6 +10,7 @@
     "web": "expo start --web",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:provider-native": "node scripts/test-native-provider-all.cjs",
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:pages": "node scripts/test-page-refresh.cjs && node scripts/test-history-retry.cjs",
     "test:payments": "node scripts/test-payment-history.cjs",
@@ -22,6 +23,7 @@
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
     "@expo/vector-icons": "~15.0.3",
+    "@noble/ciphers": "1.3.0",
     "@privy-io/expo": "0.70.0",
     "@privy-io/expo-native-extensions": "0.0.12",
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -32,6 +34,7 @@
     "expo-constants": "~18.0.13",
     "expo-crypto": "~15.0.8",
     "expo-dev-client": "~6.0.21",
+    "expo-document-picker": "~14.0.8",
     "expo-font": "~14.0.12",
     "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.10",
@@ -48,8 +51,7 @@
     "react-native-passkeys": "^0.4.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-svg": "^15.12.1",
-    "react-native-webview": "13.15.0",
-    "@noble/ciphers": "1.3.0"
+    "react-native-webview": "13.15.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

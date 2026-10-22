@@ -1,0 +1,15 @@
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict'), ts = require('typescript');
+const policy = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/providerOrderPolicy.ts', 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020}}).outputText, {exports: policy, URL, Error});
+const order = {id: '33333333-3333-4333-8333-333333333333', fulfillment: {route: 'merchant_local', owner: 'merchant', status: 'pending', version: 2}};
+const draft = {notes: ' Packed ', location: ' Test city ', carrier: '', tracking_number: '', tracking_url: 'https://tracking.example.test/item', expected_version: 999, status: 'delivered'};
+const payload = policy.providerOrderUpdate(order, 'accepted', draft, 'synthetic-key');
+assert.equal(payload.expected_version, 2); assert.equal(payload.status, 'accepted'); assert.equal(payload.notes, 'Packed'); assert.equal(payload.idempotency_key, 'synthetic-key');
+for (const change of [{owner: 'platform'}, {route: 'unknown'}, {version: 0}, {version: 1.5}, {status: 'delivered'}]) assert.equal(policy.providerOrderActions({...order, fulfillment: {...order.fulfillment, ...change}}).length, 0);
+const imported = {...order, fulfillment: {...order.fulfillment, route: 'merchant_cross_border', status: 'processing'}};
+for (const status of ['pending', 'failed', 'reversed', undefined]) assert.equal(policy.providerOrderActions({...imported, seller_funds: {status}}).length, 0, 'unsettled seller funds must not allow dispatch');
+assert.equal(policy.providerOrderActions({...imported, seller_funds: {status: 'settled'}})[0], 'dispatched_from_origin');
+assert.throws(() => policy.providerOrderUpdate(order, 'delivered', draft, 'key'));
+for (const tracking_url of ['http://tracking.example.test', 'javascript:alert(1)', 'https://user:secret@example.test']) assert.throws(() => policy.providerOrderUpdate(order, 'accepted', {...draft, tracking_url}, 'key'));
+assert.throws(() => policy.providerOrderUpdate(order, 'accepted', draft, ''));
+console.log('Provider orders passed: legal transitions, merchant ownership, settlement gating, version retention, idempotency and safe tracking links.');

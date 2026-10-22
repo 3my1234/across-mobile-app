@@ -21,10 +21,36 @@ export function verificationImageError(mime: string, bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0 || bytes > 10 * 1024 * 1024) return 'Choose a clear photo no larger than 10 MB.';
   return '';
 }
+export function verificationFileError(kind: string, mime: string, bytes: number) {
+  if (['drivers_license', 'driver_vehicle', 'driver_plate'].includes(kind)) return verificationImageError(mime, bytes);
+  if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mime)) return 'Choose a PDF, JPG, PNG or WebP document.';
+  if (!Number.isFinite(bytes) || bytes <= 0 || bytes > 10 * 1024 * 1024) return 'Choose a document no larger than 10 MB.';
+  return '';
+}
+export function privateDocumentPreviewURL(raw: string) {
+  const url = new URL(raw);
+  if (url.protocol !== 'https:' || url.username || url.password) throw new Error('A secure document preview is unavailable. Refresh and retry.');
+  return url.href;
+}
 export function nativeProviderView(route: string) {
   const query = new URLSearchParams(route);
   const view = query.get('view') || 'overview';
   // Preserve deep links into tools that have not migrated; never silently land elsewhere.
-  if (['conversation', 'shared', 'hall', 'ticket', 'event', 'notification'].some(key => query.has(key))) return 'legacy';
-  return ['overview', 'profile', 'verification', 'subscription', 'products', 'listings'].includes(view) ? view : 'legacy';
+  if (query.has('ticket') && (view !== 'support' || !validProviderID(query.get('ticket')))) return 'legacy';
+  if (view === 'support' && ['conversation', 'shared', 'hall', 'event', 'notification'].some(key => query.has(key))) return 'legacy';
+  if (['conversation', 'shared', 'hall'].some(key => query.has(key))) return ['conversation', 'shared', 'hall'].every(key => !query.has(key) || validProviderID(query.get(key))) ? 'messages' : 'legacy';
+  if (['event', 'notification'].some(key => query.has(key) && !validProviderID(query.get(key)))) return 'legacy';
+  if (view !== 'messages' && (query.has('event') || query.has('notification'))) return 'legacy';
+  if (query.has('request')) return 'legacy'; // A targeted request needs a private detail contract before migration.
+  return ['overview', 'profile', 'verification', 'subscription', 'products', 'listings', 'messages', 'support', 'driver', 'requests', 'merchant-orders'].includes(view) ? view : 'legacy';
+}
+export function providerSupportTicket(route: string) {
+  if (nativeProviderView(route) !== 'support') return undefined;
+  const value = new URLSearchParams(route).get('ticket');
+  return validProviderID(value) ? value! : undefined;
+}
+const validProviderID = (value: string | null) => Boolean(value && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value));
+export function providerMessageDestination(route: string) {
+  const query = new URLSearchParams(route), id = (key: string) => validProviderID(query.get(key)) ? query.get(key)! : '';
+  return {conversation: id('shared') || id('conversation'), hall: id('hall'), event: id('event'), mode: id('hall') || query.get('mode') === 'town-hall' ? 'town-hall' as const : 'chats' as const};
 }

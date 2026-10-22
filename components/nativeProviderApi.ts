@@ -27,7 +27,7 @@ export async function putProviderPhoto(uploadURL: string, uri: string, mime: str
     const blob = await source.blob();
     if (typeof blob.size === 'number' && (blob.size <= 0 || blob.size > maximumBytes)) throw new Error('The selected file exceeds the upload limit.');
     const response = await fetch(uploadURL, {method: 'PUT', headers: {'Content-Type': mime}, body: blob, signal: controller.signal, credentials: 'omit'});
-    if (!response.ok) throw new Error('Storage could not accept this photo. Please retry or contact Support.');
+    if (!response.ok) throw new Error('Storage could not accept this file. Please retry or contact Support.');
   } catch (error) {
     if (controller.signal.aborted) throw new Error('The file upload timed out. Check your connection and retry.');
     throw error;

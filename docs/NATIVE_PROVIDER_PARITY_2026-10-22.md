@@ -71,6 +71,60 @@ The build remains gated and the portal remains available. Do not claim native pr
 
 ## Verification
 
+### Latest native parity additions
+
+The follow-on implementation now adds native bookings/enquiries (search, status,
+pagination, confirm/accept/reject/complete), service availability creation with
+local-time validation and confirmation, camera/file/PDF verification selection,
+fresh signed document previews, advanced product stock/sale/category/delivery
+controls and previous paid-order tracking. Driver evidence remains photo-only.
+The document picker is the SDK54-compatible native dependency selected by Expo;
+it and the camera permission copy require a new test binary, not just a JS update.
+Private previews use freshly fetched short-lived links in the system browser;
+the application does not put those links into persisted chat/document history.
+
+Service editing now requires the complete private detail contract in backend
+[draft PR69](https://github.com/3my1234/across-backend-api/pull/69), commit `65008d5`,
+stacked on PR66. Its PostgreSQL16 CI passed complete fields, nested data,
+owner/manager access, outsider/member/inactive/suspended denial and route compile
+checks. Old servers without that endpoint leave the native editor closed safely.
+The public listing API does not gain private contact fields.
+
+`npm run test:provider-native` is the shared ten-suite local/CI regression gate.
+It covers policy, entitlement/ownership failures, document MIME/size rules,
+private-preview links, fresh complete edit snapshots, destination delivery offers,
+foreground driver lease ordering, booking transitions/date validation, historical
+order version/idempotency/settlement rules, notification routes and Town Hall.
+These are source/functional checks, not Android/iOS user-journey certification.
+
+Remaining parity: native subscription purchasing and next-plan checkout; legacy
+bulk order/manifests and estimated-delivery editing; some notification contexts
+still intentionally retain legacy routing; full native notification/settings
+acceptance, richer service attributes/map interaction, interrupted-upload/device
+tests and complete signed Android/iOS release journeys. The backend explicitly
+returns 410 for settlement-account setup, so that retired operation is not being
+reintroduced as a native workflow. Existing historical paid orders are retained.
+
+Provider Support now hands off to the main application's existing native Support
+inbox/thread using the same authenticated identity. Valid ticket deep links are
+preserved; ambiguous or unmigrated notification contexts retain fallback routing.
+Local typecheck, policy/destination/workspace/publishing/Town Hall regressions and
+targeted ESLint passed after this change. Device safe-area, back navigation and
+private-history checks remain required. Pre-existing messaging changes were
+preserved; these checks do not certify the complete messaging migration.
+
+`NativeProviderDriver` adds foreground-only nearby availability through existing
+approved-listing and driver-document contracts. It paginates owned approved
+services, validates fresh accurate location, serializes heartbeats and waits for
+an in-flight PUT before offline DELETE. A provider-scoped cleanup barrier protects
+rapid close/reopen from a stale DELETE. Permission, network and GPS failures stop
+publishing; the server's two-minute lease handles unreachable cleanup. Background
+tracking and automatic restart are not enabled. Android/iOS permission-dialog,
+background, account-switch, expiry and ownership acceptance remain pending.
+
+Both additions remain behind `EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT`; no release
+profile or production configuration was enabled and the PWA remains available.
+
 Run `npm run typecheck`, `node scripts/test-native-provider.cjs`, `node scripts/test-provider-workspace.cjs` and `npm run test:notifications`. Tests cover paid-period boundaries, invalid dates, the three driver photo types, upload limits, preserving unmigrated notification routes, owner denial propagation, no automatic mutation replay, HTTPS storage upload and absence of application credentials on storage requests.
 
 Local verification passed: TypeScript, native provider tests, workspace policy, notification setup and marketplace regression suites. The marketplace composer test needed its fixture updated with the already-existing reply state bindings; application messaging code was not changed by that fixture correction. Targeted ESLint covers the three new native modules. Device acceptance remains pending.

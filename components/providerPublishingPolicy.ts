@@ -1,5 +1,23 @@
 export type PostPolicy = {post_limit: number; max_images: number; max_videos: number; max_video_seconds: number; town_hall: boolean; visibility: string};
 export type ProviderPost = Record<string, any>;
+export function deliveryAreaPayload(form: {country: string; state: string; city: string; currency: string; fee: string; itemPrice: string; primary: boolean; confirmed: boolean}, product: ProviderPost) {
+  const country = form.country.trim().toUpperCase(), currency = form.currency.trim().toUpperCase();
+  const state = form.state.trim().toLowerCase().replace(/\s+/g, ' '), city = form.city.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!/^[A-Z]{2}$/.test(country) || !/^[A-Z]{3}$/.test(currency) || city && !state || state.length > 100 || city.length > 100) throw Error('Enter a two-letter delivery country and three-letter currency. A city also needs a state.');
+  const fee = Number(form.fee), price = form.primary ? product.local_selling_price : Number(form.itemPrice);
+  if (!form.fee.trim() || !Number.isFinite(fee) || fee < 0 || !Number.isFinite(price) || price <= 0 || !form.primary && !form.itemPrice.trim()) throw Error('Enter a positive item price and a delivery fee of zero or more.');
+  if (form.primary && currency !== product.currency_code) throw Error('A delivery offer linked to the main price must use the same currency.');
+  if (!form.primary && !form.confirmed) throw Error('Confirm the independent destination item price before adding this offer.');
+  if ((product.delivery_areas || []).length >= 20) throw Error('A product supports up to 20 delivery areas.');
+  if ((product.delivery_areas || []).some((area: ProviderPost) => area.country_code?.toUpperCase() === country && String(area.state || '').trim().toLowerCase().replace(/\s+/g, ' ') === state && String(area.city || '').trim().toLowerCase().replace(/\s+/g, ' ') === city)) throw Error('This delivery area already exists. Remove its old offer first.');
+  return {country_code: country, state, city, currency_code: currency, item_price: price, delivery_fee: fee, delivered_price: Math.round((price + fee) * 100) / 100, uses_primary_price: form.primary, independent_price_confirmed: !form.primary && form.confirmed};
+}
+export function editablePostSnapshot(kind: 'listings' | 'products', snapshot: ProviderPost, expectedID: string): ProviderPost {
+  if (!snapshot || snapshot.id !== expectedID) throw new Error('The server returned a different post. Refresh your posts before editing.');
+  if (kind === 'listings' && ['contact_email', 'contact_phone', 'attributes', 'media_urls'].some(key => !Object.prototype.hasOwnProperty.call(snapshot, key))) throw new Error('The server did not return the complete editable service. Refresh or contact Support; your saved post has not been changed.');
+  if (snapshot.status === 'archived' || snapshot.moderation_status === 'archived') throw new Error('This post has been archived. Refresh your posts.');
+  return JSON.parse(JSON.stringify(snapshot));
+}
 export const serviceTypes = ['hotel', 'short_let', 'car_rental', 'car_wash', 'mechanic', 'plumber', 'carpenter', 'fuel_station', 'food_vendor', 'artisan', 'shop_rental', 'property', 'land'];
 export function postMediaError(policy: PostPolicy, images: string[], videos: string[]) {
   if (!Number.isInteger(policy.max_images) || policy.max_images < 1 || !Number.isInteger(policy.max_videos) || policy.max_videos < 0) return 'Your plan limits are unavailable. Refresh before saving.';
@@ -29,6 +47,13 @@ export function validatePostDraft(kind: 'listings' | 'products', draft: Provider
     if (draft.attributes.price_mode === 'fixed' && draft.price === null) throw new Error('Enter your fixed price.');
     if (draft.service_radius_km !== null && (!Number.isFinite(draft.service_radius_km) || draft.service_radius_km <= 0 || draft.service_radius_km > 500)) throw new Error('Service radius must be between 0 and 500 km.');
   } else {
+    if (!['merchant_local', 'merchant_cross_border'].includes(draft.fulfillment_mode)) throw new Error('Choose the stock fulfillment route.');
+    if (draft.fulfillment_mode === 'merchant_local' ? draft.stock_state !== 'locally_available' : !['foreign_stock', 'import_on_demand'].includes(draft.stock_state)) throw new Error('Choose a stock state that matches the fulfillment route.');
+    if (!String(draft.inventory_location || '').trim()) throw new Error('Enter the actual stock address or area.');
+    if (!Array.isArray(draft.category_path) || !draft.category_path.length || draft.category_path.some((part: unknown) => typeof part !== 'string' || !part.trim())) throw new Error('Enter a product category.');
+    if (!Array.isArray(draft.delivery_methods) || !draft.delivery_methods.length || draft.delivery_methods.some((method: string) => !['delivery', 'pickup'].includes(method))) throw new Error('Choose delivery, pickup, or both.');
+    if (draft.compare_at_price !== null && (!Number.isFinite(draft.compare_at_price) || draft.compare_at_price <= draft.local_selling_price)) throw new Error('Crossed-out price must be higher than the selling price.');
+    if (draft.is_flash_sale && (!Number.isFinite(draft.flash_sale_price) || draft.flash_sale_price <= 0 || draft.flash_sale_price >= draft.local_selling_price)) throw new Error('Flash sale price must be positive and lower than the selling price.');
     if (!Number.isFinite(draft.local_selling_price) || draft.local_selling_price <= 0 || !Number.isInteger(draft.inventory_count) || draft.inventory_count < 0) throw new Error('Enter a positive price and a whole-number stock quantity.');
     if (!Array.isArray(draft.delivery_areas) || !draft.delivery_areas.length) throw new Error('Add at least one delivery area.');
     if (!/^[A-Z]{2}$/.test(draft.inventory_country_code) || !String(draft.inventory_city || '').trim()) throw new Error('Enter a two-letter stock country and stock city.');
