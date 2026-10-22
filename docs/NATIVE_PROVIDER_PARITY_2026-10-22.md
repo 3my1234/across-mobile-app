@@ -90,7 +90,7 @@ owner/manager access, outsider/member/inactive/suspended denial and route compil
 checks. Old servers without that endpoint leave the native editor closed safely.
 The public listing API does not gain private contact fields.
 
-`npm run test:provider-native` is the shared ten-suite local/CI regression gate.
+`npm run test:provider-native` is the shared eleven-suite local/CI regression gate.
 It covers policy, entitlement/ownership failures, document MIME/size rules,
 private-preview links, fresh complete edit snapshots, destination delivery offers,
 foreground driver lease ordering, booking transitions/date validation, historical
@@ -130,3 +130,9 @@ Run `npm run typecheck`, `node scripts/test-native-provider.cjs`, `node scripts/
 Local verification passed: TypeScript, native provider tests, workspace policy, notification setup and marketplace regression suites. The marketplace composer test needed its fixture updated with the already-existing reply state bindings; application messaging code was not changed by that fixture correction. Targeted ESLint covers the three new native modules. Device acceptance remains pending.
 
 Before accepting this slice on devices: use a staging owner and manager; submit all three synthetic driver photos; reject/approve evidence and refresh; revoke photo access; interrupt upload/register separately; double-tap submit/cancellation; test renewal failure/uncertain state and expiry; switch workspaces; open provider notification routes; exercise light/dark, large text, screen readers and safe areas on Android/iOS. No real user documents should be used in CI.
+
+### Draft review and Android compile evidence
+
+Native migration review is [mobile draft PR49](https://github.com/3my1234/across-mobile-app/pull/49). Local TypeScript, targeted ESLint, eleven native-provider suites (including a real-component booking-screen interaction test) and the pre-existing CI community/unread/catalogue/account-design suites passed. The first Linux source regression run passed at commit 81ab796; subsequent workflow-only revisions also passed source checks.
+
+A separate Android compile workflow generates the native project and uses generated test signing with a non-production .invalid API endpoint. It does not use EAS/store credentials, connect to production or establish device acceptance. Its first attempt failed before application compilation because the setup action requested the retired Android SDK tools package. The package request was corrected to platform-tools; subsequent native compilation is tracked separately from passing source checks. The APK, if produced, is compile-only; integrated staging-device testing needs a reviewed staging API target and synthetic test accounts.

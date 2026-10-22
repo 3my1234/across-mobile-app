@@ -2,7 +2,7 @@ const {spawnSync} = require('node:child_process');
 const suites = [
   'test-native-provider', 'test-provider-workspace', 'test-provider-onboarding',
   'test-provider-profile', 'test-provider-publishing', 'test-provider-driver',
-  'test-provider-bookings', 'test-provider-orders', 'test-notification-destinations',
+  'test-provider-bookings', 'test-provider-booking-screen', 'test-provider-orders', 'test-notification-destinations',
   'test-town-hall-feed',
 ];
 for (const suite of suites) {
