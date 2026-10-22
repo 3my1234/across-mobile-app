@@ -53,6 +53,12 @@ Publishing validation passed: full nested payload preservation, service missing-
 
 ## Security and limitations
 
+### Native onboarding follow-on
+
+The candidate now provides a native application form for all six server provider categories, including custom work and the driver declaration. It uses the existing authenticated identity, posts the existing `/providers/onboarding` contract and then directs applicants to the native Documents workflow. Existing customer data is untouched. Validation covers business/contact details, country code and optional HTTPS website. It has no automatic mutation retry and offers account refresh after an interrupted submission. A 404 does not automatically create or reactivate anything; the user explicitly submits an application and server ownership/access rules still apply.
+
+`node scripts/test-provider-onboarding.cjs` covers category normalization, same-account ownership payload and driver declaration. This supersedes the initial matrix's onboarding row: registration/authentication itself remains the existing main-app authentication flow, while provider application submission is now native behind the same candidate flag.
+
 The native UI is not the authorization boundary. Document registration permissions are owner/manager in the Go handler; renewal management is owner-only. A suspended provider may receive 403/404 from existing backend access rules; native code does not interpret that as permission to reactivate or create an account. A missing profile displays a neutral setup/access message and preserves existing tools.
 
 The build remains gated and the portal remains available. Do not claim native provider parity, retirement readiness or store acceptance from typechecking alone. Do not disable the provider portal until every required workflow has passed Android and iOS release-build acceptance and existing data/history/entitlements have been checked.
