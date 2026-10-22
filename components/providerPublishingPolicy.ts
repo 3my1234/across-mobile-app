@@ -2,7 +2,7 @@ export type PostPolicy = {post_limit: number; max_images: number; max_videos: nu
 export type ProviderPost = Record<string, any>;
 export const serviceTypes = ['hotel', 'short_let', 'car_rental', 'car_wash', 'mechanic', 'plumber', 'carpenter', 'fuel_station', 'food_vendor', 'artisan', 'shop_rental', 'property', 'land'];
 export function postMediaError(policy: PostPolicy, images: string[], videos: string[]) {
-  if (!Number.isInteger(policy.max_images) || policy.max_images < 1) return 'Your plan limits are unavailable. Refresh before saving.';
+  if (!Number.isInteger(policy.max_images) || policy.max_images < 1 || !Number.isInteger(policy.max_videos) || policy.max_videos < 0) return 'Your plan limits are unavailable. Refresh before saving.';
   if (images.length < 1) return 'Add at least one clear image.';
   if (images.length > policy.max_images) return `Your plan allows ${policy.max_images} image(s) per post. Remove images or upgrade.`;
   if (videos.length > policy.max_videos) return 'Your plan does not allow this many videos. Remove videos or upgrade.';
@@ -19,7 +19,8 @@ export function validatePostDraft(kind: 'listings' | 'products', draft: Provider
   if ((kind === 'listings' || draft.fulfillment_mode === 'merchant_local') && (!confirmedLocation || !Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180)) throw new Error('Capture and confirm the actual service or stock location.');
   if (kind === 'listings') {
     if (!serviceTypes.includes(draft.listing_type)) throw new Error('Choose a supported service type.');
-    if (!String(draft.city || '').trim()) throw new Error('Enter the service city.');
+    if (!String(draft.city || '').trim() || !String(draft.category || '').trim() || !String(draft.state || '').trim()) throw new Error('Enter the service category, city and state / region.');
+    if (!/^[A-Z]{2}$/.test(draft.country_code)) throw new Error('Enter a two-letter service country code.');
     // The deployed list endpoint omits contacts. Never silently clear hidden fields on PATCH.
     if (draft.id && (!Object.prototype.hasOwnProperty.call(draft, 'contact_email') || !Object.prototype.hasOwnProperty.call(draft, 'contact_phone'))) throw new Error('The server did not return the complete editable service. Open existing tools until the full-detail API is available.');
     if (!Number.isInteger(draft.capacity) || draft.capacity < 1) throw new Error('Capacity must be a positive whole number.');
@@ -30,6 +31,7 @@ export function validatePostDraft(kind: 'listings' | 'products', draft: Provider
   } else {
     if (!Number.isFinite(draft.local_selling_price) || draft.local_selling_price <= 0 || !Number.isInteger(draft.inventory_count) || draft.inventory_count < 0) throw new Error('Enter a positive price and a whole-number stock quantity.');
     if (!Array.isArray(draft.delivery_areas) || !draft.delivery_areas.length) throw new Error('Add at least one delivery area.');
+    if (!/^[A-Z]{2}$/.test(draft.inventory_country_code) || !String(draft.inventory_city || '').trim()) throw new Error('Enter a two-letter stock country and stock city.');
     if (![draft.handling_time_hours, draft.delivery_min_days, draft.delivery_max_days].every(Number.isInteger) || draft.handling_time_hours < 0 || draft.delivery_min_days < 0 || draft.delivery_max_days < draft.delivery_min_days) throw new Error('Enter valid whole-number handling and delivery times.');
   }
   if (!/^[A-Z]{3}$/.test(draft.currency_code)) throw new Error('Enter a three-letter currency code.');

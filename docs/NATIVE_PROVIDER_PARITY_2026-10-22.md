@@ -25,11 +25,11 @@ This is a reviewable first slice, not completion of the provider migration. No d
 | Existing provider capability | Native candidate | Residual work / acceptance |
 |---|---|---|
 | Current account identity/customer switching | Existing token reused; native overview | Android/iOS transitions, approval/restriction changes and stale account tests |
-| Registration/provider onboarding | Existing portal retained | Build native application form, all provider categories and driver declaration |
+| Registration/provider onboarding | Main-app auth plus native provider application | Android/iOS application and driver evidence acceptance |
 | Verification photos/review status | Native image submission and review notes | Native PDF picker, private preview, camera capture, device permission/retry acceptance |
-| Business profile/banner/avatar editing | Read-only native identity header | Native profile/media editor |
-| Product publishing/edit/archive/moderation | Existing portal retained | Native editor, media pipeline and combined tier enforcement UX |
-| Service publishing/availability/moderation | Existing portal retained | Native editor and availability |
+| Business profile/banner/avatar editing | Native full profile and image upload/removal | Device media/branding acceptance |
+| Product publishing/edit/archive/moderation | Native local create/full edit/submit/archive | Cross-border creation, advanced sale/delivery editing, device acceptance |
+| Service publishing/availability/moderation | Native create/submit/archive; full edit requires complete owner contacts | Candidate owner-contact API contract, native availability, device acceptance |
 | Subscription status/yearly quote/cancellation | Native read and owner cancellation | Native compliant purchasing, next-renewal tier choice, payment history/reconciliation |
 | Customer ordinary messaging/photos/replies | Existing portal retained | Full native provider inbox/thread reuse, optimistic delivery/history ownership and push acceptance |
 | Town Hall discovery/join/respond | Existing portal retained | Capability-aware native provider participation; never request creation |
@@ -58,6 +58,12 @@ Publishing validation passed: full nested payload preservation, service missing-
 The candidate now provides a native application form for all six server provider categories, including custom work and the driver declaration. It uses the existing authenticated identity, posts the existing `/providers/onboarding` contract and then directs applicants to the native Documents workflow. Existing customer data is untouched. Validation covers business/contact details, country code and optional HTTPS website. It has no automatic mutation retry and offers account refresh after an interrupted submission. A 404 does not automatically create or reactivate anything; the user explicitly submits an application and server ownership/access rules still apply.
 
 `node scripts/test-provider-onboarding.cjs` covers category normalization, same-account ownership payload and driver declaration. This supersedes the initial matrix's onboarding row: registration/authentication itself remains the existing main-app authentication flow, while provider application submission is now native behind the same candidate flag.
+
+### Native profile/media follow-on
+
+Business profile editing and avatar/banner upload/removal now use native controls. The full profile write preserves every editable contact/address field and fetches current `logo_url` immediately before saving, preventing a text edit from reverting a newly changed or removed avatar. Private verification media is never repurposed as public branding: the existing server route enforces provider-owned `logo`/`banner` prefixes and validates uploaded objects. Branding images are capped at 5 MB and app bearer credentials are not forwarded to storage.
+
+`node scripts/test-provider-profile.cjs` passed for fresh branding preservation, complete write fields, permission-field exclusion and validation. This remains behind the candidate flag and needs Android/iOS upload, cropping, light/dark and large-text acceptance. Source changes do not count as device-tested parity.
 
 The native UI is not the authorization boundary. Document registration permissions are owner/manager in the Go handler; renewal management is owner-only. A suspended provider may receive 403/404 from existing backend access rules; native code does not interpret that as permission to reactivate or create an account. A missing profile displays a neutral setup/access message and preserves existing tools.
 

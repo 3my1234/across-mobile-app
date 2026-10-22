@@ -2,6 +2,7 @@ export type ProviderAccount = {
   id: string; business_name: string; verification_status: string; verification_notes?: string;
   is_active: boolean; is_driver?: boolean; contact_email?: string; contact_phone?: string;
   can_sell_products?: boolean; can_offer_services?: boolean;
+  description?: string; website_url?: string; address_line?: string; city?: string; state?: string; country_code?: string;
   provider_identity?: {avatar_url?: string; banner_url?: string; tier?: string};
   subscription?: {status: string; current_period_end?: string; billing_mode?: string};
 };
@@ -25,5 +26,5 @@ export function nativeProviderView(route: string) {
   const view = query.get('view') || 'overview';
   // Preserve deep links into tools that have not migrated; never silently land elsewhere.
   if (['conversation', 'shared', 'hall', 'ticket', 'event', 'notification'].some(key => query.has(key))) return 'legacy';
-  return ['overview', 'verification', 'subscription', 'products', 'listings'].includes(view) ? view : 'legacy';
+  return ['overview', 'profile', 'verification', 'subscription', 'products', 'listings'].includes(view) ? view : 'legacy';
 }
