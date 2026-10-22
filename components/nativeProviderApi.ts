@@ -1,7 +1,7 @@
 import {API_URL} from './config';
 import {fetchJSONWithTimeout} from './utils';
 export class ProviderRequestError extends Error {
-  constructor(public status: number, message: string) { super(message); }
+  constructor(public status: number, message: string, public requestID = '') { super(requestID ? `${message} (Request ${requestID})` : message); }
 }
 export async function providerRequest(token: string, path: string, options: RequestInit = {}) {
   if (!path.startsWith('/providers/') && path !== '/marketplace/subscription-plans') throw new Error('Unsupported provider operation');
@@ -9,8 +9,12 @@ export async function providerRequest(token: string, path: string, options: Requ
     const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1${path}`, {
       ...options, cache: 'no-store', headers: {...options.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
     }, path.endsWith('/videos/complete') ? 90000 : options.method === 'POST' && /\/subscription-(renewal|checkout|confirm)$/.test(path) ? 45000 : 15000);
-    if (!response.ok) throw new ProviderRequestError(response.status,
-      typeof body?.message === 'string' ? body.message : typeof body?.error === 'string' ? body.error : 'This operation could not complete. Please retry.');
+    if (!response.ok) {
+      const rawID = response.headers?.get('X-Request-ID') || '';
+      const requestID = /^[a-zA-Z0-9-]{1,80}$/.test(rawID) ? rawID : '';
+      throw new ProviderRequestError(response.status,
+        typeof body?.message === 'string' ? body.message : typeof body?.error === 'string' ? body.error : 'This operation could not complete. Please retry.', requestID);
+    }
     return body;
   } catch (error) {
     if (error instanceof ProviderRequestError) throw error;

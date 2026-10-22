@@ -63,6 +63,10 @@ function load(path, dependencies = {}, globals = {}) {
   await assert.rejects(api.providerRequest('member', '/providers/me/subscription-renewal'), error => error.status === 403 && error.message === 'Owner access required');
   assert.equal(calls.length, 2, 'denied mutation is never automatically replayed');
   await assert.rejects(api.providerRequest('token', 'https://other.test'), /Unsupported/);
+  next = {response: {ok: false, status: 503, headers: {get: () => 'synthetic-request-id'}}, body: {message: 'Temporarily unavailable'}};
+  await assert.rejects(api.providerRequest('token', '/providers/me'), error => error.requestID === 'synthetic-request-id' && error.message.includes('Request synthetic-request-id'));
+  next.response.headers.get = () => 'unsafe token=value';
+  await assert.rejects(api.providerRequest('token', '/providers/me'), error => error.requestID === '' && !error.message.includes('token=value'));
   calls = [];
   await api.putProviderPhoto('https://storage.example.test/photo?signature=test', 'file:///selected.jpg', 'image/jpeg');
   assert.equal(calls.length, 2);

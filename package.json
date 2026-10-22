@@ -18,7 +18,9 @@
     "test:checkout": "node scripts/test-cart-review.cjs",
     "test:notifications": "node scripts/test-notification-setup.cjs",
     "ios": "expo run:ios",
-    "test:theme": "node scripts/test-theme.cjs"
+    "test:theme": "node scripts/test-theme.cjs",
+    "check:provider-staging": "node scripts/check-provider-staging.cjs",
+    "eas-build-pre-install": "node scripts/check-provider-staging.cjs --eas-hook"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",

@@ -1,4 +1,5 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL ?? "https://api.atlxpres.com";
+import {resolveAPIEnvironment} from './apiEnvironment';
+export const API_URL = resolveAPIEnvironment(process.env.EXPO_PUBLIC_APP_ENV, process.env.EXPO_PUBLIC_PROVIDER_STAGING_API_URL, process.env.EXPO_PUBLIC_API_URL);
 export const TOKEN_KEY = "across.accessToken";
 export const EXPIRY_KEY = "across.accessTokenExpiresAt";
 export const CART_KEY = "across.cart.v1";
