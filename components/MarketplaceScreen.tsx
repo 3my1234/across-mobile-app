@@ -161,7 +161,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const conversationsRead = useRef<{actor: string | null; generation: number} | null>(null);
   const conversationRef = useRef(selectedConversation); conversationRef.current = selectedConversation;
   const [selected, setSelected] = useState<Listing | null>(null);
- useEffect(()=>{let alive=true;if(initialListingId)void fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings/${encodeURIComponent(initialListingId)}`).then(({response,body})=>{if(!response.ok)throw Error('Service unavailable');if(alive){recordDiscoveryDetail(token,'service',initialListingId,[body.category||'']);void openListing(body);}}).catch(()=>{if(alive)Alert.alert('Service unavailable','Refresh and choose another listing.');});return()=>{alive=false;};},[initialListingId,token]);
+ const discoveryListingRead=useRef(0),discoveryVisible=useRef(discoveryActive);discoveryVisible.current=discoveryActive;
+ async function openDiscoveryService(id:string){const request=++discoveryListingRead.current,actor=token;try{const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings/${encodeURIComponent(id)}`);if(request!==discoveryListingRead.current||chatActor.current!==actor||!discoveryVisible.current)return;if(!response.ok||body.id!==id)throw Error('Service unavailable');await openListing(body);}catch{if(request===discoveryListingRead.current&&chatActor.current===actor)Alert.alert('Service unavailable','Refresh and choose another listing.');}}
+ useEffect(()=>{if(initialListingId)void openDiscoveryService(initialListingId);return()=>{discoveryListingRead.current++;};},[initialListingId,token]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [type, setType] = useState("");
   const [search, setSearch] = useState("");
@@ -716,7 +718,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               </View>
             )}
           </View>
-          <DiscoverySections owner={token} country={selected.country_code||country} city={selected.city} active={discoveryActive} sourceKind="service" sourceID={selected.id} topics={[selected.category]} onOpen={card=>{void openDiscovery(card,{country:selected.country_code||country,city:selected.city},product=>onOpenProduct?.(product),id=>{void fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings/${id}`).then(({response,body})=>{if(!response.ok)throw Error('Service unavailable');void openListing(body);}).catch(()=>Alert.alert('Service unavailable','Choose another listing.'));}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>
+          <DiscoverySections owner={token} country={selected.country_code||country} city={selected.city} active={discoveryActive} sourceKind="service" sourceID={selected.id} topics={[selected.category]} onOpen={card=>{void openDiscovery(card,{country:selected.country_code||country,city:selected.city},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>
         </ScrollView>
       </KeyboardFrame>
     );
@@ -748,7 +750,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               style={styles.results}
               data={items}
               keyExtractor={item => item.id}
-              ListHeaderComponent={<DiscoverySections owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings/${id}`).then(({response,body})=>{if(response.ok)void openListing(body);});}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
+              ListHeaderComponent={<DiscoverySections owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
               numColumns={2}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadListings(true)} tintColor="#FF4747" />}
               onEndReached={() => { if (listingCursor && !loadingMore) void loadListings(false, listingCursor); }}
