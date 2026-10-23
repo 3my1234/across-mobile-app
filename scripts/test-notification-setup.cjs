@@ -77,7 +77,7 @@ async function main() {
   assert.equal(presentation.shouldPlaySound,true);assert.equal(presentation.shouldShowBanner,true);assert.equal(presentation.shouldShowList,true);
   presentation=await foregroundHandler.handleNotification({request:{content:{data:{sound_enabled:false}}}});
   assert.equal(presentation.shouldPlaySound,false);
-  assert.doesNotMatch(app, /testNotificationSound|notificationTestBusy|Test sound/);
+  assert.doesNotMatch(app, /testNotificationSound|Test sound/, 'do not simulate successful remote notification delivery with local audio');
   const channelSource=read('components/notificationChannels.ts');
   const channels=[];
   const configContext=vm.createContext({exports:{},require:()=>({AndroidImportance:{MAX:7,DEFAULT:5},AndroidAudioUsage:{NOTIFICATION:5},AndroidAudioContentType:{SONIFICATION:4},setNotificationChannelAsync:async(id,config)=>channels.push({id,config})})});
@@ -90,6 +90,20 @@ async function main() {
   state.Platform.OS='ios';state.sessionTokenRef.current='buyer';muted=false;
   await context.registerPushNotifications('buyer',true,true);
   assert.equal(posts.at(-1).notification_channel,undefined,'iOS uses the payload sound, not Android channels');
+  context.token='buyer';context.notificationSoundEnabled=true;context.notificationTestFlight={current:false};
+  let testBusy=false,testPosts=0,releaseTest;
+  context.setNotificationTestBusy=value=>{testBusy=value;};
+  const originalFetch=context.fetchJSONWithTimeout;
+  const held=new Promise(resolve=>{releaseTest=resolve;});
+  context.fetchJSONWithTimeout=async(url,init)=>{
+    if(!url.endsWith('/notifications/test-push'))return originalFetch(url,init);
+    testPosts++;assert.equal(init.headers.Authorization,'Bearer buyer');assert.equal(JSON.parse(init.body).token,'expo-token');
+    await held;return {response:{ok:true},body:{queued:true}};
+  };
+  const testOne=context.sendNotificationTest(),testTwo=context.sendNotificationTest();
+  await new Promise(resolve=>setTimeout(resolve,20));assert.equal(testPosts,1,'double taps must queue only one test for the registered phone');assert.equal(testBusy,true);
+  releaseTest();await Promise.all([testOne,testTwo]);assert.equal(testBusy,false);assert.match(status,/Queued does not confirm delivery or sound/);
+  context.notificationSoundEnabled=false;await context.sendNotificationTest();assert.equal(testPosts,1,'muted test cannot queue a notification');assert.match(status,/Turn notification sound on/);
   console.log('Whole/fractional prices, push-registration retries, muted-channel diagnostics, serialized preferences and stale-session regressions passed.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,0 +1,43 @@
+# Provider migration sign-off
+
+23 October 2026, Africa/Lagos. Verdict: NOT YET signed off as complete and working. No APK installation link exists yet. This is a control-by-control source audit plus implementation updates, not device acceptance or permission to stop the PWA.
+
+## Answers to the requested checks
+
+1. **Full PWA parity: NO unconditional sign-off.** All main business workflows have native code. This audit found and closed missing catalogue status filters, video preview, address search, overview summary and the phone notification-test action. Literal in-form map clicking/dragging remains different: native currently offers GPS, explicit native address lookup/results, manual coordinate adjustment and external Maps verification. The PWA browser-test per-delivery timeline is not the same as native notification testing; native now reports queue acceptance honestly, not confirmed phone delivery/sound. These are the identified remaining source/UI parity differences. A fully functioning existing-service editor also requires the small private API read described below; that is an integration/deployment gap, not a new business feature. Real-device acceptance is still separate and outstanding.
+2. **Native navigation: YES for the enabled native candidate.** Account opens the provider workspace; overview reaches Documents, Products, Services, Subscriptions, Requests, previous paid orders/manifests, Driver, Chat/Town Hall and shared Support/settings. Essential candidate tools do not link into the provider WebView. Existing default release profiles/older APKs still use the guarded legacy path until enabled in a reviewed build; do not claim those installed apps have migrated already.
+3. **Backend reuse:** existing account/onboarding, profile/media/evidence, product/service writes, limits, availability, requests, driver leases, subscriptions/renewal/confirmation, orders/bulk/manifests, messages/Town Hall/Support and native test-push APIs exist in last reported deployed source57411f0. No replacement payment/database/account system. Source compatibility does not prove today's live revision or actual device success.
+4. **Necessary API additions:** complete private GET /providers/me/listings/:id prevents existing contacts being cleared by an edit; optional request_id on existing scoped request list locates notification targets. Other business APIs are reused. The minimal independent alternative is [draft backend PR70](https://github.com/3my1234/across-backend-api/pull/70), branch fix/provider-mobile-compat, source00986a6. It is based on57411f0 and excludes PR66's Redis/proxy/bootstrap/migration/runtime changes. It needs no schema migration. PR69 remains the stacked alternative; do not deploy/merge both copies without reconciliation. Local Go compilation passed; isolated PostgreSQL private ownership/filter CI39882349156 and provider/payment policy CI job120182422901 pass; API/worker image CI is tracked separately.
+5. **GitHub/EAS:** mobile work is retained on the existing draft PR49 branch. Existing application ID com.atlanticexpress.mobile and across scheme remain. Normal EAS building is possible without automated SSH or a new server. A reviewed compatible API target, native/direct build flags, signing/quota check and approval for any production-connected build/test are required. The existing preview profile points to production and leaves the native flag off; running it unchanged does not deliver the native migration. The separate provider-staging profile is prepared but has no deployed target. EAS login works. No EAS build, signing change, production call/write or paid resource was triggered.
+6. **Coolify provider resource: NOT cleared for removal.** Repository source is a static Nginx frontend, not the Go API/worker. Actual saved Coolify configuration, mounts, custom networking/labels and runtime content are UNKNOWN because existing automated SSH authentication fails. Public provider HTTPS inspection also failed in the browsing tool. Neither failure proves the resource is down. A prepared sanitized read-only collector is available at qualification/inspect_provider_runtime.py; it does not print env, raw labels/commands or configuration contents and has not been run on the server.
+
+## Source evidence for provider-resource dependencies
+
+| Dependency | Evidence | Retirement implication |
+|---|---|---|
+| Static frontend | admin-web/Dockerfile.provider uses nginx:stable-alpine; provider-nginx.conf serves files on8080 with no source proxy_pass | Source does not host Go business APIs; actual deployed overrides still need verification |
+| Older installed APKs | mobile/components/LegacyProviderWorkspace.tsx and providerWorkspacePolicy.ts open provider.atlxpres.com; existing flag-disabled profiles select legacy | Upgrade/transition existing clients before removing the resource |
+| Provider welcome emails | backend internal/services/email.go uses ProviderPortalURL; config defaults to provider.atlxpres.com | Change or preserve the destination before removal; old sent emails remain in circulation |
+| PWA-started payments | admin-web/provider.js saves current web location as checkout redirect_url | Preserve compatible return handling for outstanding/old checkout links; Flutterwave webhook processing remains on the API |
+| Installed PWA/browser notifications | provider-sw.js handles push/click destinations under that origin | Migrate users and handle old service workers/browser push registrations without deleting native registrations |
+| Browser/desktop/iPhone access | provider HTML, manifest, service worker and web links | Removing web business management is a product decision; Android-only acceptance does not replace iPhone/desktop access |
+| Authentication/public links | Existing source origin allowlist and portal links; actual Privy/identity and deployed callback settings not accessible | Audit actual allowed redirects/callbacks/marketing links; do not infer absence from source |
+
+## Retirement checklist (after mobile acceptance and explicit approval)
+
+- [ ] Complete the accepted source/UI parity scope and Android/iOS provider journeys, including existing data, expired plans, media, payments, messages, notification taps and permissions.
+- [ ] Verify actual provider Coolify resource identity/image/command/mounts, all domains/redirects, network dependencies and saved deployment configuration. Retain a rollback copy.
+- [ ] Confirm that no API, worker, database, Redis, private document storage or shared service is being removed with the frontend.
+- [ ] Confirm how existing providers on old APKs, installed PWAs, iPhones and desktop browsers will continue or upgrade. Obtain the owner's product decision on removing web management.
+- [ ] Replace provider welcome/onboarding links with an appropriate HTTPS app landing destination; retain useful handling of previously sent links.
+- [ ] Preserve subscription browser-return routes until affected checkouts are reconciled/retired safely; keep API webhooks and verification untouched.
+- [ ] Review actual auth callback allowlists, public/marketing links, static asset use and native deep-link fallbacks. Provide redirect/landing handling where necessary.
+- [ ] Transition service-worker caches/browser push subscriptions deliberately; do not disable users' native notification tokens or delete account/message records.
+- [ ] Observe native adoption and failures, retain a tested provider frontend rollback image/config and choose a retirement window.
+- [ ] Obtain explicit approval, then disable only the provider frontend deployment/resource. Do not delete server volumes, shared resources or the backend. Verify API, native clients and retained links after the change.
+
+## Executable next step
+
+Finish/accept the remaining location-picker and diagnostic UI scope, qualify the minimal API patch, then approve only the compatible backend rollout/API target and ONE native-enabled EAS APK. Existing operator-run SSH commands are valid; automated key access is not mandatory. Do not spend time recreating the whole infrastructure programme as a prerequisite. Keep production and the PWA running until separately authorized changes and acceptance.
+
+Local validation for the parity additions: TypeScript, targeted ESLint and17 provider suites (including address-search deadlines, safe video URLs and actual same-phone notification-test request with duplicate-tap protection) pass. No real push test was sent by the agent. Android bundle qualification and current CI are tracked with exact revisions; previous native compilation does not prove these new device interactions work.

@@ -254,6 +254,9 @@ function AcrossApp() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationStatus, setNotificationStatus] = useState("");
+  const notificationTestFlight = useRef(false);
+  const [notificationTestBusy, setNotificationTestBusy] = useState(false);
+  useEffect(() => {setNotificationTestBusy(false);}, [token]);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
@@ -716,6 +719,21 @@ function AcrossApp() {
     })();
     pushSetupFlight.current = setup;
     try { return await setup; } finally { if (pushSetupFlight.current === setup) pushSetupFlight.current = null; }
+  }
+
+  async function sendNotificationTest() {
+    if (!token || notificationTestFlight.current) return;
+    const actor = token, version = soundPreferenceVersion.current;
+    if (!notificationSoundEnabled) {setNotificationStatus('Turn notification sound on before sending a test.'); return;}
+    notificationTestFlight.current = true; setNotificationTestBusy(true);
+    try {
+      if (!await registerPushNotifications(actor, true, true) || actor !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return;
+      const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/test-push`, {method: 'POST', headers: {Authorization: `Bearer ${actor}`, 'Content-Type': 'application/json'}, body: JSON.stringify({token: pushTokenRef.current})}, 15000);
+      if (actor !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return;
+      if (!response.ok || body?.queued !== true) throw Error(typeof body?.message === 'string' ? body.message : 'The notification test could not be queued.');
+      setNotificationStatus('Test queued for this phone. Queued does not confirm delivery or sound. Check the phone notification; if silent, check phone settings. Wait 30 seconds before another test.');
+    } catch (failure) {if (actor === sessionTokenRef.current && version === soundPreferenceVersion.current) setNotificationStatus(failure instanceof Error ? failure.message : 'Notification test failed. Retry when connected.');}
+    finally {notificationTestFlight.current = false; if (actor === sessionTokenRef.current) setNotificationTestBusy(false);}
   }
 
   async function markNotificationRead(id: string, reload = true) {
@@ -2232,7 +2250,7 @@ function AcrossApp() {
           <Pressable style={[s.quickLinkCard,{marginBottom:12}]} onPress={()=>{setShowSettings(false);setShowPaymentHistory(false);setActiveTab('account');setEditingProfile(true);}}><AccountIcon name="person-outline"/><Text style={{flex:1,fontWeight:'700'}}>Edit profile and contact details</Text><Ionicons name="chevron-forward" size={18} color={accountColors.text}/></Pressable>
           <View style={accountCard}><AccountSectionHeading icon="color-palette-outline" title="Appearance" subtitle="Choose a theme or follow your phone settings."/><View accessibilityRole="radiogroup" style={{flexDirection:'row',gap:8}}>{(['system','light','dark'] as const).map(choice=><Pressable key={choice} accessibilityRole="radio" accessibilityState={{checked:theme.preference===choice}} accessibilityLabel={choice+' appearance'} onPress={()=>theme.setPreference(choice)} style={[accountDesign.themeTile,{backgroundColor:theme.preference===choice?accountColors.soft:accountColors.background,borderColor:theme.preference===choice?accountColors.accent:accountColors.line}]}><Ionicons name={choice==='system'?'desktop-outline':choice==='light'?'sunny-outline':'moon-outline'} size={25} color={accountColors.text}/><Text style={{fontSize:12,fontWeight:'600'}}>{choice[0].toUpperCase()+choice.slice(1)}</Text>{theme.preference===choice&&<Ionicons name="checkmark-circle" size={16} color={accountColors.accent} style={{position:'absolute',top:6,right:6}}/>}</Pressable>)}</View></View>
           <View style={accountCard}><View style={{flexDirection:'row',alignItems:'center',gap:10}}><View style={{flex:1}}><AccountSectionHeading icon="notifications-outline" title="Notification sound" subtitle="Play a sound for orders, messages, services and account updates."/></View><Switch accessibilityLabel="Notification sound" value={soundEnabled} trackColor={{false:accountColors.line,true:'#087B58'}} thumbColor="#FFFFFF" onValueChange={()=>void toggleNotificationSound()}/></View>
-            {!!notificationStatus&&<View style={[accountDesign.action,{backgroundColor:accountColors.soft,borderColor:accountColors.line}]}><Text accessibilityRole="alert" style={[accountDesign.caption,{color:accountColors.text,flex:1}]}>{notificationStatus}</Text></View>}
+            <Pressable accessibilityRole="button" disabled={notificationTestBusy || !token} onPress={()=>void sendNotificationTest()} style={[accountDesign.action,{backgroundColor:accountColors.soft,borderColor:accountColors.line,opacity:notificationTestBusy?.5:1}]}><Text>{notificationTestBusy ? 'Preparing test...' : 'Send a test to this phone'}</Text></Pressable>{!!notificationStatus&&<View style={[accountDesign.action,{backgroundColor:accountColors.soft,borderColor:accountColors.line}]}><Text accessibilityRole="alert" style={[accountDesign.caption,{color:accountColors.text,flex:1}]}>{notificationStatus}</Text></View>}
             <Pressable style={[accountDesign.action,{backgroundColor:accountColors.background,borderColor:accountColors.line}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert('Phone settings','Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Messages and updates.'))}><Ionicons name="phone-portrait-outline" size={21} color={accountColors.text}/><Text style={{flex:1,fontWeight:'600'}}>Phone settings</Text><Ionicons name="open-outline" size={18} color={accountColors.text}/></Pressable><Text style={[accountDesign.body,{color:accountColors.muted}]}>Allow Atl notifications, enable sound for Messages and updates, and check your notification volume and Do Not Disturb setting.</Text></View>
           <View style={accountCard}><AccountSectionHeading icon="shield-checkmark-outline" title="Privacy and storage" subtitle="Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy."/>{token&&<ReadReceiptSetting token={token} active={showSettings}/>}<Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Ionicons name="trash-outline" size={20} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Clear local chat history</Text></Pressable></View>
           <Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{setShowSettings(false);void logout();}}><Ionicons name="log-out-outline" size={21} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Sign out</Text></Pressable>

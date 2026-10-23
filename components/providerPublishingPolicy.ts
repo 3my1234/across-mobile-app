@@ -1,5 +1,10 @@
 export type PostPolicy = {post_limit: number; max_images: number; max_videos: number; max_video_seconds: number; town_hall: boolean; visibility: string};
 export type ProviderPost = Record<string, any>;
+export function providerVideoPreviewURL(raw: string) {
+  const url = new URL(raw);
+  if (url.protocol !== 'https:' || url.username || url.password) throw Error('This video preview is unavailable. Refresh the post before trying again.');
+  return url.href;
+}
 export function deliveryAreaPayload(form: {country: string; state: string; city: string; currency: string; fee: string; itemPrice: string; primary: boolean; confirmed: boolean}, product: ProviderPost) {
   const country = form.country.trim().toUpperCase(), currency = form.currency.trim().toUpperCase();
   const state = form.state.trim().toLowerCase().replace(/\s+/g, ' '), city = form.city.trim().toLowerCase().replace(/\s+/g, ' ');

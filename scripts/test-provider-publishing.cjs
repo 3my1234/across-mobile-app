@@ -6,6 +6,8 @@ function compile(code, globals = {}) {
 }
 (async () => {
   const policy = compile(fs.readFileSync('components/providerPublishingPolicy.ts', 'utf8'));
+  assert.equal(policy.providerVideoPreviewURL('https://media.example.test/video.mp4'), 'https://media.example.test/video.mp4');
+  for (const url of ['javascript:alert(1)', 'http://media.example.test/video.mp4', 'https://user:secret@media.example.test/video.mp4']) assert.throws(() => policy.providerVideoPreviewURL(url));
   const limits = {post_limit: 20, max_images: 8, max_videos: 2, max_video_seconds: 60};
   const service = policy.makeServiceDraft({contact_email: 'example@example.test'});
   Object.assign(service, {title: 'Repair', description: 'Repair work', category: 'Repair', city: 'Test city', state: 'Test state', media_urls: ['https://storage.test/one'], latitude: 9, longitude: 7});
