@@ -1,3 +1,4 @@
+import {ProviderPostImages} from './ProviderPostImages';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Modal, Pressable, ScrollView, View} from 'react-native';
 import * as Crypto from 'expo-crypto';
@@ -51,7 +52,7 @@ export function NativeProviderOrders({token, onClose}: {token: string; onClose: 
     {editor ? <><Text style={{fontWeight: '700'}}>{editor.next.replace(/_/g, ' ')}</Text>{Object.keys(draft).map(key => <View key={key} style={{gap: 6}}><Text>{key.replace(/_/g, ' ')}</Text><Input accessibilityLabel={key.replace(/_/g, ' ')} editable={!busy} value={draft[key as keyof TrackingDraft] || ''} onChangeText={value => setDraft(old => ({...old, [key]: value}))} autoCapitalize={key === 'tracking_url' ? 'none' : 'sentences'} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/></View>)}{button('Review and publish update', save)}</> : <>
       {button('Bulk orders and manifests', () => setTools(true), loading)}<Text>Estimated delivery dates use YYYY-MM-DD and your phone?s local time (HH:MM).</Text>{items.map(order => <View key={order.id} style={{padding: 16, gap: 8, borderWidth: 1, borderColor: c.line, borderRadius: 16, backgroundColor: c.surface}}>
         <Text style={{fontSize: 17, fontWeight: '700'}}>{order.package_label || order.id}</Text><Text>{order.fulfillment?.status || order.status} · {order.currency_code} {order.total_amount}</Text>
-        {(order.items || []).map((item, index) => <Text key={index}>{item.title} · {item.quantity} × {order.currency_code} {item.unit_price}</Text>)}
+        {(order.items || []).map((item, index) => <View key={index}><ProviderPostImages title={item.title} urls={item.product_snapshot?.image_urls}/><Text>{item.title} · {item.quantity} × {order.currency_code} {item.unit_price}</Text></View>)}
         <Text>{order.fulfillment_contact?.full_name} · {order.fulfillment_contact?.phone}</Text><Text>{[order.fulfillment_contact?.address, order.fulfillment_contact?.city, order.fulfillment_contact?.state].filter(Boolean).join(', ')}</Text>
         <Text>Seller funds: {order.seller_funds?.status || 'pending'}</Text>{!!order.seller_funds?.note && <Text>{order.seller_funds.note}</Text>}
         {order.fulfillment?.route === 'merchant_cross_border' && order.seller_funds?.status !== 'settled' && <Text>Seller funds are not confirmed as settled. Do not purchase or dispatch this imported item yet.</Text>}

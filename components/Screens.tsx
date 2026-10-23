@@ -95,7 +95,7 @@ export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCo
   const [authKeyboardVisible, setAuthKeyboardVisible] = useState(false);
   const authScrollRef = useRef<ScrollView | null>(null);
   const isWelcome = mode === "welcome";
-  const title = mode === "signin" ? "Welcome back" : "Create your Atlantic Express account";
+  const title = mode === "signin" ? "Welcome back" : workspaceIntent === "provider" ? "Register as a provider" : "Create your Atlantic Express account";
 
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setAuthKeyboardVisible(true));
@@ -108,9 +108,11 @@ export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCo
 
   async function submit() {
     if (mode === 'signup' && workspaceIntent === 'auto') {Alert.alert('Choose how to get started', 'Choose Customer or Provider. You can use both with the same account.'); return;}
+    if (mode === 'signup' && (!fullName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) {Alert.alert('Check your details', 'Enter your full name and a valid email address.'); return;}
+    if (mode === 'signup' && workspaceIntent === 'provider' && !phone.trim()) {Alert.alert('Phone required', 'Enter your phone number to register as a provider.'); return;}
     if(mode==='signup'&&(password.length<8||password.length>72||!/[A-Z]/.test(password)||!/[a-z]/.test(password)||!/[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/.test(password))){Alert.alert('Choose a stronger password','Use at least 8 characters, including an uppercase letter, a lowercase letter and a special character such as !@#$.');return;}
     if (mode === "signin") await onSubmit("/api/v1/auth/login", { email, password });
-    else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password });
+    else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password, ...(workspaceIntent === 'provider' ? {registration_context: 'provider'} : {}) });
   }
 
   function revealAuthForm(target: number) {
@@ -178,8 +180,10 @@ export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCo
                 <Text style={s.authFormCopy}>{mode === "signin" ? "Sign in with your existing customer or provider account. Your workspace opens automatically." : "How would you like to use Atlantic Express? You can use both experiences with one account."}</Text>
                 {mode === 'signup' && <View style={{gap: 10, marginBottom: 16}}>{([['customer', 'Customer', 'Shop products, book services and create Town Hall requests.'], ['provider', 'Provider', 'Sell products, offer services and manage your business.']] as const).map(([value, label, copy]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{checked: workspaceIntent === value, disabled: busy}} disabled={busy} onPress={() => onWorkspaceIntent(value)} style={[s.secondaryButton, {alignItems: 'flex-start', borderColor: theme.color(workspaceIntent === value ? COLORS.primary : '#D0D5DD', 'borderColor'), borderWidth: workspaceIntent === value ? 2 : 1}]}><Text style={s.secondaryButtonText}>{label}{workspaceIntent === value ? ' - selected' : ''}</Text><Text style={s.authFormCopy}>{copy}</Text></Pressable>)}</View>}
                 {(mode !== 'signup' || workspaceIntent !== 'auto') && <>
+                {mode === 'signup' && workspaceIntent === 'provider' && <Text style={s.authFormCopy}>Register with your name, phone, email and password. Verify your email, then return to this app and sign in with the same email and password to complete your business profile and documents.</Text>}
+                {mode === 'signup' && workspaceIntent === 'customer' && <Pressable accessibilityRole="button" disabled={googleBusy} onPress={onGoogle} style={s.gmailButton}><Text style={s.gmailButtonText}>Sign in with Google</Text></Pressable>}
                 {mode === "signup" && !!noticeText && <Text style={s.authFormCopy}>{noticeText}</Text>}
-                {mode === "signup" && <><Text style={s.authFormCopy}>Delivery country and checkout currency</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: theme.color(countryCode === market.country_code ? COLORS.primary : "#D0D5DD", "borderColor") }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
+                {mode === "signup" && <><Text style={s.authFormCopy}>{workspaceIntent === "provider" ? "Your country" : "Delivery country and checkout currency"}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: theme.color(countryCode === market.country_code ? COLORS.primary : "#D0D5DD", "borderColor") }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}

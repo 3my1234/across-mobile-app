@@ -12,12 +12,13 @@ const react = {
 const modules = {
   react,
   'react-native': {ActivityIndicator: 'Spinner', Alert: {alert() {}}, Linking: {}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'Scroll', StyleSheet: {create: value => value}, Switch: 'Switch', View: 'View'},
-  'expo-image-picker': {},
+  'expo-image-picker': {}, 'expo-crypto': {}, './providerOrderPolicy': {providerOrderActions: () => []}, './NativeProviderFulfillmentTools': {},
   'react-native-safe-area-context': {useSafeAreaInsets: () => ({top: 12, bottom: 16})},
   './ThemeProvider': {ThemedText: 'Text', ThemedTextInput: 'Input'},
   './AccountDesign': {useAccountDesign: () => ({})},
   './nativeProviderApi': {providerRequest: async (token, path, options) => {
     calls.push({token, path, options});
+    if (path.startsWith('/providers/me/merchant-orders')) return {items: [{id: 'saved-order', items: [{title: 'Saved product', quantity: 1, unit_price: 500, product_snapshot: {image_urls: photos}}]}]};
     if (path === '/providers/me/post-policy') return {post_limit: 20, max_images: 8, max_videos: 2, max_video_seconds: 60};
     return {items: [{id: 'synthetic-post', title: 'Existing business post', image_urls: photos, media_urls: photos.slice(0, 2), moderation_status: 'approved', status: 'approved'}]};
   }},
@@ -32,6 +33,7 @@ function load(path) {
   return context.exports;
 }
 const {NativeProviderCatalog} = load('components/NativeProviderCatalog.tsx');
+const {NativeProviderOrders} = load('components/NativeProviderOrders.tsx');
 const {ProviderPostImages} = load('components/ProviderPostImages.tsx');
 const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...(node.children || []).flatMap(nodes)];
 const text = node => typeof node === 'string' || typeof node === 'number' ? String(node) : node?.children?.map(text).join('') || '';
@@ -48,6 +50,11 @@ async function settle() {for (let i = 0; i < 6; i++) {await new Promise(resolve 
     assert.ok(calls.every(call => call.token === 'synthetic-owner' && !call.options?.method), 'image previews only read the existing owner catalogue');
   }
   reset();
+  function renderOrders() {index = 0; effects = []; changed = false; tree = NativeProviderOrders({token: 'synthetic-owner', onClose() {}}); effects.forEach(fn => fn());}
+  renderOrders();for(let i=0;i<6;i++){await new Promise(resolve=>setImmediate(resolve));if(changed)renderOrders();}
+  assert.deepEqual(nodes(tree).find(n=>n.type==='Gallery').props.urls,photos,'previous paid order renders original saved product photos');
+  assert.ok(calls.every(call=>call.token==='synthetic-owner'&&!call.options?.method));
+  reset();
   const draw = urls => {index = 0; return ProviderPostImages({urls, title: 'Existing business post'});};
   tree = draw([...photos, photos[0], '']);
   assert.equal(nodes(tree).filter(n => n.type === 'Photo').length, 8, 'all eight uploaded photos remain accessible, with duplicates/blank entries omitted');
@@ -56,6 +63,8 @@ async function settle() {for (let i = 0; i < 6; i++) {await new Promise(resolve 
   const modal = nodes(tree).find(n => n.type === 'Modal'); assert.ok(modal);
   const full = nodes(modal).find(n => n.type === 'Photo'); assert.equal(full.props.uri, photos[7]); assert.equal(full.props.resizeMode, 'contain');
   assert.ok(nodes(tree).filter(n => n.type === 'Photo').every(n => n.props.fallbackUri === ''), 'never replace an actual product image with unrelated stock imagery');
+  full.props.onError(); tree=draw(photos);assert.match(text(tree),/Image unavailable/);
+  nodes(tree).find(n=>n.props.accessibilityLabel==='Retry Existing business post image').props.onPress();tree=draw(photos);assert.ok(!text(tree).includes('Image unavailable'),'explicit image retry clears failure and remounts image');
   modal.props.onRequestClose(); tree = draw(photos); assert.ok(!nodes(tree).some(n => n.type === 'Modal'), 'Android back closes the enlarged image');
   reset(); assert.match(text(draw(undefined)), /No images uploaded/);
   console.log('Provider catalogue screen passed: owner product/service reads, existing photo mapping, eight-image gallery, enlargement, Android back and honest empty state.');

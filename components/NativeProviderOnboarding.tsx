@@ -5,7 +5,7 @@ import {useAccountDesign} from './AccountDesign';
 import {providerRequest} from './nativeProviderApi';
 import {ProviderApplication, providerApplicationPayload, providerTypes} from './providerOnboardingPolicy';
 
-export function NativeProviderOnboarding({token, onSaved, onRefresh}: {token: string; onSaved: () => Promise<void>; onRefresh: () => void}) {
+export function NativeProviderOnboarding({token, onSaved, onRefresh}: {token: string; onSaved: (isDriver: boolean) => Promise<void>; onRefresh: () => void}) {
   const c = useAccountDesign();
   const [form, setForm] = useState<ProviderApplication>({business_name: '', provider_type: '', provider_type_other: '', description: '', contact_email: '', contact_phone: '', website_url: '', address_line: '', city: '', state: '', country_code: 'NG', is_driver: false});
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -14,7 +14,7 @@ export function NativeProviderOnboarding({token, onSaved, onRefresh}: {token: st
   const input = (key: Exclude<keyof ProviderApplication, 'is_driver' | 'provider_type'>, label: string, multiline = false) => <View key={key} style={{gap: 6}}><Text>{label}</Text><Input accessibilityLabel={label} editable={!busy} value={form[key]} onChangeText={value => setForm(old => ({...old, [key]: value}))} multiline={multiline} autoCapitalize={key === 'contact_email' || key === 'website_url' ? 'none' : 'sentences'} keyboardType={key === 'contact_email' ? 'email-address' : key === 'contact_phone' ? 'phone-pad' : 'default'} style={{borderWidth: 1, borderColor: c.line, borderRadius: 12, padding: 12, minHeight: multiline ? 85 : 46}}/></View>;
   const submit = async () => {
     if (flight.current) return; flight.current = true; setBusy(true); setError('');
-    try {const payload = providerApplicationPayload(form); await providerRequest(token, '/providers/onboarding', {method: 'POST', body: JSON.stringify(payload)}); if (mounted.current) await onSaved();}
+    try {const payload = providerApplicationPayload(form); await providerRequest(token, '/providers/onboarding', {method: 'POST', body: JSON.stringify(payload)}); if (mounted.current) await onSaved(payload.is_driver);}
     catch (failure) {if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not submit your provider profile.');}
     finally {flight.current = false; if (mounted.current) setBusy(false);}
   };

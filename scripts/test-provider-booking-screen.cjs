@@ -23,6 +23,8 @@ const context = {exports: {}, URLSearchParams, require: name => {
   if (name === './ThemeProvider') return {ThemedText: 'Text', ThemedTextInput: 'Input'};
   if (name === './AccountDesign') return {useAccountDesign: () => ({})};
   if (name === './KeyboardFrame') return {KeyboardFrame: 'Frame'};
+  if (name === './providerBookingImages') return {loadBookingImages: async () => {}};
+  if (name === './ProviderPostImages') return {ProviderPostImages: 'Gallery'};
   if (name === './nativeProviderApi') return {providerRequest: request};
   if (name === './providerBookingPolicy') return policy;
   throw Error('Unexpected import '+name);

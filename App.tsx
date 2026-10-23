@@ -1,5 +1,5 @@
 import {ProviderEntryGate, WorkspaceIntent} from './components/ProviderEntryGate';
-import {rememberSignupWorkspace, signupWorkspaceFor, clearSignupWorkspace} from './components/workspaceIntent';
+import {rememberSignupWorkspace, signupWorkspaceFor} from './components/workspaceIntent';
 import {NativeNotificationDiagnostics} from './components/NativeNotificationDiagnostics';
 import {AccountIcon,AccountSectionHeading,XPRewardSummary,accountDesign,useAccountDesign} from './components/AccountDesign';
 import {acknowledgeNotificationDelivery} from './components/messageReceipts';
@@ -843,7 +843,8 @@ function AcrossApp() {
     sessionTokenRef.current=s.access_token;
     setToken(s.access_token);
     setStage("app");
-    void clearSignupWorkspace().catch(() => {});
+    // Retain the email-bound provider journey across sign-in and restarts;
+    // the entry gate verifies the signed-in identity before restoring it.
     // The app-stage effects own catalogue/profile loading once.
   }
 
@@ -1210,6 +1211,7 @@ function AcrossApp() {
       const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken }) });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
+      setWorkspaceIntent('auto');
       await saveSession(d); setOauthBusy(false);
     } catch (e) {
       setOauthBusy(false);

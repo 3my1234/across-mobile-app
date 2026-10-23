@@ -13,3 +13,13 @@ export async function signupWorkspaceFor(email: string): Promise<WorkspaceIntent
   } catch {return 'auto';}
 }
 export async function clearSignupWorkspace() {await SecureStore.deleteItemAsync(KEY);}
+
+// A pending provider journey survives verification, sign-in and app restarts.
+// It is only a navigation preference; confirm its email with the signed-in API.
+export async function hasPendingProviderSignup(): Promise<boolean> {
+  try {
+    const raw = await SecureStore.getItemAsync(KEY);
+    const saved = raw ? JSON.parse(raw) : null;
+    return saved?.workspace === 'provider' && typeof saved.email === 'string' && !!saved.email;
+  } catch {return false;}
+}

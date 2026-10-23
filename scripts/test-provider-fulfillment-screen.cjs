@@ -15,8 +15,8 @@ const id='11111111-1111-4111-8111-111111111111',manifest={id,manifest_code:'Synt
 const request=async(token,path,options={})=>{
  calls.push({token,path,...options});
  if(options.method==='PATCH'){if(held)await held;status='accepted';return {};}
- if(path.includes('merchant-orders'))return {items:[{id,package_label:'Synthetic parcel',fulfillment:{route:'merchant_local',owner:'merchant',status,version:1}}]};
- if(path.includes('/manifests/'))return {manifest,items:[{order_id:id,package_code:'Synthetic parcel',product:{title:'<script>bad</script>'},buyer:{full_name:'Synthetic buyer'}}]};
+ if(path.includes('merchant-orders'))return {items:[{id,items:[{title:'Saved product',product_snapshot:{image_urls:['https://media.example.test/saved.jpg']}}],package_label:'Synthetic parcel',fulfillment:{route:'merchant_local',owner:'merchant',status,version:1}}]};
+ if(path.includes('/manifests/'))return {manifest,items:[{order_id:id,package_code:'Synthetic parcel',product:{title:'<script>bad</script>',image_urls:['https://media.example.test/manifest.jpg']},buyer:{full_name:'Synthetic buyer'}}]};
  return {items:[manifest]};
 };
 const context={exports:{},URLSearchParams,Error,require:name=>{
@@ -28,6 +28,7 @@ const context={exports:{},URLSearchParams,Error,require:name=>{
  if(name==='./ThemeProvider')return {ThemedText:'Text',ThemedTextInput:'Input'};
  if(name==='./AccountDesign')return {useAccountDesign:()=>({})};
  if(name==='./KeyboardFrame')return {KeyboardFrame:'Frame'};
+ if(name==='./ProviderPostImages')return {ProviderPostImages:'Gallery'};
  if(name==='./nativeProviderApi')return {providerRequest:request};
  if(name==='./providerOrderPolicy')return policy;
  throw Error('Unexpected import '+name);
@@ -39,13 +40,13 @@ function nodes(node){return !node||typeof node!=='object'?[]:[node,...(node.chil
 const text=node=>typeof node==='string'?node:node?.children?.map(text).join('')||'';
 function button(label,root=tree){const result=nodes(root).find(node=>node.type==='Button'&&text(node)===label);assert.ok(result,'missing '+label);return result;}
 (async()=>{
- render();await settle();nodes(tree).find(node=>node.type==='Switch').props.onValueChange(true);await settle();
+ render();await settle();assert.equal(nodes(tree).find(n=>n.type==='Gallery').props.urls[0],'https://media.example.test/saved.jpg');nodes(tree).find(node=>node.type==='Switch').props.onValueChange(true);await settle();
  button('Update selected: accepted').props.onPress();assert.equal(calls.filter(call=>call.method==='PATCH').length,0);
  let release;held=new Promise(resolve=>release=resolve);const confirm=alert[2].find(item=>item.text==='Update orders').onPress;confirm();confirm();await settle();
  const writes=calls.filter(call=>call.method==='PATCH');assert.equal(writes.length,1);assert.equal(writes[0].token,'synthetic-owner');assert.equal(JSON.parse(writes[0].body).orders[0].expected_version,1);
  release();held=null;await settle();assert.equal(status,'accepted');
  button('Manifests').props.onPress();await settle();button('View and print').props.onPress();await settle();
- const list=nodes(tree).find(node=>node.type==='FlatList');assert.ok(list);const before=calls.length;
+ const list=nodes(tree).find(node=>node.type==='FlatList');assert.ok(list);const manifestRow=list.props.renderItem({item:list.props.data[0]});assert.equal(nodes(manifestRow).find(n=>n.type==='Gallery').props.urls[0],'https://media.example.test/manifest.jpg');const before=calls.length;
  button('Print manifest',list.props.ListHeaderComponent).props.onPress();await settle();assert.equal(calls.length,before+1,'printing must re-fetch owned manifest details');assert.ok(printed.includes('&lt;script&gt;'));assert.ok(!printed.includes('<script>'));
  hooks.forEach(hook=>hook?.cleanup?.());confirm();await settle();assert.equal(calls.filter(call=>call.method==='PATCH').length,1,'a dismissed confirmation cannot write after unmount');
  console.log('Native fulfillment screen passed: confirmed single-flight bulk tracking, versions, owned fresh manifest print and unmounted-action protection.');

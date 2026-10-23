@@ -1,4 +1,4 @@
-export type ProviderBooking = {id: string; status: string; listing_title: string; request_type: string; message?: string; party_size: number; starts_at?: string; ends_at?: string; buyer?: {full_name?: string; email?: string; phone?: string}};
+export type ProviderBooking = {id: string; listing_id?: string; status: string; listing_title: string; request_type: string; message?: string; party_size: number; starts_at?: string; ends_at?: string; buyer?: {full_name?: string; email?: string; phone?: string}};
 export const bookingFilters = ['', 'pending', 'accepted', 'rejected', 'completed'] as const;
 export function bookingActions(status: string) {
   return status === 'pending' ? ['accepted', 'rejected'] : status === 'accepted' ? ['completed'] : [];

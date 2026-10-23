@@ -1,5 +1,5 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
-let hooks=[],index=0,intent='auto',mode='signup',tree;const submissions=[],alerts=[];
+let hooks=[],index=0,intent='auto',mode='signup',tree;const submissions=[],alerts=[];let googleCalls=0;
 const react={createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)})};
 const useState=initial=>{const i=index++;if(!(i in hooks))hooks[i]=initial;return [hooks[i],value=>{hooks[i]=typeof value==='function'?value(hooks[i]):value;}];};
 const source=fs.readFileSync('components/Screens.tsx','utf8');const part=source.slice(source.indexOf('export function AuthScreen('),source.indexOf('// ---- Product Detail Screen'));
@@ -7,17 +7,33 @@ const context={exports:{},React:react,useState,useEffect:()=>{},useRef:value=>({
  Keyboard:{addListener:()=>({remove(){}})},Platform:{OS:'android'},Alert:{alert:(...args)=>alerts.push(args)},COLORS:{primary:'#087B58'},MOBILE_AUTH_BACKGROUND:1,LOGO:1,setTimeout:()=>{},
  ImageBackground:'Background',View:'View',StatusBar:'StatusBar',KeyboardFrame:'KeyboardFrame',ScrollView:'Scroll',Image:'Image',Text:'Text',Pressable:'Button',TextInput:'Input',ActivityIndicator:'Spinner',Ionicons:'Icon'};
 vm.runInNewContext(ts.transpileModule(part,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React}}).outputText,context);
-function render(){index=0;tree=context.exports.AuthScreen({mode,workspaceIntent:intent,onWorkspaceIntent:value=>{intent=value;},countryCode:'NG',buyerMarkets:[],onCountryChange(){},busy:false,googleReady:true,googleTimedOut:false,googleBusy:false,onModeChange:value=>{mode=value;},onSubmit:async(path,body)=>submissions.push({path,body}),onResend:async()=>{},onForgotPassword:async()=>{},onGoogle:async()=>{}});}
+function render(){index=0;tree=context.exports.AuthScreen({mode,workspaceIntent:intent,onWorkspaceIntent:value=>{intent=value;},countryCode:'NG',buyerMarkets:[],onCountryChange(){},busy:false,googleReady:true,googleTimedOut:false,googleBusy:false,onModeChange:value=>{mode=value;},onSubmit:async(path,body)=>submissions.push({path,body}),onResend:async()=>{},onForgotPassword:async()=>{},onGoogle:async()=>{googleCalls++;}});}
 const nodes=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flatMap(nodes)],text=n=>typeof n==='string'?n:n?.children?.map(text).join('')||'';
 const button=label=>{const n=nodes(tree).find(n=>n.type==='Button'&&text(n)===label);assert.ok(n,label);return n;};
 function input(placeholder,value){const n=nodes(tree).find(n=>n.type==='Input'&&n.props.placeholder===placeholder);assert.ok(n,placeholder);n.props.onChangeText(value);}
 (async()=>{
  render();assert.equal(nodes(tree).filter(n=>n.props.accessibilityRole==='radio').length,2);assert.ok(!nodes(tree).some(n=>n.type==='Input'),'registration asks workspace before personal details');
  nodes(tree).find(n=>n.props.accessibilityRole==='radio'&&text(n).startsWith('Provider')).props.onPress();render();assert.equal(intent,'provider');assert.ok(nodes(tree).some(n=>n.props.accessibilityState?.checked===true&&text(n).startsWith('Provider')));
- input('Full name','Synthetic owner');input('Email','owner@example.test');input('Phone','08000000000');input('Password','Password!123');render();await button('Continue').props.onPress();
- assert.equal(submissions.length,1);assert.equal(submissions[0].path,'/api/v1/auth/signup');assert.equal(submissions[0].body.email,'owner@example.test');assert.equal(submissions[0].body.role,undefined,'workspace choice must not grant a backend role');assert.equal(submissions[0].body.provider_type,undefined,'provider application remains an explicit post-auth step');
- intent='customer';render();await button('Continue').props.onPress();assert.equal(submissions[1].body.email,'owner@example.test','switching workspace must not create a second identity');
+ input('Full name','Synthetic owner');input('Email','owner@example.test');input('Phone','08000000000');input('Password','Password!123');render();
+ const passwordInput=()=>nodes(tree).find(n=>n.type==='Input'&&n.props.placeholder==='Password');assert.equal(passwordInput().props.secureTextEntry,true);nodes(tree).find(n=>n.props.accessibilityLabel==='Show password').props.onPress();render();assert.equal(passwordInput().props.secureTextEntry,false);
+ input('Phone','');render();await button('Continue').props.onPress();assert.equal(submissions.length,0);assert.equal(alerts.at(-1)[0],'Phone required');input('Phone','08000000000');render();await button('Continue').props.onPress();
+ assert.equal(submissions.length,1);assert.equal(submissions[0].path,'/api/v1/auth/signup');assert.equal(submissions[0].body.email,'owner@example.test');assert.equal(submissions[0].body.registration_context,'provider','match existing PWA provider verification context');assert.equal(submissions[0].body.role,undefined,'workspace choice must not grant a backend role');assert.equal(submissions[0].body.provider_type,undefined,'provider application remains an explicit post-auth step');
+ assert.ok(!nodes(tree).some(n=>n.type==='Button'&&text(n)==='Sign in with Google'),'provider registration retains email/password flow');
+ intent='customer';render();await button('Sign in with Google').props.onPress();assert.equal(googleCalls,1);await button('Continue').props.onPress();assert.equal(submissions[1].body.email,'owner@example.test','switching workspace must not create a second identity');
  input('Password','weak');render();await button('Continue').props.onPress();assert.equal(submissions.length,2);assert.match(alerts.at(-1)[0],/stronger password/);
  mode='signin';intent='auto';input('Password','Password!123');render();assert.equal(nodes(tree).filter(n=>n.props.accessibilityRole==='radio').length,0,'existing users are detected automatically');await button('Sign In').props.onPress();assert.equal(submissions.at(-1).path,'/api/v1/auth/login');
- console.log('Actual registration screen passed: Customer/Provider choice before form, visible selection, same identity payload, password validation and automatic existing-account sign-in.');
+ // Exercise the real App auth coordinator through queued verification and login.
+ const app=fs.readFileSync('App.tsx','utf8'),ast=ts.createSourceFile('App.tsx',app,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let coordinator;
+ function visit(node){if(ts.isFunctionDeclaration(node)&&node.name?.text==='authenticate')coordinator=node.getText(ast);ts.forEachChild(node,visit);}visit(ast);assert.ok(coordinator);
+ let verified=false;const sessions=[],requests=[],remembered=[];
+ const auth={exports:{},workspaceIntent:'provider',API_URL:'https://auth.example.invalid',catalogCountry:'NG',setBusy(){},setWorkspaceIntent:value=>{auth.workspaceIntent=value;},
+ rememberSignupWorkspace:async(email,workspace)=>remembered.push({email,workspace}),signupWorkspaceFor:async()=> 'provider',setAuthMode:value=>{mode=value;},
+ Alert:{alert:(...args)=>alerts.push(args)},saveSession:async value=>sessions.push(value),readResponseBody:async r=>r.body,formatHttpError:(_r,d)=>d.message,
+ fetch:async(url,options)=>{requests.push({url,options});if(url.endsWith('/signup'))return {ok:true,status:202,body:{requires_email_verification:true}};return verified?{ok:true,status:200,body:{access_token:'synthetic-session',expires_at:123}}:{ok:false,status:403,body:{message:'Verify your email before signing in'}};}};
+ vm.runInNewContext(ts.transpileModule(coordinator+';exports.authenticate=authenticate;',{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText,auth);
+ await auth.exports.authenticate('/api/v1/auth/signup',submissions[0].body);assert.equal(mode,'signin');assert.equal(sessions.length,0,'queued verification cannot grant a session');assert.equal(remembered[0].workspace,'provider');assert.match(alerts.at(-1)[1],/Spam\/Junk/);
+ await auth.exports.authenticate('/api/v1/auth/login',{email:'owner@example.test',password:'Synthetic-password!'});assert.equal(sessions.length,0,'unverified account remains signed out');
+ verified=true;await auth.exports.authenticate('/api/v1/auth/login',{email:'owner@example.test',password:'Synthetic-password!'});assert.equal(sessions.length,1);assert.equal(auth.workspaceIntent,'provider');
+ assert.equal(JSON.parse(requests[0].options.body).registration_context,'provider');
+ console.log('Actual registration and auth coordinator passed: provider email/password, customer Google, verification before session, same-credential login and provider continuation.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

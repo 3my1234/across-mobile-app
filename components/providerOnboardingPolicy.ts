@@ -9,6 +9,7 @@ export function providerApplicationPayload(form: ProviderApplication) {
   for (const key of Object.keys(payload) as (keyof ProviderApplication)[]) if (key !== 'is_driver') (payload[key] as string) = String(payload[key]).trim();
   payload.country_code = payload.country_code.toUpperCase();
   if (!payload.business_name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.contact_email) || !payload.contact_phone) throw new Error('Enter your business name, valid contact email and phone number.');
+  if (!payload.city || !payload.state) throw new Error('Enter your business city and state / region.');
   if (!providerTypes.some(([key]) => key === payload.provider_type)) throw new Error('Choose the provider category that describes your work.');
   if (payload.provider_type === 'other' && !payload.provider_type_other) throw new Error('Describe what you provide.');
   if (!/^[A-Z]{2}$/.test(payload.country_code)) throw new Error('Enter a two-letter country code, such as NG.');

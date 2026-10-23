@@ -38,16 +38,16 @@ export function ProviderBadge({identity,size=18,animate=false}:{identity:Provide
 
 export function ProviderBanner({identity,compact=false}:{identity?:ProviderIdentityData;compact?:boolean}) {
  if(!identity?.banner_url)return null;
- return <ResilientImage uri={identity.banner_url} style={{width:'100%',height:compact?44:96,borderRadius:10,marginVertical:5}} resizeMode="cover"/>;
+ return <ResilientImage fallbackUri="" uri={identity.banner_url} style={{width:'100%',height:compact?44:96,borderRadius:10,marginVertical:5}} resizeMode="cover"/>;
 }
 export function ProviderProfileHeader({identity,compact=false,animate=false,showName=true}:{identity?:ProviderIdentityData;compact?:boolean;animate?:boolean;showName?:boolean}) {
  const theme=useTheme();
  if(!identity?.name)return null;
  const size=compact?48:68,cover=compact?64:112,overlap=size/2;
  return <View style={{width:'100%',marginVertical:8,flexShrink:0}}>
-  <View style={{height:cover,borderRadius:12,overflow:'hidden',backgroundColor:theme.color('#DCECE5','backgroundColor')}}>{identity.banner_url&&<ResilientImage uri={identity.banner_url} style={{width:'100%',height:'100%'}} resizeMode="cover"/>}</View>
+  <View style={{height:cover,borderRadius:12,overflow:'hidden',backgroundColor:theme.color('#DCECE5','backgroundColor')}}>{identity.banner_url&&<ResilientImage fallbackUri="" uri={identity.banner_url} style={{width:'100%',height:'100%'}} resizeMode="cover"/>}</View>
   <View style={{paddingHorizontal:12,marginTop:-overlap}}>
-   <View style={{width:size,height:size,borderRadius:overlap,borderWidth:3,borderColor:theme.color('#FFFFFF','backgroundColor'),backgroundColor:theme.color('#E8EEEB','backgroundColor'),overflow:'hidden',alignItems:'center',justifyContent:'center'}}>{identity.avatar_url?<ResilientImage uri={identity.avatar_url} style={{width:'100%',height:'100%'}} resizeMode="cover"/>:<Text style={{fontSize:compact?20:27,fontWeight:'700'}}>{identity.name.slice(0,1).toUpperCase()}</Text>}</View>
+   <View style={{width:size,height:size,borderRadius:overlap,borderWidth:3,borderColor:theme.color('#FFFFFF','backgroundColor'),backgroundColor:theme.color('#E8EEEB','backgroundColor'),overflow:'hidden',alignItems:'center',justifyContent:'center'}}>{identity.avatar_url?<ResilientImage fallbackUri="" uri={identity.avatar_url} style={{width:'100%',height:'100%'}} resizeMode="cover"/>:<Text style={{fontSize:compact?20:27,fontWeight:'700'}}>{identity.name.slice(0,1).toUpperCase()}</Text>}</View>
    {showName&&<View style={{flexDirection:'row',alignItems:'center',gap:7,paddingTop:6}}><Text style={{fontSize:compact?13:16,fontWeight:'700',flexShrink:1}}>{identity.name}</Text><ProviderBadge identity={identity} animate={animate}/></View>}
   </View>
  </View>;
@@ -57,7 +57,7 @@ export function ProviderIdentity({identity,animate=false,compact=true}:{identity
  if(!identity?.name)return null;
  const size=compact?22:30;
  return <View style={styles.row}>
-  {identity.avatar_url?<ResilientImage uri={identity.avatar_url} style={{width:size,height:size,borderRadius:size/2}} resizeMode="cover"/>:<View style={[styles.avatar,{width:size,height:size,borderRadius:size/2,backgroundColor:theme.color("#E8EEEB","backgroundColor")}]}><Text style={styles.initial}>{identity.name.slice(0,1).toUpperCase()}</Text></View>}
+  {identity.avatar_url?<ResilientImage fallbackUri="" uri={identity.avatar_url} style={{width:size,height:size,borderRadius:size/2}} resizeMode="cover"/>:<View style={[styles.avatar,{width:size,height:size,borderRadius:size/2,backgroundColor:theme.color("#E8EEEB","backgroundColor")}]}><Text style={styles.initial}>{identity.name.slice(0,1).toUpperCase()}</Text></View>}
   <Text style={[styles.name,!compact&&{fontSize:13}]} numberOfLines={1}>{identity.name}</Text>
   <ProviderBadge identity={identity} animate={animate}/>
  </View>;

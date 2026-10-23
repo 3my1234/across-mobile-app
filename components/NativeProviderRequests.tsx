@@ -6,11 +6,15 @@ import {useAccountDesign} from './AccountDesign';
 import {KeyboardFrame} from './KeyboardFrame';
 import {providerRequest} from './nativeProviderApi';
 import {bookingActions, bookingFilters, bookingTransition, ProviderBooking} from './providerBookingPolicy';
+import {loadBookingImages} from './providerBookingImages';
+import {ProviderPostImages} from './ProviderPostImages';
 
 export function NativeProviderRequests({token, onClose, requestID = ''}: {token: string; onClose: () => void; requestID?: string}) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
   const [target, setTarget] = useState(requestID);
   const [items, setItems] = useState<ProviderBooking[]>([]), [cursor, setCursor] = useState('');
+  const [photos, setPhotos] = useState<Record<string, string[] | null>>({});
+  const [photosLoading, setPhotosLoading] = useState(false);
   const [status, setStatus] = useState(''), [search, setSearch] = useState(''), [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const alive = useRef(true), generation = useRef(0), mutation = useRef(false), paging = useRef(false);
@@ -18,14 +22,21 @@ export function NativeProviderRequests({token, onClose, requestID = ''}: {token:
   useEffect(() => {alive.current = true; return () => {alive.current = false; invalidate();};}, [invalidate]);
   const load = useCallback(async (next = '') => {
     if (next && paging.current) return;
-    paging.current = true; const version = ++generation.current; setLoading(true); setError('');
+    paging.current = true; const version = ++generation.current; setLoading(true); setPhotosLoading(false); setError('');
     try {
       const params = new URLSearchParams({limit: '25'}); if (status) params.set('status', status); if (query.trim()) params.set('search', query.trim()); if (next) params.set('cursor', next);
       if (target) {params.set('request_id', target); params.delete('status'); params.delete('search');}
       const data = await providerRequest(token, `/providers/me/requests?${params}`);
       const rows = target ? (data.items || []).filter((item: ProviderBooking) => item.id === target) : data.items || [];
       if (target && !rows.length) throw Error('This request is unavailable or you no longer have access.');
-      if (alive.current && version === generation.current) {setItems(old => next ? [...old, ...rows.filter((item: ProviderBooking) => !old.some(existing => existing.id === item.id))] : rows); setCursor(target ? '' : data.next_cursor || '');}
+      if (alive.current && version === generation.current) {
+        if (!next) setPhotos({});
+        setItems(old => next ? [...old, ...rows.filter((item: ProviderBooking) => !old.some(existing => existing.id === item.id))] : rows); setCursor(target ? '' : data.next_cursor || '');
+        // Images load after booking content; image failures never hide requests.
+        setPhotosLoading(true);
+        void loadBookingImages(token, rows, () => alive.current && version === generation.current, (id, urls) => setPhotos(old => ({...old, [id]: urls})))
+          .finally(() => {if (alive.current && version === generation.current) setPhotosLoading(false);});
+      }
     } catch (failure) {if (alive.current && version === generation.current) setError(failure instanceof Error ? failure.message : 'Requests could not load. Retry.');}
     finally {if (version === generation.current) {paging.current = false; if (alive.current) setLoading(false);}}
   }, [token, status, query, target]);
@@ -52,12 +63,13 @@ export function NativeProviderRequests({token, onClose, requestID = ''}: {token:
       {(loading || busy) && <ActivityIndicator/>}{!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
       {items.map(item => <View key={item.id} style={{padding: 16, gap: 8, borderWidth: 1, borderColor: c.line, borderRadius: 16, backgroundColor: c.surface}}>
         <Text style={{fontSize: 18, fontWeight: '700'}}>{item.listing_title}</Text><Text>{item.request_type} · {item.status} · Party size: {item.party_size}</Text>
+        {!!item.listing_id && (photos[item.listing_id] === undefined ? <Text>Loading service images…</Text> : photos[item.listing_id] === null ? <Text>Service images unavailable. Refresh requests to retry.</Text> : <ProviderPostImages title={item.listing_title} urls={photos[item.listing_id] || []}/>)}
         <Text>{item.starts_at ? new Date(item.starts_at).toLocaleString() : 'Agree a time with the customer'}{item.ends_at ? ` – ${new Date(item.ends_at).toLocaleString()}` : ''}</Text>
         <Text>{item.message || 'No message included.'}</Text>{item.buyer && <><Text>{item.buyer.full_name}</Text><Text selectable>{item.buyer.email}{item.buyer.phone ? ` · ${item.buyer.phone}` : ''}</Text></>}
         {bookingActions(item.status).map(next => <View key={next}>{button(next === 'accepted' ? 'Accept' : next === 'rejected' ? 'Reject' : 'Complete', () => update(item, next), loading)}</View>)}
       </View>)}
       {!items.length && !loading && !error && <Text>No matching bookings or enquiries.</Text>}
-      {!!cursor && button('Load more', () => void load(cursor), loading)}{button('Refresh requests', () => void load(), loading)}
+      {!!cursor && button('Load more', () => void load(cursor), loading || photosLoading)}{button('Refresh requests', () => void load(), loading)}
     </ScrollView>
   </KeyboardFrame></Modal>;
 }
