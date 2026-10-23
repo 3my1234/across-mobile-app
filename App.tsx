@@ -164,6 +164,8 @@ function AcrossApp() {
   useEffect(()=>{setCommunityMode('chats');setCommunityConversationId('');setCommunityHallRoomId('');},[token]);
   const [notificationNavigationKey,setNotificationNavigationKey]=useState(0);
   const notificationNavigationRequest=useRef(0);
+  const workspaceEntryNavigation = useRef({token, request: notificationNavigationRequest.current});
+  if (workspaceEntryNavigation.current.token !== token) workspaceEntryNavigation.current = {token, request: notificationNavigationRequest.current};
   const rewardsOffset=useRef(0);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -1889,7 +1891,7 @@ function AcrossApp() {
   if (stage === "booting") return <LaunchScreen />;
 	if (stage === "auth") return <AuthScreen workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
-  if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === 0) setProviderWorkspaceVisible(true);}}/>;
+  if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === workspaceEntryNavigation.current.request) setProviderWorkspaceVisible(true);}}/>;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
