@@ -1,3 +1,4 @@
+import {NativeProviderNotifications} from './NativeProviderNotifications';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, View} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
@@ -22,14 +23,14 @@ import {NativeProviderOverviewSummary} from './NativeProviderOverviewSummary';
 import {KeyboardFrame} from './KeyboardFrame';
 
 type Document = {id: string; document_type: string; status: string; review_notes?: string};
-type Props = {token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenSettings?: () => void};
+type Props = {token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenSettings?: () => void; onOpenNotification?: (notification: Record<string, unknown>) => void};
 
 // Native is the normal app experience. Explicit false retains the rollback path.
 export function ProviderWorkspace(props: Props) {
   if (process.env.EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT === 'false') return <LegacyProviderWorkspace {...props}/>;
   return <NativeProviderAccount {...props}/>;
 }
-export function NativeProviderAccount({token, route = '', onClose, onOpenSupport, onOpenSettings}: Props) {
+export function NativeProviderAccount({token, route = '', onClose, onOpenSupport, onOpenSettings, onOpenNotification}: Props) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
   const [view, setView] = useState(() => nativeProviderView(route)), [legacyRoute, setLegacyRoute] = useState(route);
   const [provider, setProvider] = useState<ProviderAccount | null>(null);
@@ -113,6 +114,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     if (mounted.current) await WebBrowser.openBrowserAsync(url);
   });
   if (view === 'legacy') return <Modal onRequestClose={onClose}><View style={{flex: 1, padding: 20, paddingTop: insets.top + 20, gap: 16, backgroundColor: c.background}}><Text>This provider link is unavailable. Open your provider workspace to continue.</Text>{button('Open provider overview', () => setView('overview'))}{button('Back to customer', onClose)}</View></Modal>;
+  if (view === 'notifications' && onOpenNotification) return <NativeProviderNotifications key={`${token}:${!!provider}`} token={token} hasProvider={!!provider} onClose={() => setView('overview')} onOpen={onOpenNotification}/>;
   if (provider && view === 'messages') return <NativeProviderMessages token={token} route={legacyRoute} onClose={() => setView('overview')}/>;
   if (provider && view === 'requests') return <NativeProviderRequests key={`${provider.id}:${token}:${context.request}`} token={token} requestID={context.request} onClose={() => {setView('overview');}}/>;
   if (provider && view === 'merchant-orders') return <NativeProviderOrders key={`${provider.id}:${token}`} token={token} onClose={() => setView('overview')}/>;
@@ -120,7 +122,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const paid = provider ? hasPaidProviderAccess(provider) : false;
   return <Modal animationType="slide" onRequestClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, backgroundColor: c.background, paddingTop: insets.top}}>
     <View style={[s.header, {backgroundColor: c.surface, borderColor: c.line}]}><Pressable accessibilityRole="button" onPress={onClose} style={{padding: 10}}><Text style={{color: c.accent}}>Back to customer</Text></Pressable><Text style={[s.title, {flex: 1}]}>Provider workspace</Text></View>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow: 0}} contentContainerStyle={{padding: 12, gap: 8}}>{[['overview', 'Overview'], ['verification', 'Documents'], ['subscription', 'Subscriptions'], ['support', 'Support']].map(([id, label]) => <Pressable accessibilityRole="tab" accessibilityState={{selected: view === id, disabled: busy}} disabled={busy} key={id} onPress={() => setView(id)} style={[s.button, {backgroundColor: view === id ? c.soft : c.surface, borderColor: c.line}]}><Text>{label}</Text></Pressable>)}</ScrollView>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{flexGrow: 0}} contentContainerStyle={{padding: 12, gap: 8}}>{[['overview', 'Overview'], ['notifications', 'Notifications'], ['verification', 'Documents'], ['subscription', 'Subscriptions'], ['support', 'Support']].map(([id, label]) => <Pressable accessibilityRole="tab" accessibilityState={{selected: view === id, disabled: busy}} disabled={busy} key={id} onPress={() => setView(id)} style={[s.button, {backgroundColor: view === id ? c.soft : c.surface, borderColor: c.line}]}><Text>{label}</Text></Pressable>)}</ScrollView>
     <ScrollView contentContainerStyle={{padding: 16, gap: 12}} refreshControl={<RefreshControl refreshing={loading && ready} onRefresh={() => {if (!busy) void load();}}/>}>
       {loading && !ready && <ActivityIndicator accessibilityLabel="Loading provider account"/>}
       {!!error && card('Please retry', <><Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>{button('Refresh account', () => void load())}<Text>After an interrupted submission, refresh before submitting again.</Text></>)}

@@ -41,7 +41,7 @@ export function nativeProviderView(route: string) {
   if (['conversation', 'shared', 'hall'].some(key => query.has(key))) return ['conversation', 'shared', 'hall'].every(key => !query.has(key) || validProviderID(query.get(key))) ? 'messages' : 'legacy';
   if (['event', 'notification'].some(key => query.has(key) && !validProviderID(query.get(key)))) return 'legacy';
   if (query.has('request') && (view !== 'requests' || !validProviderID(query.get('request')))) return 'legacy';
-  return ['overview', 'profile', 'verification', 'subscription', 'products', 'listings', 'messages', 'support', 'driver', 'requests', 'merchant-orders'].includes(view) ? view : 'legacy';
+  return ['overview', 'notifications', 'profile', 'verification', 'subscription', 'products', 'listings', 'messages', 'support', 'driver', 'requests', 'merchant-orders'].includes(view) ? view : 'legacy';
 }
 export function providerRouteContext(route: string) {
   const query = new URLSearchParams(route), id = (key: string) => validProviderID(query.get(key)) ? query.get(key)! : '';
