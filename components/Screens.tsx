@@ -22,6 +22,7 @@ import { ReviewStars } from "./ReviewStars";
 import { ProductCard } from "./ProductCard";
 import { freshCatalogURL, useCatalogFreshness } from "./catalogFreshness";
 import { latestProductSnapshot } from "./catalogState";
+import type {WorkspaceIntent} from './ProviderEntryGate';
 
 const MOBILE_AUTH_BACKGROUND = require("../assets/mobile-background.png");
 
@@ -64,6 +65,8 @@ export function StartupErrorScreen({ message }: { message: string }) {
 
 // ---- Auth Screen ----
 interface AuthProps {
+  workspaceIntent: WorkspaceIntent;
+  onWorkspaceIntent: (intent: WorkspaceIntent) => void;
   countryCode: string;
   buyerMarkets: { country_code: string; currency_code: string }[];
   onCountryChange: (countryCode: string) => void;
@@ -80,7 +83,7 @@ interface AuthProps {
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
   const theme = useTheme();
   const s = useThemedStyles(sharedStyles);
   const authInsets = useSafeAreaInsets();
@@ -104,6 +107,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
   }, []);
 
   async function submit() {
+    if (mode === 'signup' && workspaceIntent === 'auto') {Alert.alert('Choose how to get started', 'Choose Customer or Provider. You can use both with the same account.'); return;}
     if(mode==='signup'&&(password.length<8||password.length>72||!/[A-Z]/.test(password)||!/[a-z]/.test(password)||!/[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/.test(password))){Alert.alert('Choose a stronger password','Use at least 8 characters, including an uppercase letter, a lowercase letter and a special character such as !@#$.');return;}
     if (mode === "signin") await onSubmit("/api/v1/auth/login", { email, password });
     else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password });
@@ -171,7 +175,9 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
             ) : (
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
-                <Text style={s.authFormCopy}>{mode === "signin" ? "Access your orders, messages, saved details, and provider requests." : "Join the marketplace to shop, book services, pay securely, and track your orders."}</Text>
+                <Text style={s.authFormCopy}>{mode === "signin" ? "Sign in with your existing customer or provider account. Your workspace opens automatically." : "How would you like to use Atlantic Express? You can use both experiences with one account."}</Text>
+                {mode === 'signup' && <View style={{gap: 10, marginBottom: 16}}>{([['customer', 'Customer', 'Shop products, book services and create Town Hall requests.'], ['provider', 'Provider', 'Sell products, offer services and manage your business.']] as const).map(([value, label, copy]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{checked: workspaceIntent === value, disabled: busy}} disabled={busy} onPress={() => onWorkspaceIntent(value)} style={[s.secondaryButton, {alignItems: 'flex-start', borderColor: theme.color(workspaceIntent === value ? COLORS.primary : '#D0D5DD', 'borderColor'), borderWidth: workspaceIntent === value ? 2 : 1}]}><Text style={s.secondaryButtonText}>{label}{workspaceIntent === value ? ' - selected' : ''}</Text><Text style={s.authFormCopy}>{copy}</Text></Pressable>)}</View>}
+                {(mode !== 'signup' || workspaceIntent !== 'auto') && <>
                 {mode === "signup" && !!noticeText && <Text style={s.authFormCopy}>{noticeText}</Text>}
                 {mode === "signup" && <><Text style={s.authFormCopy}>Delivery country and checkout currency</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: theme.color(countryCode === market.country_code ? COLORS.primary : "#D0D5DD", "borderColor") }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
@@ -182,6 +188,7 @@ export function AuthScreen({ mode, countryCode, buyerMarkets, onCountryChange, b
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
                 {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
+                </>}
                 <Pressable style={s.textButton} onPress={() => onModeChange("welcome")}><Text style={s.textButtonText}>Back</Text></Pressable>
               </View>
             )}

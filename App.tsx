@@ -1,3 +1,5 @@
+import {ProviderEntryGate, WorkspaceIntent} from './components/ProviderEntryGate';
+import {rememberSignupWorkspace, signupWorkspaceFor, clearSignupWorkspace} from './components/workspaceIntent';
 import {NativeNotificationDiagnostics} from './components/NativeNotificationDiagnostics';
 import {AccountIcon,AccountSectionHeading,XPRewardSummary,accountDesign,useAccountDesign} from './components/AccountDesign';
 import {acknowledgeNotificationDelivery} from './components/messageReceipts';
@@ -140,6 +142,8 @@ function AcrossApp() {
   const { login: loginWithOAuth, state: oauthState } = useLoginWithOAuth();
   const [stage, setStage] = useState<AppStage>("booting");
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
+  const [workspaceIntent, setWorkspaceIntent] = useState<WorkspaceIntent>("auto");
+  const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [productFeed, setProductFeed] = useState<{key: string; status: "loading" | "ready" | "error"}>({key: "", status: "loading"});
@@ -514,13 +518,13 @@ function AcrossApp() {
   }, [stage, activeTab, showFlashSale]);
 
   useEffect(() => {
-    if (stage !== "app" || activeTab !== "home" || showFlashSale || selectedProduct || discountPromptSeen.current || flashSaleProducts.length === 0) return;
+    if (stage !== "app" || workspaceEntryToken !== token || providerWorkspaceVisible || activeTab !== "home" || showFlashSale || selectedProduct || discountPromptSeen.current || flashSaleProducts.length === 0) return;
     const hasRealDiscount = flashSaleProducts.some(product => (product.compare_at_price ?? 0) > (product.flash_sale_price || product.price));
     if (!hasRealDiscount) return;
     discountPromptSeen.current = true;
     const timer = setTimeout(() => setShowDiscountOffer(true), 700);
     return () => clearTimeout(timer);
-  }, [stage, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
+  }, [stage, token, workspaceEntryToken, providerWorkspaceVisible, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
 
   useEffect(() => {
     if (!oauthState) return;
@@ -837,6 +841,7 @@ function AcrossApp() {
     sessionTokenRef.current=s.access_token;
     setToken(s.access_token);
     setStage("app");
+    void clearSignupWorkspace().catch(() => {});
     // The app-stage effects own catalogue/profile loading once.
   }
 
@@ -852,6 +857,7 @@ function AcrossApp() {
       SecureStore.deleteItemAsync(CART_KEY),
       SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY)
     ]);
+    setWorkspaceEntryToken(null); setWorkspaceIntent("auto"); setProviderWorkspaceVisible(false);
     setToken(null);
     setProducts([]);
     setProductFeed({key: "", status: "loading"});
@@ -1123,6 +1129,10 @@ function AcrossApp() {
   async function authenticate(path: string, payload: Record<string, string>) {
     setBusy(true);
     try {
+      if (path.endsWith("/signup")) {
+        if (workspaceIntent === "auto") throw Error("Choose Customer or Provider before registering.");
+        await rememberSignupWorkspace(payload.email || "", workspaceIntent);
+      } else if (path.endsWith("/login")) setWorkspaceIntent(await signupWorkspaceFor(payload.email || ""));
       const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Client-Country-Code": catalogCountry }, body: JSON.stringify(payload) });
       const d = await readResponseBody(r);
       if (d.requires_email_verification) {
@@ -1877,7 +1887,9 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-	if (stage === "auth") return <AuthScreen mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+
+  if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === 0) setProviderWorkspaceVisible(true);}}/>;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -1922,6 +1934,7 @@ function AcrossApp() {
         </View>
       )}
 
+      <View style={{paddingHorizontal: 14, paddingVertical: 6, paddingRight: 60, backgroundColor: accountColors.surface}}><Pressable accessibilityRole="button" accessibilityLabel="Switch to provider workspace" onPress={() => {setProviderWorkspaceRoute(''); setProviderWorkspaceVisible(true);}} style={{flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 40}}><Ionicons name="storefront-outline" size={21} color={accountColors.accent}/><Text style={{color: accountColors.accent, fontWeight: '700'}}>Provider workspace</Text><Ionicons name="swap-horizontal" size={18} color={accountColors.accent}/></Pressable></View>
       {/* Home header */}
       {activeTab !== "home" && !showFlashSale && (
         <View style={{ height: 40, paddingHorizontal: 14, justifyContent: "center", backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
@@ -2238,7 +2251,7 @@ function AcrossApp() {
         </View>
       )}
 
-      <Modal visible={showDiscountOffer} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
+      <Modal visible={showDiscountOffer && !providerWorkspaceVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
         <View style={{ flex: 1, padding: 22, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("rgba(0,0,0,0.58)", "backgroundColor") }}>
           <View style={{ width: "100%", maxWidth: 360, borderRadius: 22, padding: 24, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
             <Pressable style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", zIndex: 2 }} onPress={() => setShowDiscountOffer(false)} accessibilityLabel="Close discount offer"><Ionicons name="close" size={24} color={theme.color("#595959")} /></Pressable>

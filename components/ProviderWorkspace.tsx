@@ -24,9 +24,9 @@ import {KeyboardFrame} from './KeyboardFrame';
 type Document = {id: string; document_type: string; status: string; review_notes?: string};
 type Props = {token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenSettings?: () => void};
 
-// Opt in only after candidate device acceptance. The existing portal remains intact.
+// Native is the normal app experience. Explicit false retains the rollback path.
 export function ProviderWorkspace(props: Props) {
-  if (process.env.EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT !== 'true') return <LegacyProviderWorkspace {...props}/>;
+  if (process.env.EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT === 'false') return <LegacyProviderWorkspace {...props}/>;
   return <NativeProviderAccount {...props}/>;
 }
 export function NativeProviderAccount({token, route = '', onClose, onOpenSupport, onOpenSettings}: Props) {

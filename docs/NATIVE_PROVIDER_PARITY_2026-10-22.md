@@ -4,7 +4,7 @@ Updated 23 October 2026. Mobile draft PR49 (`feat/native-provider-account`), min
 
 ## Current implementation
 
-The native candidate reuses the existing authenticated identity and Go authorization. It does not create a second provider account or copy existing provider data. `EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT=true` selects native screens. Release profiles have not been enabled, draft PRs are unmerged and the public PWA remains available.
+The native candidate reuses the existing authenticated identity and Go authorization. It does not create a second provider account or copy existing provider data. `EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT=true` selects native screens. Native provider navigation is now the default app experience. Ordinary preview/production profiles explicitly enable it; explicit false preserves the legacy rollback path. The public PWA remains available.
 
 All essential provider tools in the candidate stay native. There is no link back into a portal WebView from the native workspace. An invalid destination displays a native recovery screen. The flag-disabled existing release path is retained until migration acceptance; this does not constitute PWA retirement.
 
@@ -77,3 +77,12 @@ Closed catalogue status filters, video preview, native address search, bounded o
 The phone test uses the existing test-push queue and PR70?s private ledger read. It displays queue/worker/gateway/phone-push-service states and a foreground receipt when actually observed. Manual refresh is bounded; no permanent polling timer is added. Sound remains a real-device/OS acceptance item.
 
 provider-preview extends the existing preview APK profile, keeps com.atlanticexpress.mobile/across and remote signing, and explicitly enables native workspace/direct Android checkout. Its API is the existing https://api.atlxpres.com, not a new backend. The smallest compatibility deployment (PR70 only) and this production-connected build target require separate confirmation before requesting the ONE EAS build. No EAS build, merge, production change or PWA shutdown has occurred.
+
+
+### Device-reported entry regression and correction - 23 October
+
+The user tested EAS provider-preview build44 at ec9c8a0 and reported that registration and provider sign-in still opened customer screens. Cloud metadata confirms that profile/source for the latest build; the installed device binary was not independently inspected. Source inspection verified the actual defect: provider tools existed only behind Account > Provider workspace, with no automatic provider entry and no signup workspace choice. Earlier screen-level tests did not qualify this entry journey.
+
+Correction: registration asks Customer/Provider before personal details; selected provider signup opens existing native onboarding after authentication. A SecureStore pending choice is email-bound across email verification. Existing sign-ins and restored sessions resolve /providers/me and open the provider workspace automatically, including applicants/restricted/expired providers (API restrictions remain authoritative). Only404 resolves a non-provider automatically; other failures show retry and explicit alternatives. A visible customer-header workspace switch and provider Back to customer retain both experiences. Ordinary build profiles cannot silently omit the native tools. No role is granted by selection; no second identity, data copy or backend change.
+
+21 provider suites and TypeScript pass locally, including actual registration component behavior, provider-entry/error/stale-response interactions, pending-choice ownership and actual App routing callback. Fresh Linux/native Android qualification is tracked in HANDOVER.md. The updated APK still requires device retest; build44 does not change without rebuilding. User triggers EAS personally, once checks pass.

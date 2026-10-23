@@ -1,29 +1,13 @@
-# Provider migration delivery status ? 23 October 2026
+# Provider migration acceptance - entry-flow correction
 
-The two previously identified interface differences are now implemented in the native candidate: an in-app map with tap/drag/GPS/address search and owner-scoped notification delivery diagnostics. Automated interactions and TypeScript pass (19 native-provider suites). These are source/test results; phone acceptance and a signed EAS APK remain pending.
+23 October 2026. User-reported build44 feedback invalidated acceptance of the entry experience. Latest EAS metadata: provider-preview, ec9c8a0, build ba648177-0475-4c04-a66a-23270f99a884. Source confirms signup had no workspace choice and login always landed on customer home; provider tools were hidden under Account. This was an implementation gap, not evidence that provider data was lost.
 
-## Scope and compatibility
+The correction adds Customer/Provider registration selection, email-bound continuation through verification, automatic existing-provider detection on sign-in/session restoration, explicit error recovery, and a visible workspace switch. Provider tools are native by default, including normal preview/production builds; explicit false remains a rollback option. Backend authorization still controls publishing, verification and subscriptions. Existing customer access and chats remain with the same identity.
 
-Native provider navigation includes account/onboarding/profile/documents, product/service publishing and availability, requests/bookings, subscriptions and cancellations, driver availability, messages/Town Hall, orders/bulk/ETA/manifests/printing, Support and settings. Essential candidate flows do not open the provider PWA. The existing account identity, records, APIs and business rules are reused.
+21 local provider suites and TypeScript pass; actual screen/entry callback interactions are tested. Fresh CI/native compilation must be checked for the final source. No corrected EAS APK or device acceptance is claimed until built and retested. User will submit EAS themselves.
 
-Most functionality is compatible with reported production57411f0. Full safe service editing requires the private complete read in PR70. Exact booking navigation uses its optional request filter. Detailed notification-test tracking uses its new read over existing delivery records. Other existing workflows do not require PR66 infrastructure changes. See PROVIDER_BACKEND_COMPATIBILITY_2026-10-23.md for the exact boundaries.
+The approved minimal backend compatibility release65a159b is already deployed to healthy aligned API/worker/replicas. This entry fix requires no further backend release, schema/runtime changes or new services. PR69 is closed as superseded; PR66/67/68 remain separate.
 
-PR70 is the standalone minimal release choice; PR69 repeats the two service/request changes on an older PR66 foundation. Do not merge both implementations. No PR is merged or deployed here.
+Provider screens remain native for onboarding, profile/documents, product/service management, subscriptions, availability, bookings, driver tools, chats/Town Hall, orders/bulk/ETA/manifests and Support/settings. Registration choice does not grant a provider role or create an organization without explicit application submission. Device acceptance must start from fresh registration and existing-provider login, then verify the full journeys.
 
-## EAS delivery
-
-provider-preview is prepared for the normal internal Android APK flow: existing application ID/signing source, existing production API, explicit native/direct flags. User approval is still required to deploy PR70 and confirm the production-connected build target. The ONE EAS build should follow those confirmations and successful candidate checks. It must not use a placeholder backend. Build source commit, EAS build ID and installation link must be recorded when produced.
-
-Camera/files/location, subscriptions/browser returns, background notification display/sound/taps, account switching and all provider journeys still require installation and device acceptance. iOS compilation/device acceptance remains separate; direct Flutterwave subscription checkout is intentionally unavailable in store distribution. No claim of full store readiness or measured large-user capacity follows from this migration.
-
-## Keep provider Coolify running
-
-Source Dockerfile.provider serves static Nginx content; actual saved Coolify runtime/configuration remains unverified. Source dependencies include older APK provider WebViews, welcome-email links, PWA checkout return URLs, installed browser push and web/desktop/iPhone users. Keep it running until mobile acceptance, safe redirects/returns and a transition for remaining users are verified. No resource was stopped or deleted.
-
-## Retirement acceptance (later)
-
-- Accept signed Android and iOS provider journeys and preserve account/data/payment history.
-- Verify actual Coolify image, mounts, domains, proxy configuration and any server-side dependencies read-only.
-- Inventory old APKs, web users, email links, browser notifications and pending checkout returns.
-- Maintain safe landing/return URLs and communicate the transition before disabling portal access.
-- Retain an approved rollback path and separately approve stopping/removing the resource.
+Keep provider Coolify running. Older APKs, web users, email links, browser push and PWA checkout returns need an accepted transition. iOS/store billing, physical-device acceptance and measured scaling remain separate gates. No PWA shutdown or server configuration change accompanies this fix.
