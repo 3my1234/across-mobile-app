@@ -54,7 +54,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const [kind, setKind] = useState<string>('government_id');
   const readFlight = useRef(false);
   const generation = useRef(0), mutation = useRef(false), mounted = useRef(true);
-  const invalidate = useCallback(() => {generation.current++;}, []);
+  const invalidate = useCallback(() => {generation.current++; readFlight.current = false;}, []);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false; invalidate();};}, [invalidate]);
   useEffect(() => {setView(nativeProviderView(route)); setLegacyRoute(route); setHistory([]);}, [route]);
   const context = providerRouteContext(route);
@@ -80,7 +80,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
 
     } catch (failure) {
       if (mounted.current && version === generation.current) setError(failure instanceof Error ? failure.message : 'Could not load provider access. Retry below.');
-    } finally {readFlight.current = false; if (mounted.current && version === generation.current) setLoading(false);}
+    } finally {if (version === generation.current) {readFlight.current = false; if (mounted.current) setLoading(false);}}
   }, [token]);
   useEffect(() => {void load(); return invalidate;}, [load, invalidate]);
   useEffect(() => {
@@ -138,7 +138,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const labels: Record<string, string> = {overview: 'Provider workspace', catalog: 'Listings', requests: 'Bookings', messages: 'Chats', more: 'More', products: 'Products', listings: 'Services', verification: 'Verification documents', subscription: 'Subscriptions', profile: 'Business profile', driver: 'Driver availability', 'merchant-orders': 'Previous paid orders', notifications: 'Notifications', referrals: 'Refer and earn XP'};
   const row = (label: string, icon: React.ComponentProps<typeof Ionicons>['name'], action: () => void) => <Pressable key={label} accessibilityRole="button" onPress={action} disabled={busy} style={({pressed}) => [s.menuRow, {backgroundColor: pressed ? c.soft : c.surface, borderColor: c.line}]}><View style={[s.menuIcon, {backgroundColor: c.soft}]}><Ionicons name={icon} size={23} color={c.accent}/></View><Text style={{flex: 1, fontWeight: '600'}}>{label}</Text><Ionicons name="chevron-forward" size={18} color={c.muted}/></Pressable>;
   const tools = provider && <>
-    {view === 'products' || view === 'listings' ? <NativeProviderCatalog embedded token={token} kind={view} provider={provider} onClose={back} onNavigationGuard={registerGuard}/> :
+    {view === 'products' || view === 'listings' ? <NativeProviderCatalog key={`${provider.id}:${token}:${view}`} embedded token={token} kind={view} provider={provider} onClose={back} onNavigationGuard={registerGuard}/> :
     view === 'messages' ? <NativeProviderMessages embedded token={token} route={legacyRoute} onClose={back}/> :
     view === 'requests' ? <NativeProviderRequests embedded key={context.request} token={token} requestID={context.request} onClose={back}/> :
     view === 'merchant-orders' ? <NativeProviderOrders embedded token={token} onClose={back}/> :
