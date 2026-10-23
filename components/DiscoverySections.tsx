@@ -1,0 +1,31 @@
+import React,{useEffect,useRef,useState} from 'react';
+import {ActivityIndicator,AppState,Pressable,ScrollView,View,useWindowDimensions} from 'react-native';
+import {ThemedText as Text} from './ThemeProvider';
+import {useAccountDesign} from './AccountDesign';
+import {ResilientImage} from './ResilientImage';
+import {discoveryFeed,DiscoveryCard,recordDiscovery,rememberDiscoveryTopics} from './discoveryClient';
+
+// Continuous half-card viewability, measured in window coordinates, also works
+// when this horizontal rail sits below a vertically scrolling detail screen.
+export function discoveryViewable(x:number,y:number,width:number,height:number,screenWidth:number,screenHeight:number) {
+ const area=width*height;if(!Number.isFinite(area)||area<=0)return false;
+ const visible=Math.max(0,Math.min(x+width,screenWidth)-Math.max(x,0))*Math.max(0,Math.min(y+height,screenHeight)-Math.max(y,0));
+ return visible/area>=.5;
+}
+function Rail({title,cards,active,onOpen}:{title:string;cards:DiscoveryCard[];active:boolean;onOpen:(card:DiscoveryCard)=>void}) {
+ const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
+ useEffect(()=>{
+  if(!active){entered.current.clear();return;}
+  let alive=true;const measure=()=>{if(AppState.currentState!=='active'){entered.current.clear();return;}for(const card of cards){const key=card.kind+card.id,node=refs.current.get(key);if(!node||measuring.current.has(key))continue;measuring.current.add(key);node.measureInWindow((x,y,w,h)=>{measuring.current.delete(key);if(!alive||AppState.currentState!=='active')return;if(!discoveryViewable(x,y,w,h,screen.width,screen.height)){entered.current.delete(key);return;}const since=entered.current.get(key)||Date.now();entered.current.set(key,since);if(Date.now()-since>=1000)recordDiscovery(card,'impression',Date.now()-since);});}};
+  const timer=setInterval(measure,500),subscription=AppState.addEventListener('change',()=>entered.current.clear());measure();
+  return()=>{alive=false;clearInterval(timer);subscription.remove();entered.current.clear();};
+ },[active,cards,screen.width,screen.height]);
+ if(!cards.length)return null;
+ return <View style={{paddingVertical:12,gap:10}}><Text style={{fontSize:18,fontWeight:'700',paddingHorizontal:12}}>{title}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}}>{cards.map(card=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:180,borderWidth:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:c.surface}}><Pressable accessibilityRole="button" accessibilityLabel={`Open ${card.title}`} onPress={()=>onOpen(card)}><ResilientImage uri={card.image_urls[0]||''} style={{height:140,width:180}} resizeMode="cover"/><View style={{padding:10,gap:5}}>{card.placement==='promoted'&&<Text style={{color:c.accent,fontSize:11,fontWeight:'700'}}>Promoted</Text>}<Text numberOfLines={2} style={{fontWeight:'600',minHeight:36}}>{card.title}</Text><Text style={{fontSize:12,color:c.muted}}>{card.kind==='product'?'Product':'Service'}{card.city?' · '+card.city:''}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={{fontWeight:'700',color:c.accent}}>{card.price===null?'Ask for a price':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}</Text>{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text numberOfLines={1} adjustsFontSizeToFit style={{fontSize:12,color:'#C62828',textDecorationLine:'line-through'}}>{card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}</View></Pressable></View>)}</ScrollView></View>;
+}
+export function DiscoverySections({owner,country='NG',state='',city='',search='',sourceKind,sourceID,topics=[],active=true,onOpen}:{owner:string|null;country?:string;state?:string;city?:string;search?:string;sourceKind?:'product'|'service';sourceID?:string;topics?:string[];active?:boolean;onOpen:(card:DiscoveryCard)=>void}) {
+ const c=useAccountDesign(),[data,setData]=useState<{similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]}|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),sequence=useRef(0),topicsRef=useRef(topics);topicsRef.current=topics;
+ useEffect(()=>{const version=++sequence.current;setData(null);setError('');if(!active)return;let alive=true;const load=()=>{if(sourceID)rememberDiscoveryTopics(owner,topicsRef.current);void discoveryFeed({owner,country,state,city,search,sourceKind,sourceID}).then(next=>{if(alive&&version===sequence.current)setData(next);}).catch(()=>{if(alive&&version===sequence.current)setError('Could not load discovery. Tap to retry.');});};const delay=setTimeout(load,300);return()=>{alive=false;clearTimeout(delay);};},[owner,country,state,city,search,sourceKind,sourceID,active,retry]);
+ if(!active)return null;
+ return <View>{!data&&!error&&<ActivityIndicator accessibilityLabel="Loading listing discovery" style={{padding:12}}/>}{!!error&&<Pressable accessibilityRole="button" onPress={()=>setRetry(n=>n+1)}><Text style={{color:c.danger,padding:12}}>{error}</Text></Pressable>}{data&&<><Rail title={sourceID?'Similar Listings':'Recommended for You'} cards={sourceID?data.similar:data.recommended} active={active} onOpen={onOpen}/><Rail title="Promoted" cards={data.promoted} active={active} onOpen={onOpen}/>{!data.similar.length&&!data.recommended.length&&!data.promoted.length&&<Text style={{padding:12,color:c.muted}}>No matching listings are available yet.</Text>}</>}</View>;
+}

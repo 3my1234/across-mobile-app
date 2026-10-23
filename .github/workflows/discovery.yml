@@ -1,0 +1,29 @@
+name: Discovery mobile viewability and navigation
+on:
+  pull_request:
+    branches: [main, feat/native-provider-account]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discovery-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPO_NO_DOTENV: '1'
+      EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT: 'true'
+      EXPO_PUBLIC_API_URL: https://discovery-build-check.invalid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: node scripts/test-discovery.cjs
+      - run: node scripts/test-provider-promotions.cjs
+      - run: npm run test:provider-native
+      - run: npm run test:marketplace
+      - name: Bundle Android source without an EAS submission
+        run: npx expo export --platform android --output-dir discovery-bundle

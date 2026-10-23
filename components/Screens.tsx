@@ -1,3 +1,5 @@
+import {DiscoverySections} from './DiscoverySections';
+import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
 import {PostVideos} from "./PostVideos";
 import {ProviderProfileHeader, ProviderIdentity} from "./ProviderIdentity";
 import { KeyboardFrame } from "./KeyboardFrame";
@@ -218,14 +220,16 @@ interface DetailProps {
   onRemove: (product: Product) => void;
   onProductChange: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
+  onOpenService?: (id:string)=>void;
   getCartQuantity: (sku: string) => number;
 }
 
-export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity }: DetailProps) {
+export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity,onOpenService }: DetailProps) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const [sellerChat,setSellerChat]=useState(false);
-  const contactSeller=()=>{if(!token){Alert.alert("Sign in required","Sign in to message this seller.");return;}setSellerChat(true);};
+  const contactSeller=()=>{recordDiscoveryContact(token,'product',initialProduct.id);if(!token){Alert.alert("Sign in required","Sign in to message this seller.");return;}setSellerChat(true);};
+  useEffect(()=>recordDiscoveryDetail(token,'product',initialProduct.id,initialProduct.category_path),[token,initialProduct.id]);
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
   const {width: windowWidth, height: windowHeight} = useWindowDimensions();
@@ -243,9 +247,6 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const [reviewBusy, setReviewBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [reviewError, setReviewError] = useState("");
-  const [recommendations, setRecommendations] = useState<Product[]>([]);
-  const [recommendationsLoading, setRecommendationsLoading] = useState(true);
-  const [recommendationsError, setRecommendationsError] = useState("");
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
   const [heroIndex, setHeroIndex] = useState(0);
@@ -261,7 +262,6 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const snapshotRequest = useRef(0);
   const reviewRequest = useRef(0);
   const reviewSaving = useRef(false);
-  const recommendationRequest = useRef(0);
   const outOfStock = product.inventory_count <= 0;
   const atMax = cartQuantity >= product.inventory_count;
   const isLocalMerchantProduct = product.fulfillment_mode === "merchant_local";
@@ -284,13 +284,13 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     sectionOffsets.current = { overview: 0, reviews: 0, recommended: 0 };
     detailScrollRef.current?.scrollTo({y:0,animated:false});
     void loadDetail(true);
-    return () => { snapshotRequest.current += 1; recommendationRequest.current += 1; reviewRequest.current += 1; };
+    return () => { snapshotRequest.current += 1; reviewRequest.current += 1; };
     // The product id and session token are the intentional request keys.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialProduct.id, token, destination.country_code, destination.state, destination.city]);
   useEffect(() => { setProduct(initialProduct); }, [initialProduct]);
   useCatalogFreshness(async () => {
-    await Promise.allSettled([loadProductSnapshot(true), loadRecommendations()]);
+    await loadProductSnapshot(true);
   });
   useEffect(() => {
     const show = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -312,21 +312,6 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
     const mapped = mapProduct(data.product);
     setProduct(current => latestProductSnapshot(current, mapped));
     onProductChange(mapped);
-  }
-
-  async function loadRecommendations() {
-    const request = ++recommendationRequest.current;
-    setRecommendationsLoading(true);
-    setRecommendationsError("");
-    const params = new URLSearchParams({ limit: "10", ...destination });
-    try {
-      const response = await fetchWithTimeout(freshCatalogURL(`${API_URL}/api/v1/products/${initialProduct.id}/recommendations?${params}`), { headers: { "Cache-Control": "no-cache" } });
-      if (!response.ok) throw new Error("Related products could not be loaded. Tap to retry.");
-      const data = await response.json();
-      if (request === recommendationRequest.current) setRecommendations((data?.products ?? []).map(mapProduct));
-    } catch (error) {
-      if (request === recommendationRequest.current) setRecommendationsError(error instanceof Error ? error.message : "Related products could not be loaded. Tap to retry.");
-    } finally { if (request === recommendationRequest.current) setRecommendationsLoading(false); }
   }
 
   async function loadDetail(force = true) {
@@ -358,7 +343,6 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
       if (request !== reviewRequest.current) return;
       setReviewError(error instanceof Error ? error.message : "Reviews are temporarily unavailable");
     }).finally(() => { if (request === reviewRequest.current) setLoading(false); });
-    const recommendationTask = loadRecommendations();
     const myReviewTask = (async () => {
       if (token) {
         const mr = await fetchWithTimeout(`${API_URL}/api/v1/products/${initialProduct.id}/reviews/mine?fresh=${Date.now()}`, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } });
@@ -375,7 +359,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
         }
       }
     })();
-    await Promise.allSettled([productTask, reviewTask, recommendationTask, myReviewTask]);
+    await Promise.allSettled([productTask, reviewTask, myReviewTask]);
   }
 
   async function loadMoreReviews() {
@@ -469,7 +453,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
         <View style={styles.detailHeader}>
           <Pressable style={styles.detailBackButton} accessibilityLabel="Back to products" onPress={onClose}><Ionicons name="chevron-back" size={23} color={theme.color("#191919")} /></Pressable>
           <View style={styles.sectionTabs}>
-            {(["overview", "reviews", "recommended"] as const).map(section=><Pressable key={section} accessibilityRole="tab" accessibilityState={{selected:activeSection===section}} style={styles.sectionTab} onPress={()=>scrollToSection(section)}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTabText,activeSection===section && styles.sectionTabActive]}>{section === "overview" ? "Overview" : section === "reviews" ? "Reviews" : "Recommended"}</Text>{activeSection===section && <View style={styles.sectionUnderline}/>}</Pressable>)}
+            {(["overview", "reviews", "recommended"] as const).map(section=><Pressable key={section} accessibilityRole="tab" accessibilityState={{selected:activeSection===section}} style={styles.sectionTab} onPress={()=>scrollToSection(section)}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTabText,activeSection===section && styles.sectionTabActive]}>{section === "overview" ? "Overview" : section === "reviews" ? "Reviews" : "Similar Listings"}</Text>{activeSection===section && <View style={styles.sectionUnderline}/>}</Pressable>)}
           </View>
           <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color={theme.color("#191919")} /></Pressable>
         </View>
@@ -553,16 +537,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               {(showAllPhotos ? images : images.slice(0,3)).map((uri,index)=><Pressable key={`description-${uri}-${index}`} accessibilityLabel={`View product photo ${index+1}`} onPress={()=>{setGalleryPhotos(null);setGalleryIndex(index);setGalleryOpen(true);}}><ProductPhoto uri={uri}/></Pressable>)}
               {images.length>3 && <Pressable style={styles.photoExpand} onPress={()=>setShowAllPhotos(value=>!value)}><Text style={styles.sectionTabText}>{showAllPhotos ? "Show fewer photos" : `See all ${images.length} photos`}</Text><Ionicons name={showAllPhotos ? "chevron-up" : "chevron-down"} size={16}/></Pressable>}
             </View>
-            <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y; }}>
-              <Text style={styles.detailSectionTitle}>Recommended for you</Text>
-              <Text style={styles.recommendationHint}>Related products selected from the live catalogue.</Text>
-              {!!recommendationsError && <Pressable onPress={()=>void loadRecommendations()}><Text style={styles.reviewError}>{recommendationsError}</Text></Pressable>}
-              {recommendations.length === 0 ? recommendationsLoading ? <ActivityIndicator color={theme.color("#FF4747")} style={{padding:20}}/> : !recommendationsError && <Text style={styles.recommendationEmpty}>No related products available yet.</Text> : (
-                <View style={styles.recommendationGrid}>
-                  {recommendations.map(item=><View key={item.id} style={styles.recommendationCard}><ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={()=>onSelectProduct(item)} onAdd={()=>onAdd(item)}/></View>)}
-                </View>
-              )}
-            </View>
+            <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y; }}><DiscoverySections owner={token} country={destination.country_code} state={destination.state} city={destination.city} sourceKind="product" sourceID={product.id} topics={product.category_path} active={!sellerChat&&!galleryOpen} onOpen={card=>{void openDiscovery(card,{country:destination.country_code,state:destination.state,city:destination.city},onSelectProduct,id=>onOpenService?.(id)).catch(error=>Alert.alert('Listing unavailable',error.message));}}/></View>
           </View>
         </ScrollView>
         {!keyboardVisible && <View onLayout={event => setActionBarHeight(event.nativeEvent.layout.height)} style={[styles.detailActions, { paddingBottom: bottomInset + 12 }]}>
