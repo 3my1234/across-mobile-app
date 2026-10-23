@@ -1,6 +1,6 @@
 # Native provider migration: implementation and acceptance
 
-Updated 23 October 2026. Mobile draft PR49 (`feat/native-provider-account`), backend draft PR69 (`feat/native-provider-contracts`, stacked on foundation PR66).
+Updated 23 October 2026. Mobile draft PR49 (`feat/native-provider-account`), minimal backend draft PR70 (`fix/provider-mobile-compat`); PR69 is the duplicate stacked alternative.
 
 ## Current implementation
 
@@ -15,21 +15,21 @@ All essential provider tools in the candidate stay native. There is no link back
 | Verification | Top-level Documents, camera/library/files/PDF, private signed preview; licence/car/plate require photos | Permissions, interrupted upload/register, admin review |
 | Business identity | Full profile, separate banner/avatar upload/removal, overlapping circular avatar | Device display, image permissions, old data preservation |
 | Products | Create/full edit/archive/submit, stock routes, categories, sale terms, delivery offers, media caps | Integrated publishing and tier boundaries |
-| Services | Complete owner snapshot, full edit, pricing modes, location, capacity, availability slots | Requires PR69 endpoint; device and server integration |
+| Services | Complete owner snapshot, full edit, pricing modes, location, capacity, availability slots | Requires PR70 private-read endpoint; device and server integration |
 | Subscription purchasing | Existing server checkout/verification, monthly recurring cards, monthly/3/6/12-month prepaid transfer, annual prepaid card and backend yearly quote | Direct Android APK only; safe gateway/device acceptance; store billing remains a release gate |
 | Renewal/cancellation | Owner-only existing API, expiry preserved, next-period tier choice, uncertain cancellation remains uncertain | Gateway sandbox, expiry and failed renewal acceptance |
 | Interrupted payment | Provider-scoped SecureStore marker before request, saved hosted checkout, server reconciliation on restart/resume and manual check | Process-kill/browser return and network interruption on device |
 | Messaging | Shared native CommunityScreen, ordinary inbox/threads/photos/replies | Two phones, background/locked push, history isolation, reconnect |
 | Town Hall | Shared native discovery/join/respond, provider request creation disabled | Subscription/approval/group participation and expiry |
 | Support | Existing native main-app inbox/thread under same identity | Older-ticket routing, safe areas and back navigation |
-| Bookings/enquiries | Search/status/pagination, confirm/accept/reject/complete; exact owned request context | Integrated backend PR69 lookup and device transitions |
+| Bookings/enquiries | Search/status/pagination, confirm/accept/reject/complete; exact owned request context | Integrated backend PR70 lookup and device transitions |
 | Previous paid orders | Tracking transitions, settlement restrictions, expected version/idempotency, ETA | Existing historical orders and customer tracking acceptance |
 | Bulk fulfillment | Selection, legal common transitions, versioned atomic backend updates | Representative imported/local orders in isolated integration |
 | Manifests | Create/list/details/status transitions, fresh private OS print | Native print UI and server-integrated lifecycle |
 | Driver availability | Foreground GPS, bounded leases, serialized heartbeat/offline cleanup | Android/iOS permissions, GPS loss, foreground/background |
 | Settings/notifications | Shared native settings, sound/phone settings, native destinations and nonblocking read acknowledgement | Real device delivery, deep links, OS channel behavior |
 
-Native location entry supports foreground GPS, manual coordinates, Maps pin verification and confirmation. It does not reproduce the PWA's draggable browser map. Existing nested service attributes are preserved during editing. Retired settlement-account setup remains retired (backend HTTP410), rather than being reintroduced.
+Native location entry now includes an in-app MapLibre map with tap/drag selection, GPS, address search, explicit confirmation, tile-error retry and manual-coordinate fallback. OpenFreeMap supplies online tiles without application credentials. Provider drafts change only after confirmation; the existing save remains separate. Existing nested service attributes are preserved during editing. Retired settlement-account setup remains retired (backend HTTP410), rather than being reintroduced.
 
 ## Payment safety and distribution
 
@@ -41,7 +41,7 @@ Tier changes stop the old automatic renewal and save the next choice for checkou
 
 ## Validation evidence
 
-Local `npm run test:provider-native` now contains 14 suites: account/deep-link/upload policy, workspace bridge policy, onboarding, profile, publishing, driver leases, booking policy, real booking component interaction, orders/bulk/manifests/ETA/print policy, notification destinations, Town Hall feed, subscription policy, real subscription component interaction and real fulfillment component interaction.
+Historical initial regression set (subsequently expanded; see latest evidence below): account/deep-link/upload policy, workspace bridge policy, onboarding, profile, publishing, driver leases, booking policy, real booking component interaction, orders/bulk/manifests/ETA/print policy, notification destinations, Town Hall feed, subscription policy, real subscription component interaction and real fulfillment component interaction.
 
 The subscription interaction fixture exercises confirmation, double taps, durable interrupted-checkout recovery, authoritative settlement and uncertain cancellation. Fulfillment interactions exercise single-flight confirmed bulk updates, expected versions, fresh owned manifest reads, escaped printing and delayed confirmation after unmount. These use synthetic data and mocked services, not production accounts or payment requests.
 
@@ -68,3 +68,12 @@ A separate fail-closed provider-staging EAS profile is prepared. It requires a r
 ### Control-by-control sign-off audit, 23 October
 
 Closed catalogue status filters, video preview, native address search, bounded overview snapshot and the real owner-scoped phone notification-test action using existing APIs/modules.17 local provider suites, TypeScript and targeted lint pass. Literal embedded map tap/drag and the browser-specific delivery-test timeline remain explicit UI parity differences; native GPS/address/manual location and queue-only phone test are available. There is not yet a full migration/device sign-off. See PROVIDER_MIGRATION_SIGNOFF_2026-10-23.md for all six requested answers and the resource retirement checklist. The two API compatibility changes now have minimal independent draft PR70 based on reported production57411f0, avoiding a forced PR66 foundation rollout. Nothing is merged/deployed and the PWA must stay available.
+
+
+### Latest map, delivery diagnostics and build profile ? 23 October
+
+19 local provider suites and TypeScript PASS. New actual-component interaction tests cover valid tap/drag, explicit confirm, cancelled geocoder results, GPS, map-error recovery, private delivery reads, gateway-versus-phone acceptance wording, unavailable states, single-flight refresh and stale-account responses. MapLibre10.4.2 is pinned to retain the existing old-architecture React Native configuration; Android native compilation for this new dependency is tracked separately. Do not assign older compile evidence to this source.
+
+The phone test uses the existing test-push queue and PR70?s private ledger read. It displays queue/worker/gateway/phone-push-service states and a foreground receipt when actually observed. Manual refresh is bounded; no permanent polling timer is added. Sound remains a real-device/OS acceptance item.
+
+provider-preview extends the existing preview APK profile, keeps com.atlanticexpress.mobile/across and remote signing, and explicitly enables native workspace/direct Android checkout. Its API is the existing https://api.atlxpres.com, not a new backend. The smallest compatibility deployment (PR70 only) and this production-connected build target require separate confirmation before requesting the ONE EAS build. No EAS build, merge, production change or PWA shutdown has occurred.

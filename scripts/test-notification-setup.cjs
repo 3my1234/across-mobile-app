@@ -92,7 +92,7 @@ async function main() {
   assert.equal(posts.at(-1).notification_channel,undefined,'iOS uses the payload sound, not Android channels');
   context.token='buyer';context.notificationSoundEnabled=true;context.notificationTestFlight={current:false};
   let testBusy=false,testPosts=0,releaseTest;
-  context.setNotificationTestBusy=value=>{testBusy=value;};
+  context.setNotificationTestBusy=value=>{testBusy=value;};context.setNotificationTestId=()=>{};
   const originalFetch=context.fetchJSONWithTimeout;
   const held=new Promise(resolve=>{releaseTest=resolve;});
   context.fetchJSONWithTimeout=async(url,init)=>{

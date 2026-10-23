@@ -12,7 +12,7 @@ A separate test backend is recommended for safely exercising mutations, payments
 
 ## Existing API reuse
 
-Compared mobile candidate29853fc and provider.js with the last user-reported deployed backend source57411f0. This does not establish today's running revision or certify all end-to-end behavior.
+Compared native candidate workflows and provider.js with the last user-reported deployed backend source57411f0. This does not establish today's running revision or certify all end-to-end behavior.
 
 | Native workflow | Existing API family reused |
 |---|---|
@@ -36,13 +36,15 @@ Compared mobile candidate29853fc and provider.js with the last user-reported dep
 1. NEW GET /providers/me/listings/:listing_id. The existing list response omits contact_email/contact_phone. Its existing PATCH writes those values. The PWA editor reads its list snapshot; the native editor deliberately refuses an incomplete snapshot to avoid clearing existing contacts. The new owner/manager-only, private/no-store read returns all editable fields. Public discovery is not an adequate substitute for private draft/rejected/suspended edits. This is a small read-contract correction, not new listing business logic. Without it, current native full service editing stays closed safely; other service operations use existing APIs.
 2. OPTIONAL request_id UUID filter on the existing scoped request list. This lets a notification locate one owned booking directly without scanning pages. Existing list/transition behavior is unchanged. This is a navigation enhancement, not required for ordinary booking-list operation. The native target view refuses unrelated rows if an older server ignores the filter.
 
-Both changes are in draft PR69. It is currently based on foundation PR66, but the migration-specific controller/route diff is small and does not technically require every Redis/proxy/scaling improvement to land first. A compatible narrowly scoped release can be prepared separately if chosen; no branch/production release is changed by this report. PR66 security/infrastructure work remains important for launch and must not be silently dropped.
+3. NEW GET /notifications/test-push/:notification_id. Reads the existing native push delivery ledger for the authenticated owner and the original test device. Returns only delivery state, attempts and timestamps; never tokens, raw errors or gateway tickets. No schema change or additional notification system. A receipt reports push-service acceptance, not audible sound. Existing POST /notifications/test-push already queues the real phone test on the deployed API.
+
+PR70 (fix/provider-mobile-compat, currently40b511c) contains all three minimal changes, based on reported production57411f0. It excludes foundation PR66. Source comparison confirms PR69 has byte-identical service-detail implementation/tests and exact-request implementation/tests: these are alternatives, not two patches to merge. Use PR70 for the minimal release. Keep PR69 unmerged; after approved PR70 integration, drop its duplicate commits when rebasing any foundation integration. The diagnostics read is unique to PR70. PR66/67 infrastructure work and PR68 development-login protection remain separate; this patch does not silently resolve or discard them.
 
 ## What an APK can do before new backend deployment
 
-Existing-API workflows have a source-compatible path to the reported current backend. This is not a claim that a physical phone has tested them. The two exact limitations above remain until the small API additions are available. A complete functioning service editor cannot be claimed against an older server lacking its read route.
+Existing-API workflows have a source-compatible path to the reported current backend. This is not a claim that a physical phone has tested them. The three exact limitations above remain until the small API additions are available. A complete functioning service editor cannot be claimed against an older server lacking its read route.
 
-The existing EAS preview profile points at production and does not enable the native candidate by default. A provider-enabled build needs explicit reviewed flags and API target; the prepared provider-staging profile is one safe option, not a universal requirement. No production-connected candidate or real payment/user-data test is authorized here.
+The existing EAS preview profile points at production and does not enable the native candidate by default. The new provider-preview profile explicitly inherits that internal APK identity/API and enables native/direct Android flags. It is prepared for the user?s usual EAS flow, but no production compatibility deployment or connected candidate build is implied by preparing it. A provider-enabled build needs explicit reviewed flags and API target; the prepared provider-staging profile is one safe option, not a universal requirement. No production-connected candidate or real payment/user-data test is authorized here.
 
 Native purchase implementation reuses Flutterwave for directly distributed Android APKs. Play/iOS digital billing remains a separate store gate. Real camera/files/GPS, notification sound/taps and payment browser returns require device checks even when server rules are unchanged.
 
