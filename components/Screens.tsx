@@ -13,7 +13,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
-import { money, uploadReviewImage, mapProduct, fetchWithTimeout } from "./utils";
+import { priceMoney, money, uploadReviewImage, mapProduct, fetchWithTimeout } from "./utils";
 import { saveProductReview } from "./productReview";
 import { s as sharedStyles } from "./Styles";
 import { ResilientImage } from "./ResilientImage";
@@ -65,6 +65,8 @@ export function StartupErrorScreen({ message }: { message: string }) {
 
 // ---- Auth Screen ----
 interface AuthProps {
+  referralCode?: string;
+  onReferralCode?: (code: string) => void;
   workspaceIntent: WorkspaceIntent;
   onWorkspaceIntent: (intent: WorkspaceIntent) => void;
   countryCode: string;
@@ -83,7 +85,7 @@ interface AuthProps {
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+export function AuthScreen({ referralCode = "", onReferralCode = () => {}, workspaceIntent, onWorkspaceIntent, mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
   const theme = useTheme();
   const s = useThemedStyles(sharedStyles);
   const authInsets = useSafeAreaInsets();
@@ -112,7 +114,7 @@ export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCo
     if (mode === 'signup' && workspaceIntent === 'provider' && !phone.trim()) {Alert.alert('Phone required', 'Enter your phone number to register as a provider.'); return;}
     if(mode==='signup'&&(password.length<8||password.length>72||!/[A-Z]/.test(password)||!/[a-z]/.test(password)||!/[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/.test(password))){Alert.alert('Choose a stronger password','Use at least 8 characters, including an uppercase letter, a lowercase letter and a special character such as !@#$.');return;}
     if (mode === "signin") await onSubmit("/api/v1/auth/login", { email, password });
-    else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password, ...(workspaceIntent === 'provider' ? {registration_context: 'provider'} : {}) });
+    else if (mode === "signup") await onSubmit("/api/v1/auth/signup", { full_name: fullName, email, phone, password, ...(workspaceIntent === 'provider' ? {registration_context: 'provider'} : {}), ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) });
   }
 
   function revealAuthForm(target: number) {
@@ -146,6 +148,7 @@ export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCo
                   <Text style={s.primaryButtonText}>Create free account</Text>
                   <Ionicons name="arrow-forward" size={18} color={theme.color("#FFFFFF")} />
                 </Pressable>
+                <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={12} style={s.input}/>
                 <View style={s.authDivider}>
                   <View style={s.authDividerLine} />
                   <Text style={s.authDividerText}>or continue with</Text>
@@ -187,6 +190,7 @@ export function AuthScreen({ workspaceIntent, onWorkspaceIntent, mode, countryCo
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
+                {mode === "signup" && <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={12} style={s.input}/>}
                 <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" autoCapitalize="none" autoCorrect={false} secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable accessibilityRole="button" accessibilityLabel={showPassword?'Hide password':'Show password'} style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
                 {mode==='signup'&&<Text style={s.authFormCopy}>At least 8 characters, with uppercase, lowercase and a special character such as !@#$.</Text>}
                 <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
@@ -467,7 +471,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           <View style={styles.sectionTabs}>
             {(["overview", "reviews", "recommended"] as const).map(section=><Pressable key={section} accessibilityRole="tab" accessibilityState={{selected:activeSection===section}} style={styles.sectionTab} onPress={()=>scrollToSection(section)}><Text maxFontSizeMultiplier={1.2} style={[styles.sectionTabText,activeSection===section && styles.sectionTabActive]}>{section === "overview" ? "Overview" : section === "reviews" ? "Reviews" : "Recommended"}</Text>{activeSection===section && <View style={styles.sectionUnderline}/>}</Pressable>)}
           </View>
-          <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.flash_sale_price || product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color={theme.color("#191919")} /></Pressable>
+          <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color={theme.color("#191919")} /></Pressable>
         </View>
         <ScrollView ref={detailScrollRef} scrollEventThrottle={100} onScrollBeginDrag={()=>{sectionJump.current=false;}} onScroll={event=>{if(sectionJump.current)return;const y=event.nativeEvent.contentOffset.y+48-sectionOffsets.current.overview;const section=y>=sectionOffsets.current.recommended && sectionOffsets.current.recommended>0 ? "recommended" : y>=sectionOffsets.current.reviews && sectionOffsets.current.reviews>0 ? "reviews" : "overview";setActiveSection(section);}} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
           <ScrollView
@@ -491,10 +495,10 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               <ProviderProfileHeader identity={product.provider_identity} animate/>
             <View style={styles.productSocialRow}><Text style={styles.productSocialText}>{Number(product.sold_count || 0).toLocaleString()} sold</Text><Pressable accessibilityLabel="Read customer reviews" onPress={()=>scrollToSection("reviews")} style={styles.productRating}><Text style={styles.productSocialText}>{product.review_count>0 ? product.average_rating.toFixed(1) : "New"}</Text><ReviewStars rating={product.average_rating} size={13}/><Text style={styles.productSocialText}>({product.review_count})</Text></Pressable></View>
             <View style={styles.detailPriceRow}>
-              <Text style={styles.detailPrice}>{money(product.flash_sale_price || product.price, product.currency)}</Text>
-              {!!product.compare_at_price && product.compare_at_price > (product.flash_sale_price || product.price) && <Text style={styles.detailComparePrice}>{money(product.compare_at_price, product.currency)}</Text>}
+              <Text style={styles.detailPrice} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(product.price, product.currency)}</Text>
+              {!!product.compare_at_price && product.compare_at_price > (product.price) && <Text style={styles.detailComparePrice} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(product.compare_at_price, product.currency)}</Text>}
             </View>
-            {!!product.delivery_fee && <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Price breakdown</Text><Text style={styles.detailMetaValue}>{money((product.flash_sale_price || product.price) - product.delivery_fee, product.currency)} product + {money(product.delivery_fee, product.currency)} delivery</Text></View>}
+            {!!product.delivery_fee && <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Price breakdown</Text><Text style={styles.detailMetaValue}>{money((product.price) - product.delivery_fee, product.currency)} product + {money(product.delivery_fee, product.currency)} delivery</Text></View>}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{originLabel}</Text></View>
             {deliveryAreaLabel ? <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Delivers to</Text><Text style={styles.detailMetaValue}>{deliveryAreaLabel}</Text></View> : null}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Stock</Text><Text style={styles.detailMetaValue}>{outOfStock ? "Out" : `${product.inventory_count} units`}</Text></View>
@@ -638,9 +642,9 @@ const baseStyles = StyleSheet.create({
   detailBody: {paddingHorizontal:12,paddingTop:12,paddingBottom:0},
   detailTitle: {color:"#191919",fontSize:15,fontWeight:"600",lineHeight:21,marginTop:4},
   detailSku: { marginTop: 6, color: "#66736F", fontSize: 12, fontWeight: "800" },
-  detailPriceRow: {marginTop:8,flexDirection:"row",alignItems:"center",gap:8,flexWrap:"wrap"},
-  detailPrice: {color:"#191919",fontSize:22,fontWeight:"800"},
-  detailComparePrice: {color:"#888",fontSize:13,fontWeight:"600",textDecorationLine:"line-through"},
+  detailPriceRow: {marginTop:8,alignItems:"flex-start",gap:4},
+  detailPrice: {color:"#191919",fontSize:18,fontWeight:"800",maxWidth:"100%"},
+  detailComparePrice: {color:"#C62828",fontSize:12,fontWeight:"600",textDecorationLine:"line-through",textDecorationColor:"#C62828",maxWidth:"100%"},
   detailMetaRow: {marginTop:8,flexDirection:"row",justifyContent:"space-between",gap:12},
   detailMetaLabel: {color:"#66736F",fontSize:12,lineHeight:18,fontWeight:"500"},
   detailMetaValue: {flex:1,textAlign:"right",color:"#191919",fontSize:12,lineHeight:18,fontWeight:"600"},

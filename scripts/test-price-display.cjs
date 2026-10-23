@@ -1,0 +1,34 @@
+const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript'), assert = require('node:assert/strict');
+const compile = code => ts.transpileModule(code, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React, esModuleInterop: true}}).outputText;
+const utils = {exports: {}, Intl, URL, require: () => ({API_URL: 'https://api.example.test'})}; vm.runInNewContext(compile(fs.readFileSync('components/utils.ts', 'utf8')), utils);
+const react = {createElement: (type, props, ...children) => ({type, props: props || {}, children: children.flat(Infinity)})};
+const context = {exports: {}, require: name => {
+  if (name === 'react') return react;
+  if (name === 'react-native') return {View: 'View', Pressable: 'Button', StyleSheet: {create: value => value}};
+  if (name === './ThemeProvider') return {ThemedText: 'Text', useTheme: () => ({color: value => value}), useThemedStyles: value => value};
+  if (name === './utils') return utils.exports;
+  if (name === './ProviderIdentity') return {ProviderIdentity: 'Identity'};
+  if (name === './ResilientImage') return {ResilientImage: 'Photo'};
+  if (name === './ReviewStars') return {ReviewStars: 'Stars'};
+  if (name === '@expo/vector-icons') return {Ionicons: 'Icon'};
+  throw Error('Unexpected ' + name);
+}};
+vm.runInNewContext(compile(fs.readFileSync('components/ProductCard.tsx', 'utf8')), context);
+const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...(node.children || []).flatMap(nodes)];
+const text = node => typeof node === 'string' || typeof node === 'number' ? String(node) : node?.children?.map(text).join('') || '';
+const product = utils.exports.mapProduct({id: 'test', title: 'Large price', currency: 'NGN', price: '9000000000', compare_at_price: '10000000000', flash_sale_price: 1, is_flash_sale: false});
+let tree = context.exports.ProductCard({product, cartQuantity: 0, onPress() {}});
+const price = utils.exports.priceMoney(product.price, product.currency), compare = utils.exports.priceMoney(product.compare_at_price, product.currency);
+assert.ok(price.includes('9,000,000,000')); assert.ok(!price.includes('.00')); assert.ok(!/[KMBT]$/.test(price), 'never round large prices to K/M');
+const parent = nodes(tree).find(n => n.children?.[0]?.type === 'Text' && text(n.children[0]) === price && text(n.children[1]) === compare); assert.ok(parent, 'crossed price must sit directly below main price in the same column');
+const crossed = parent.children[1]; assert.equal(crossed.props.style.color, '#C62828'); assert.equal(crossed.props.style.textDecorationLine, 'line-through'); assert.equal(parent.children[0].props.adjustsFontSizeToFit, true); assert.ok(parent.children[0].props.style.fontSize <= 14);
+assert.ok(!nodes(tree).some(n => n.type === 'Text' && text(n) === utils.exports.priceMoney(1, 'NGN')), 'inactive raw flash value must not replace server price');
+const source = fs.readFileSync('components/Screens.tsx', 'utf8'), ast = ts.createSourceFile('Screens.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX); let jsx; const styles = {};
+function visit(node) {
+  if (ts.isJsxElement(node) && node.openingElement.attributes.properties.some(p => p.name?.getText(ast) === 'style' && p.initializer?.expression?.getText(ast) === 'styles.detailPriceRow')) jsx = node.getText(ast);
+  if (ts.isPropertyAssignment(node) && ['detailPriceRow', 'detailPrice', 'detailComparePrice'].includes(node.name.getText(ast))) styles[node.name.getText(ast)] = vm.runInNewContext('(' + node.initializer.getText(ast) + ')');
+  ts.forEachChild(node, visit);
+} visit(ast); assert.ok(jsx);
+const detail = {exports: {}, React: react, product, styles, View: 'View', Text: 'Text', priceMoney: utils.exports.priceMoney}; vm.runInNewContext(compile('exports.render=()=>(' + jsx + ');'), detail); tree = detail.exports.render();
+assert.equal(styles.detailPriceRow.flexDirection, undefined); assert.equal(text(tree.children[0]), price); assert.equal(text(tree.children[1]), compare); assert.equal(styles.detailComparePrice.color, '#C62828'); assert.equal(styles.detailComparePrice.textDecorationLine, 'line-through');
+console.log('Actual product prices passed: red crossed price directly below main price, compact exact large amounts, numeric API mapping and no inactive flash override.');

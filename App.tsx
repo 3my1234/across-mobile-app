@@ -1,3 +1,5 @@
+import {NativeReferrals} from './components/NativeReferrals';
+import {validateSignupReferral} from './components/referralApi';
 import {ProviderEntryGate, WorkspaceIntent} from './components/ProviderEntryGate';
 import {rememberSignupWorkspace, signupWorkspaceFor} from './components/workspaceIntent';
 import {NativeNotificationDiagnostics} from './components/NativeNotificationDiagnostics';
@@ -142,6 +144,8 @@ function AcrossApp() {
   const { login: loginWithOAuth, state: oauthState } = useLoginWithOAuth();
   const [stage, setStage] = useState<AppStage>("booting");
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
+  const [referralCode,setReferralCode] = useState("");
+  const [showReferrals,setShowReferrals] = useState(false);
   const [workspaceIntent, setWorkspaceIntent] = useState<WorkspaceIntent>("auto");
   const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -843,6 +847,7 @@ function AcrossApp() {
     sessionTokenRef.current=s.access_token;
     setToken(s.access_token);
     setStage("app");
+    setReferralCode("");
     // Retain the email-bound provider journey across sign-in and restarts;
     // the entry gate verifies the signed-in identity before restoring it.
     // The app-stage effects own catalogue/profile loading once.
@@ -860,6 +865,7 @@ function AcrossApp() {
       SecureStore.deleteItemAsync(CART_KEY),
       SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY)
     ]);
+    setReferralCode(""); setShowReferrals(false);
     setWorkspaceEntryToken(null); setWorkspaceIntent("auto"); setProviderWorkspaceVisible(false);
     setToken(null);
     setProducts([]);
@@ -1134,6 +1140,7 @@ function AcrossApp() {
     try {
       if (path.endsWith("/signup")) {
         if (workspaceIntent === "auto") throw Error("Choose Customer or Provider before registering.");
+        await validateSignupReferral(payload.referral_code || "");
         await rememberSignupWorkspace(payload.email || "", workspaceIntent);
       } else if (path.endsWith("/login")) setWorkspaceIntent(await signupWorkspaceFor(payload.email || ""));
       const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Client-Country-Code": catalogCountry }, body: JSON.stringify(payload) });
@@ -1208,7 +1215,8 @@ function AcrossApp() {
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
       if (!privyToken) throw new Error("Could not get access token");
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken }) });
+      await validateSignupReferral(referralCode);
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
       setWorkspaceIntent('auto');
@@ -1891,7 +1899,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-	if (stage === "auth") return <AuthScreen workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen referralCode={referralCode} onReferralCode={setReferralCode} workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === workspaceEntryNavigation.current.request) setProviderWorkspaceVisible(true);}}/>;
 
@@ -2070,6 +2078,7 @@ function AcrossApp() {
               </View>
             )}
             <Pressable style={s.quickLinkCard} onPress={()=>{setProviderWorkspaceRoute('');setProviderWorkspaceVisible(true);}}><AccountIcon name="storefront-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Provider workspace</Text><Text style={s.quickLinkMeta}>Manage your business, listings and customer chats.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
+            <Pressable style={s.quickLinkCard} onPress={()=>setShowReferrals(true)}><AccountIcon name="gift-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Refer and earn XP</Text><Text style={s.quickLinkMeta}>Invite customers and providers. View your code and rewards.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
             <View onLayout={event=>{rewardsOffset.current=event.nativeEvent.layout.y;}}>{xpReserved>0&&<Text style={s.muted}>{xpReserved} XP reserved for pending checkout.</Text>}<XPRewardSummary balance={xpBalance} claimed={xpClaimed} busy={busy} onClaim={()=>void claimDailyXP()}/></View>
             {withdrawalEnabled && token && <View style={accountCard}><XPWithdrawalPanel key={token} token={token} balance={xpBalance} onRefresh={()=>loadXPBalance(token)}/></View>}
             <View style={s.quickLinks}>
@@ -2280,7 +2289,8 @@ function AcrossApp() {
           <View style={accountCard}><AccountSectionHeading icon="shield-checkmark-outline" title="Privacy and storage" subtitle="Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy."/>{token&&<ReadReceiptSetting token={token} active={showSettings}/>}<Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Ionicons name="trash-outline" size={20} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Clear local chat history</Text></Pressable></View>
           <Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{setShowSettings(false);void logout();}}><Ionicons name="log-out-outline" size={21} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Sign out</Text></Pressable>
         </ScrollView></View></Modal>
-      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onOpenReferrals={()=>setShowReferrals(true)} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {showReferrals&&token&&<NativeReferrals key={token} token={token} onClose={()=>setShowReferrals(false)} onOpenXP={()=>{setShowReferrals(false);void openNotification({notification_type:"xp_earned"});}}/>}
     </View>
   );
 }

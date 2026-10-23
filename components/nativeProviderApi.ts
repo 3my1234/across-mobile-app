@@ -4,7 +4,9 @@ export class ProviderRequestError extends Error {
   constructor(public status: number, message: string, public requestID = '') { super(requestID ? `${message} (Request ${requestID})` : message); }
 }
 export async function providerRequest(token: string, path: string, options: RequestInit = {}) {
-  if (!path.startsWith('/providers/') && path !== '/marketplace/subscription-plans') throw new Error('Unsupported provider operation');
+  const method = (options.method || 'GET').toUpperCase();
+  const shared = method === 'GET' && ['/profile', '/notifications'].includes(path) || method === 'PATCH' && path === '/notifications/read-all';
+  if (!path.startsWith('/providers/') && path !== '/marketplace/subscription-plans' && !shared) throw new Error('Unsupported provider operation');
   try {
     const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1${path}`, {
       ...options, cache: 'no-store', headers: {...options.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
