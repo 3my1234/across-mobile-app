@@ -17,6 +17,7 @@ const request = async (token, path, options = {}) => {
   return {items: [{id: '33333333-3333-4333-8333-333333333333', status, listing_title: 'Synthetic repair', request_type: 'appointment', party_size: 1, buyer: {full_name: 'Test buyer'}}], next_cursor: ''};
 };
 const context = {exports: {}, URLSearchParams, require: name => {
+ if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
   if (name === 'react') return react;
   if (name === 'react-native') return {ActivityIndicator: 'Spinner', Alert: {alert: (...args) => {alert = args;}}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'ScrollView', View: 'View'};
   if (name === 'react-native-safe-area-context') return {useSafeAreaInsets: () => ({top: 0, bottom: 16})};

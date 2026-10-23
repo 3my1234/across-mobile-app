@@ -1,5 +1,6 @@
+import {ProviderPanel} from './ProviderPanel';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Modal, Pressable, ScrollView, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
@@ -9,8 +10,8 @@ import {bookingActions, bookingFilters, bookingTransition, ProviderBooking} from
 import {loadBookingImages} from './providerBookingImages';
 import {ProviderPostImages} from './ProviderPostImages';
 
-export function NativeProviderRequests({token, onClose, requestID = ''}: {token: string; onClose: () => void; requestID?: string}) {
-  const c = useAccountDesign(), insets = useSafeAreaInsets();
+export function NativeProviderRequests({embedded = false, token, onClose, requestID = ''}: {embedded?: boolean; token: string; onClose: () => void; requestID?: string}) {
+  const c = useAccountDesign(), safeInsets = useSafeAreaInsets(), insets = embedded ? {top: 0, bottom: 0} : safeInsets;
   const [target, setTarget] = useState(requestID);
   const [items, setItems] = useState<ProviderBooking[]>([]), [cursor, setCursor] = useState('');
   const [photos, setPhotos] = useState<Record<string, string[] | null>>({});
@@ -53,8 +54,8 @@ export function NativeProviderRequests({token, onClose, requestID = ''}: {token:
       })();}},
     ]);
   };
-  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled: disabled || busy}} disabled={disabled || busy} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled || busy ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
-  return <Modal animationType="slide" onRequestClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, paddingTop: insets.top, backgroundColor: c.background}}>
+  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled: disabled || busy}} disabled={disabled || busy} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  return <ProviderPanel embedded={embedded} onClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, paddingTop: insets.top, backgroundColor: c.background}}>
     <View style={{padding: 12, flexDirection: 'row', gap: 12, alignItems: 'center'}}>{button('Back', onClose)}<Text style={{fontSize: 20, fontWeight: '700'}}>Bookings & enquiries</Text></View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding: 16, gap: 12}}>
       {target ? <>{button('All bookings and enquiries', () => setTarget(''))}<Text>Request opened from your notification</Text></> : <><Input accessibilityLabel="Search bookings and enquiries" value={search} editable={!busy} onChangeText={setSearch} placeholder="Customer or service" style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/>
@@ -71,5 +72,5 @@ export function NativeProviderRequests({token, onClose, requestID = ''}: {token:
       {!items.length && !loading && !error && <Text>No matching bookings or enquiries.</Text>}
       {!!cursor && button('Load more', () => void load(cursor), loading || photosLoading)}{button('Refresh requests', () => void load(), loading)}
     </ScrollView>
-  </KeyboardFrame></Modal>;
+  </KeyboardFrame></ProviderPanel>;
 }

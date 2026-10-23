@@ -14,6 +14,7 @@ const react = {
   useEffect: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) {const old = hooks[i]; hooks[i] = {deps}; effects.push(() => {old?.cleanup?.(); hooks[i].cleanup = fn();});}},
 };
 const component = {exports: {}, require: name => {
+ if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
   if (name === 'react') return react;
   if (name === 'react-native') return {ActivityIndicator: 'Spinner', Modal: 'Modal', Pressable: 'Button', ScrollView: 'Scroll', View: 'View', Share: {share: async options => {shared.push(options);}}};
   if (name === 'react-native-safe-area-context') return {useSafeAreaInsets: () => ({top: 12, bottom: 16})};

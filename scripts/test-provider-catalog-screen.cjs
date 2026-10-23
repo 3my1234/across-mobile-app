@@ -10,6 +10,7 @@ const react = {
   useCallback: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) hooks[i] = {deps, fn}; return hooks[i].fn;},
 };
 const modules = {
+  './ProviderPanel': {ProviderPanel: 'Modal'}, './NativeServiceCategory': {NativeServiceCategory: 'Category'},
   react,
   'react-native': {ActivityIndicator: 'Spinner', Alert: {alert() {}}, Linking: {}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'Scroll', StyleSheet: {create: value => value}, Switch: 'Switch', View: 'View'},
   'expo-image-picker': {}, 'expo-crypto': {}, './providerOrderPolicy': {providerOrderActions: () => []}, './NativeProviderFulfillmentTools': {},

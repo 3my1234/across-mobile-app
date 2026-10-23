@@ -18,6 +18,8 @@ function compile(code, globals = {}) {
   assert.throws(() => policy.editablePostSnapshot('listings', editing, 'service'), /complete editable/);
   assert.throws(() => policy.editablePostSnapshot('listings', {...service, id: 'another'}, 'service'), /different post/);
   assert.throws(() => policy.editablePostSnapshot('listings', {...service, id: 'service', status: 'archived'}, 'service'), /archived/);
+  assert.equal(policy.editablePostSnapshot('listings', {...service, id: 'service', price: 500, attributes: {}}, 'service').attributes.price_mode, 'fixed', 'legacy priced services have a clear pricing choice');
+  assert.equal(policy.editablePostSnapshot('listings', {...service, id: 'service', price: null, attributes: {}}, 'service').attributes.price_mode, 'quote');
   const snapshot = policy.editablePostSnapshot('listings', {...service, id: 'service', attributes: {custom: {keep: true}}}, 'service');
   assert.equal(snapshot.contact_email, service.contact_email); snapshot.attributes.custom.keep = false;
   assert.equal(service.attributes.custom, undefined, 'editor changes cannot mutate a fetched row');

@@ -19,6 +19,7 @@ const react = {
   useCallback: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) hooks[i] = {deps, fn}; return hooks[i].fn;},
 };
 const context = {exports: {}, require: name => {
+ if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
   if (name === 'react') return react;
   if (name === 'react-native') return {ActivityIndicator: 'Spinner', AppState: {addEventListener: (_event, fn) => {foreground = fn; return {remove() {}};}}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'Scroll', View: 'View'};
   if (name === 'react-native-safe-area-context') return {useSafeAreaInsets: () => ({top: 12, bottom: 20})};

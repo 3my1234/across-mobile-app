@@ -20,6 +20,7 @@ const request=async(token,path,options={})=>{
  return {items:[manifest]};
 };
 const context={exports:{},URLSearchParams,Error,require:name=>{
+ if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
  if(name==='react')return react;
  if(name==='react-native')return {ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},FlatList:'FlatList',Modal:'Modal',Pressable:'Button',ScrollView:'Scroll',Switch:'Switch',View:'View'};
  if(name==='react-native-safe-area-context')return {useSafeAreaInsets:()=>({top:0,bottom:0})};

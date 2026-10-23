@@ -19,6 +19,7 @@ export function NativeProviderLocationPicker({initial, onChoose, onClose}: {init
   const [pin, setPin] = useState<Pin | null>(() => validProviderPin(initial) ? initial : null);
   const [camera, setCamera] = useState(() => ({centerCoordinate: validProviderPin(initial) ? [initial.longitude, initial.latitude] : [8.6753, 9.082], zoomLevel: validProviderPin(initial) ? 15 : 5}));
   const [query, setQuery] = useState(''), [results, setResults] = useState<Pin[]>([]);
+  const [activeAction, setActiveAction] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [mapFailed, setMapFailed] = useState(false), [mapLoaded, setMapLoaded] = useState(false), [mapVersion, setMapVersion] = useState(0);
   const mounted = useRef(true), flight = useRef(false), closed = useRef(false);
   useEffect(() => {mounted.current = true; return () => {mounted.current = false;};}, []);
@@ -36,7 +37,7 @@ export function NativeProviderLocationPicker({initial, onChoose, onClose}: {init
     try {await action();} catch (failure) {if (mounted.current && !closed.current) setError(failure instanceof Error ? failure.message : 'Location could not load. Retry or choose a pin on the map.');}
     finally {flight.current = false; if (mounted.current && !closed.current) setBusy(false);}
   };
-  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{disabled}} onPress={action} style={[s.button, {backgroundColor: c.soft, borderColor: c.line, opacity: disabled ? .5 : 1}]}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{disabled, busy: busy && activeAction === label}} onPress={() => {setActiveAction(label); action();}} style={({pressed}) => [s.button, {backgroundColor: pressed ? c.soft : c.surface, borderColor: c.line, opacity: disabled && !busy ? .5 : 1}]}><View style={{flexDirection: 'row', gap: 8, alignItems: 'center'}}>{busy && activeAction === label && <ActivityIndicator accessibilityLabel={`${label} in progress`}/>}<Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></View></Pressable>;
   return <Modal animationType="slide" onRequestClose={close}><View style={{flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: c.background}}>
     <ScrollView style={{maxHeight: '40%', flexGrow: 0}} contentContainerStyle={s.controls} keyboardShouldPersistTaps="handled"><Text style={s.title}>Choose service / stock location</Text><Text>Tap the map, or hold and drag the pin. Your post changes only after you confirm and save it.</Text>
       <Input accessibilityLabel="Find a location on the map" value={query} editable={!busy} onChangeText={value => {setQuery(value); setResults([]);}} placeholder="Address, city or landmark" style={[s.input, {borderColor: c.line}]}/>
@@ -52,7 +53,7 @@ export function NativeProviderLocationPicker({initial, onChoose, onClose}: {init
       {!mapLoaded && !mapFailed && <View pointerEvents="none" style={s.loading}><ActivityIndicator/><Text>Loading map…</Text></View>}
     </View>
     <View style={s.controls}>
-      {mapFailed && <><Text accessibilityRole="alert">Map tiles could not load. Retry, use GPS, or return to manual coordinates.</Text>{button('Retry map', () => {setMapFailed(false); setMapLoaded(false); setMapVersion(value => value + 1);})}</>}
+      {mapFailed && <><Text accessibilityRole="alert" style={{color: c.danger}}>Map tiles could not load. Retry, use GPS, or return to manual coordinates.</Text>{button('Retry map', () => {setMapFailed(false); setMapLoaded(false); setMapVersion(value => value + 1);})}</>}
       <Text>{pin ? `Selected: ${pin.latitude.toFixed(6)}, ${pin.longitude.toFixed(6)}` : 'Choose the actual location before confirming.'}</Text>
       <View style={s.row}><View style={{flex: 1}}>{button('Use this location', () => {if (pin && !closed.current) {closed.current = true; onChoose({...pin});}}, busy || !pin)}</View><View>{button('Cancel', close)}</View></View>
     </View>

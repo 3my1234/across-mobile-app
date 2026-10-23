@@ -46,6 +46,9 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  let release;held=new Promise(resolve=>release=resolve);failCheckout=true;
  const confirm=alert[2].find(item=>item.text==='Continue to payment').onPress;confirm();confirm();await settle();
  assert.equal(checkouts().length,1,'duplicate confirmation must make only one checkout');
+ assert.equal(nodes(tree).filter(node=>node.type==='Button'&&node.props.accessibilityState?.busy).length,1,'only the chosen plan shows busy feedback');
+ assert.equal(button('Refresh billing status').props.accessibilityState.busy,false);
+ assert.equal(button('Refresh billing status').props.style({pressed:false}).opacity,1,'other controls stay visually unpressed while financial writes remain locked');
  assert.equal(JSON.parse(stored).provider_id,id,'persist uncertainty before sending checkout');
  assert.equal(checkouts()[0].token,'synthetic-owner');release();held=null;await settle();
  assert.ok(text(tree).includes('Connection interrupted'));assert.equal(button('Continue: NGN 500').props.disabled,true,'ambiguous checkout blocks a second payment');

@@ -1,6 +1,7 @@
+import {ProviderPanel} from './ProviderPanel';
 import {ProviderPostImages} from './ProviderPostImages';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Modal, Pressable, ScrollView, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, ScrollView, View} from 'react-native';
 import * as Crypto from 'expo-crypto';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
@@ -10,8 +11,8 @@ import {providerRequest} from './nativeProviderApi';
 import {ProviderOrder, providerETADraft, providerOrderActions, providerOrderUpdate, TrackingDraft} from './providerOrderPolicy';
 import {NativeProviderFulfillmentTools} from './NativeProviderFulfillmentTools';
 
-export function NativeProviderOrders({token, onClose}: {token: string; onClose: () => void}) {
-  const c = useAccountDesign(), insets = useSafeAreaInsets();
+export function NativeProviderOrders({embedded = false, token, onClose}: {embedded?: boolean; token: string; onClose: () => void}) {
+  const c = useAccountDesign(), safeInsets = useSafeAreaInsets(), insets = embedded ? {top: 0, bottom: 0} : safeInsets;
   const [items, setItems] = useState<ProviderOrder[]>([]), [cursor, setCursor] = useState('');
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [editor, setEditor] = useState<{order: ProviderOrder; next: string; key: string} | null>(null);
@@ -43,10 +44,10 @@ export function NativeProviderOrders({token, onClose}: {token: string; onClose: 
       finally {mutation.current = false; if (alive.current) {setBusy(false); setLoading(false); paging.current = false;}}
     })();}}]);
   };
-  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled || busy} accessibilityState={{disabled: disabled || busy}} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled || busy ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
-  if (tools) return <NativeProviderFulfillmentTools token={token} onClose={() => {setTools(false); void load();}}/>;
-  return <Modal animationType="slide" onRequestClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, paddingTop: insets.top, backgroundColor: c.background}}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding: 16, gap: 12}}>
-    {button(editor ? 'Cancel update' : 'Back to provider', () => editor ? setEditor(null) : onClose())}<Text style={{fontSize: 20, fontWeight: '700'}}>Previous paid orders</Text>
+  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled || busy} accessibilityState={{disabled: disabled || busy}} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  if (tools) return <NativeProviderFulfillmentTools embedded={embedded} token={token} onClose={() => {setTools(false); void load();}}/>;
+  return <ProviderPanel embedded={embedded} onClose={onClose}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, paddingTop: insets.top, backgroundColor: c.background}}><ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{padding: 16, gap: 12}}>
+    {button(editor ? 'Cancel update' : 'Back', () => editor ? setEditor(null) : onClose())}<Text style={{fontSize: 20, fontWeight: '700'}}>Previous paid orders</Text>
     <Text>New product purchases are arranged directly with sellers. Existing paid orders and their tracking remain available here.</Text>
     {(loading || busy) && <ActivityIndicator/>}{!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
     {editor ? <><Text style={{fontWeight: '700'}}>{editor.next.replace(/_/g, ' ')}</Text>{Object.keys(draft).map(key => <View key={key} style={{gap: 6}}><Text>{key.replace(/_/g, ' ')}</Text><Input accessibilityLabel={key.replace(/_/g, ' ')} editable={!busy} value={draft[key as keyof TrackingDraft] || ''} onChangeText={value => setDraft(old => ({...old, [key]: value}))} autoCapitalize={key === 'tracking_url' ? 'none' : 'sentences'} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12}}/></View>)}{button('Review and publish update', save)}</> : <>
@@ -60,5 +61,5 @@ export function NativeProviderOrders({token, onClose}: {token: string; onClose: 
       </View>)}
       {!items.length && !loading && !error && <Text>No previous paid orders.</Text>}{!!cursor && button('Load more orders', () => void load(cursor), loading)}{button('Refresh orders', () => void load(), loading)}
     </>}
-  </ScrollView></KeyboardFrame></Modal>;
+  </ScrollView></KeyboardFrame></ProviderPanel>;
 }

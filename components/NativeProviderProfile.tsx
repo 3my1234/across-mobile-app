@@ -18,7 +18,7 @@ export function NativeProviderProfile({token, provider, onSaved}: {token: string
     try {await action();} catch (failure) {if (mounted.current) setError(failure instanceof Error ? failure.message : 'Could not update the profile.');}
     finally {flight.current = false; if (mounted.current) setBusy(false);}
   };
-  const button = (label: string, action: () => void) => <Pressable accessibilityRole="button" disabled={busy} onPress={action} style={{borderRadius: 12, padding: 12, minHeight: 44, backgroundColor: c.soft, opacity: busy ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  const button = (label: string, action: () => void) => <Pressable accessibilityRole="button" disabled={busy} onPress={action} style={{borderRadius: 12, padding: 12, minHeight: 44, backgroundColor: c.soft, opacity: 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
   const media = (banner: boolean) => void run(async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted) throw new Error('Allow photo access in phone settings to choose your business images.');
     const result = await ImagePicker.launchImageLibraryAsync({mediaTypes: ['images'], quality: .8, allowsEditing: true, aspect: banner ? [16, 6] : [1, 1]}); if (result.canceled) return;
