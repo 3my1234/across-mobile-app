@@ -32,7 +32,8 @@ if (require.main === module) {
   try {
     if (process.argv.includes('--eas-hook') && !['provider-staging', 'provider-preview'].includes(process.env.EAS_BUILD_PROFILE)) process.exit(0);
     const result = process.env.EAS_BUILD_PROFILE === 'provider-preview' ? checkProviderPreview() : checkProviderStaging();
-    console.log(JSON.stringify({provider_staging_configuration: 'pass', ...result, note: 'Configuration check only; backend isolation, gateway sandbox, signing and device acceptance require separate evidence.'}));
+    const direct = process.env.EAS_BUILD_PROFILE === 'provider-preview';
+    console.log(JSON.stringify({[direct ? 'provider_preview_configuration' : 'provider_staging_configuration']: 'pass', ...result, note: direct ? 'Existing API APK configuration only; backend release verification, signing and device acceptance are separate gates.' : 'Configuration check only; backend isolation, gateway sandbox, signing and device acceptance require separate evidence.'}));
   } catch (error) {console.error(error.message); process.exitCode = 1;}
 }
 module.exports = {checkProviderStaging, checkProviderPreview};

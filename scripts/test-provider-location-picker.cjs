@@ -7,7 +7,7 @@ const react={createElement:(type,props,...children)=>({type,props:props||{},chil
  useEffect:(fn,deps)=>{const i=index++;if(!hooks[i]||!same(hooks[i].deps,deps)){const previous=hooks[i];hooks[i]={deps};effects.push(()=>{previous?.cleanup?.();hooks[i].cleanup=fn();});}}};
 const context={exports:{},Number,setTimeout:()=>1,clearTimeout:()=>{},require:name=>{
  if(name==='react')return react;
- if(name==='react-native')return {ActivityIndicator:'Spinner',Modal:'Modal',Pressable:'Button',ScrollView:'Scroll',View:'View',StyleSheet:{create:x=>x}};
+ if(name==='react-native')return {ActivityIndicator:'Spinner',Keyboard:{dismiss(){}},Modal:'Modal',Pressable:'Button',ScrollView:'Scroll',View:'View',StyleSheet:{create:x=>x}};
  if(name==='@maplibre/maplibre-react-native')return {MapView:'Map',Camera:'Camera',PointAnnotation:'Pin'};
  if(name==='react-native-safe-area-context')return {useSafeAreaInsets:()=>({top:0,bottom:16})};
  if(name==='./ThemeProvider')return {ThemedText:'Text',ThemedTextInput:'Input'};

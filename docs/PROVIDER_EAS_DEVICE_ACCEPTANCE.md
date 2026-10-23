@@ -2,29 +2,21 @@
 
 Status: prepared, not built or deployed. The provider workflows are implemented in draft PR49. There is not yet a usable migrated APK. A successful compile-only artifact does not change the app installed on a phone.
 
-## Delivery choice
+## Current delivery choice ? normal EAS APK
 
-Use the normal EAS internal APK process; no USB debugging, laptop tunnel, new developer-store account or additional rented server is required for this delivery method. Store submission and iOS device signing remain separate.
+The user will trigger the build personally when the approved minimal backend release is confirmed. Use provider-preview from the native-provider branch, not the ordinary preview/production profile (which does not enable the native workspace). This profile inherits the existing internal Android APK, application identity and remote signing, explicitly enables native/direct Android features, and uses the existing https://api.atlxpres.com backend. The cloud preview environment contains the required public Privy variable names; values/keystores are not printed or changed. The build hook fails if required public authentication settings or reviewed flags are missing.
 
-`provider-staging` is a separate EAS profile using the preview environment, native provider workspace and direct Android distribution flags. Existing preview/production profiles retain their existing behavior. The staging profile requires `EXPO_PUBLIC_PROVIDER_STAGING_API_URL`, uses no default production URL, rejects known production/placeholder/local origins and runs the build pre-install guard. Required public Privy app/client identifiers must be configured in the reviewed preview environment; do not paste credentials into reports. A syntactically valid URL is not evidence of a deployed or isolated backend.
+The approved backend candidate is PR70 only, merged as65a159bea32b3176cb67065e835ee26f6daff50e. It adds the complete private service-edit read, optional exact owned request filter and private native test-push status read. Its five CI checks pass. Worker/API/replica deployment alignment still needs operator confirmation; merge/readiness alone do not prove those new routes are deployed. No PR66 foundation release is required for this APK.
 
-Expo build environment behavior and hooks: https://docs.expo.dev/eas/environment-variables/usage/ and https://docs.expo.dev/build-reference/npm-hooks/ .
+When readiness and source alignment are confirmed, run from the mobile directory:
 
-## Backend prerequisite: proposed isolated setup on the existing application host
+```powershell
+eas build --platform android --profile provider-preview
+```
 
-This is a plan requiring approval, not an existing environment. Proposed hostname: `staging-api.atlxpres.com` (not created or verified). The operator prepares this address; the user does not need to invent it.
+Do not start a second build if submission is slow; inspect the first EAS build ID instead. Record the source commit, build ID and installation link. This is a same-identity replacement/update APK; no USB tunnel, new rented server, test-backend setup or store developer payment is required to compile/install it. Tests inside this selected existing-API build affect live records and payments, so use owned accounts and deliberate actions. Controlled synthetic/sandbox acceptance remains preferable for destructive/payment boundaries.
 
-1. Recheck main-host health, available memory/disk and running release identity before allocating resources. Stop if headroom is insufficient; historical server readings do not prove current headroom.
-2. Build/pin the PR69 candidate revision (`55613e3`, including PR66 foundation) for API and worker. Do not merge main or reuse production deployment resources/webhooks/controller labels. CI image builds are local-to-runner, not registry-published deployment artifacts.
-3. Use separate PostgreSQL16 and Redis instances, volumes, database credentials, JWT secret, TLS materials and Docker networks. Seed synthetic customers/providers/approved evidence and tiers. Do not restore/copy production users, messages, documents, billing tokens or payment references. API/worker use the same candidate revision and only these staging stores.
-4. Suggested starting runtime limits: PostgreSQL 768 MiB/0.5 CPU; API 512 MiB/0.5 CPU; worker 256 MiB/0.25 CPU; Redis 128 MiB/0.25 CPU; ingress/controlled egress 128 MiB/0.25 CPU. Total 1,792 MiB and 1.75 CPU quotas, subject to the fresh headroom check. Build work also consumes resources; build outside the live host where practical. These are isolation budgets, not measured traffic capacity.
-5. Keep database/Redis off public ports. Do not attach application containers to production service networks or use production connection URLs. Expose only the proposed HTTPS API route through reviewed ingress. Adding DNS/ingress or egress restrictions is a production-host configuration change requiring explicit approval. Existing routing and replica reconciliation remain unchanged.
-6. Begin with external egress blocked and captured/local test adapters. Browser/device push, email, OAuth and Flutterwave sandbox acceptance are separate controlled egress steps. Use sandbox-only credentials and owned test recipients/tokens, storage restricted to synthetic media and isolated prefixes/bucket. No production payment secret, SMTP/SES sending credential, real provider renewal token or production push registration may be copied. Review the actual client/worker behavior before allowing destinations; environment labels alone cannot guarantee isolation.
-7. Use actual authenticated routes. Disable development login and bootstrap tokens. Generate protected test passwords through a private operator channel; never include passwords/tokens in CI artifacts, commands pasted to chat or this file. Fixture users may be pre-verified for initial UI tests; that does not qualify the registration/verification-email journey.
-8. Run separate migrations against staging only, then readiness and authenticated customer/provider checks. Verify the private service editor, scoped request lookup, payments/renewals, ordinary chats and Town Hall on the deployed candidate. An HTTP200 readiness response alone cannot close these gates.
-9. Establish a rollback/cleanup boundary using only staging-owned resource IDs. Removing staging must not stop production or remove its storage. Do not use blanket Docker prune or compose project names shared with production. Retain sanitized evidence; remove synthetic accounts/media when acceptance ends.
-
-No server, DNS, routing, secrets, runtime settings, test accounts or gateway configuration has been changed by preparing this plan. No new paid server is proposed. EAS build quota/credit consumption must be checked before submitting a cloud build; no charged build is authorized by this document.
+The provider-staging profile remains an optional fail-closed alternative for a separately reviewed staging origin. No such backend has been deployed; its absence is not a prerequisite to the selected normal APK flow. Expo build environment behavior and hooks: https://docs.expo.dev/eas/environment-variables/usage/ and https://docs.expo.dev/build-reference/npm-hooks/ .
 
 ## Build identity and permissions
 
@@ -63,4 +55,6 @@ Windows cannot qualify Xcode native compilation, provisioning, APNs entitlements
 
 Mobile: native workflow compilation at `8826bc7` passed in run 39871938430; later source changes are covered by source regressions. The staging guard adds a fifteenth provider suite and does not turn the compile-only artifact into a usable candidate.
 
-Backend candidate `55613e3`: private contract CI run 39871523779 PASS; API/worker Docker and PostgreSQL provider/payment/messaging checks run 39873110097 PASS; Redis TLS, security/concurrency/vulnerability checks and synthetic recovery run 39873119341 PASS. These use isolated CI/synthetic resources and do not establish a deployed phone-reachable staging environment.
+Historical stacked backend candidate `55613e3`: private contract CI run 39871523779 PASS; API/worker Docker and PostgreSQL provider/payment/messaging checks run 39873110097 PASS; Redis TLS, security/concurrency/vulnerability checks and synthetic recovery run 39873119341 PASS. These use isolated CI/synthetic resources and do not establish a deployed phone-reachable staging environment.
+
+Latest native application source f2074d3 adds map tap/drag/GPS/address search and private delivery diagnostics.19 provider suites/typecheck/lint PASS; Android native compile39885410547 PASS atf2074d3, including MapLibre. A subsequent compact-layout/doc refinement is recorded in the source history. Direct Flutterwave subscription checkout remains direct-Android-only, not store distribution. Keep PWA available and keep device/iOS acceptance open.
