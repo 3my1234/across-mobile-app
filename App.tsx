@@ -147,6 +147,8 @@ function AcrossApp() {
   const [referralCode,setReferralCode] = useState("");
   const [showReferrals,setShowReferrals] = useState(false);
   const [workspaceIntent, setWorkspaceIntent] = useState<WorkspaceIntent>("auto");
+  const googleWorkspaceIntent = useRef<WorkspaceIntent>('auto');
+  const googleVerificationInFlight = useRef(false);
   const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -1206,6 +1208,8 @@ function AcrossApp() {
       return;
     }
     if (oauthBusy) return;
+    // Carry only a navigation preference through OAuth, never a provider role.
+    googleWorkspaceIntent.current = authMode === 'signup' ? workspaceIntent : 'auto';
     setOauthBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
@@ -1218,6 +1222,8 @@ function AcrossApp() {
   }
 
   async function finishPrivyLogin() {
+    if (googleVerificationInFlight.current) return;
+    googleVerificationInFlight.current = true;
     setBusy(true);
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
@@ -1226,13 +1232,13 @@ function AcrossApp() {
       const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
-      setWorkspaceIntent('auto');
+      setWorkspaceIntent(googleWorkspaceIntent.current);
       await saveSession(d); setOauthBusy(false);
     } catch (e) {
       setOauthBusy(false);
       await privyLogout().catch(() => undefined);
       Alert.alert("Sign-in failed", e instanceof Error ? e.message : "");
-    } finally { setBusy(false); }
+    } finally { googleVerificationInFlight.current = false; googleWorkspaceIntent.current = 'auto'; setBusy(false); }
   }
 
   async function getPrivyAccessTokenWithRetry() {
@@ -2085,7 +2091,7 @@ function AcrossApp() {
                 </View>
               </View>
             )}
-            <Pressable accessibilityLabel="Open provider workspace" style={s.quickLinkCard} onPress={()=>{setProviderWorkspaceRoute('');setProviderWorkspaceVisible(true);}}><AccountIcon name="storefront-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Provider workspace</Text><Text style={s.quickLinkMeta}>Manage your business, listings and customer chats.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
+            <Pressable accessibilityLabel="Open provider workspace" style={s.quickLinkCard} onPress={()=>{setProviderWorkspaceRoute('');setProviderWorkspaceVisible(true);}}><AccountIcon name="storefront-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Provider workspace / Become a provider</Text><Text style={s.quickLinkMeta}>Apply or manage your business with this same account.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
             <Pressable style={s.quickLinkCard} onPress={()=>setShowReferrals(true)}><AccountIcon name="gift-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Refer and earn XP</Text><Text style={s.quickLinkMeta}>Invite customers and providers. View your code and rewards.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
             <View onLayout={event=>{rewardsOffset.current=event.nativeEvent.layout.y;}}>{xpReserved>0&&<Text style={s.muted}>{xpReserved} XP reserved for pending checkout.</Text>}<XPRewardSummary balance={xpBalance} claimed={xpClaimed} busy={busy} onClaim={()=>void claimDailyXP()}/></View>
             {withdrawalEnabled && token && <View style={accountCard}><XPWithdrawalPanel key={token} token={token} balance={xpBalance} onRefresh={()=>loadXPBalance(token)}/></View>}
