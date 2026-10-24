@@ -37,7 +37,7 @@ export function playPurchasePayload(purchase: Purchase, catalog: PlayCatalog) {
   return {purchase_token: purchase.purchaseToken, product_id: plans[0].product_id, base_plan_id: plans[0].base_plan_id};
 }
 
-type Confirmation = {active: boolean; pending: boolean; needs_acknowledgement: boolean; expires_at: string};
+type Confirmation = {active: boolean; pending: boolean; needs_acknowledgement: boolean; expires_at: string; refund_state?: 'requested' | 'confirmed'};
 export function createPlayPurchaseProcessor(verify: (body: ReturnType<typeof playPurchasePayload>) => Promise<Confirmation>, finish: (purchase: Purchase) => Promise<void>, changed: () => Promise<void>) {
   const flights = new Map<string, Promise<string>>();
   return (purchase: Purchase, catalog: PlayCatalog): Promise<string> => {
@@ -45,6 +45,7 @@ export function createPlayPurchaseProcessor(verify: (body: ReturnType<typeof pla
     if (previous) return previous;
     const flight = (async () => {
       const result = await verify(payload);
+      if (result.refund_state) return result.refund_state === 'confirmed' ? 'Google Play confirmed a refund for this duplicate purchase. Your previous subscription remains unchanged.' : 'Your previous subscription remains unchanged. A refund for this duplicate purchase has been requested; confirmation is still pending.';
       // Local purchase callbacks never grant access or acknowledge an unpaid
       // purchase. The backend must have committed and acknowledged it first.
       if (result.pending) return 'Payment is pending in Google Play. Do not pay again; restore purchases when it completes.';

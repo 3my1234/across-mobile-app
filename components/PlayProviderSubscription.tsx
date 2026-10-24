@@ -15,6 +15,14 @@ export function PlayProviderSubscription({token, provider, onChanged}: {token: s
     if (alive.current) {setBusy(''); setNotice(failure.code === 'user-cancelled' ? 'Checkout closed. Restore purchases if a payment was sent. A checkout reservation expires after 15 minutes.' : 'Google Play could not finish checkout. Restore purchases before paying again.');}
     action.current = false;
   }});
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setTimeout(() => {
+      action.current = false;
+      if (alive.current) {setBusy(''); setNotice('Google Play confirmation is taking longer than expected. Restore purchases before paying again. Your checkout reservation expires after 15 minutes.');}
+    }, 45000);
+    return () => clearTimeout(timer);
+  }, [busy]);
   const refresh = useCallback(async () => {
     const result = playCatalog(await providerRequest(token, '/providers/me/play-billing'));
     if (alive.current) {catalogRef.current = result; setCatalog(result);}
@@ -68,6 +76,7 @@ export function PlayProviderSubscription({token, provider, onChanged}: {token: s
     {catalog?.state && <Text>{catalog.auto_renews ? 'Automatic renewal is on in Google Play.' : 'Google Play automatic renewal is off or this purchase is inactive.'}</Text>}
     {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
     {button('Restore purchases and refresh status', 'restore', () => void restore(), !iap.connected)}
+    {button('Reload available plans', 'catalog', () => {void refresh().catch(() => {if (alive.current) setError('Plans could not load. Retry when connected.');});})}
     {button('Manage or cancel in Google Play', 'manage', () => {void Linking.openURL('https://play.google.com/store/account/subscriptions?package=com.atlanticexpress.mobile').catch(() => setError('Google Play could not open. Open Play Store → Payments and subscriptions → Subscriptions.'));})}
     {!iap.connected && <Text>Connecting to Google Play. Install this version through Google Play to make store purchases.</Text>}
     {catalog?.items.map(plan => {let offer; try {offer = playOffer(plan, iap.subscriptions);} catch {offer = null;} return <View key={`${plan.product_id}:${plan.base_plan_id}`} style={{padding: 14, gap: 8, borderRadius: 12, borderWidth: 1, borderColor: c.line}}><Text style={{fontWeight: '700'}}>{plan.name}</Text><Text>{offer ? `${offer.displayPrice} / ${plan.duration_months === 12 ? 'year' : 'month'}` : 'Google Play price is unavailable. Refresh before purchasing.'}</Text>{button('Subscribe with Google Play', `${plan.product_id}:${plan.base_plan_id}`, () => start(plan), !offer || !iap.connected || hasPaidProviderAccess(provider))}</View>;})}

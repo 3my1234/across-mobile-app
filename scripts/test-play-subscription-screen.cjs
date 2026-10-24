@@ -2,6 +2,7 @@ const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),asser
 const compile=path=>ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,esModuleInterop:true}}).outputText;
 const policy={};vm.runInNewContext(compile('components/playSubscriptionPolicy.ts'),{exports:policy,Map,Set,Date,BigInt,Promise,Error});
 let hooks=[],index=0,effects=[],dirty=false,tree,options,alert,changed=0,finished=0,held,resolveHeld;
+const timers=new Map();let nextTimer=0;
 const calls=[],same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 const react={createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)}),useRef:v=>{const i=index++;return hooks[i]||(hooks[i]={current:v});},useState:v=>{const i=index++;if(!(i in hooks))hooks[i]=v;return[hooks[i],next=>{const value=typeof next==='function'?next(hooks[i]):next;if(!Object.is(value,hooks[i])){hooks[i]=value;dirty=true;}}];},useEffect:(fn,deps)=>{const i=index++;if(!hooks[i]||!same(hooks[i].deps,deps)){const old=hooks[i];hooks[i]={deps};effects.push(()=>{old?.cleanup?.();hooks[i].cleanup=fn();});}},useCallback:(fn,deps)=>{const i=index++;if(!hooks[i]||!same(hooks[i].deps,deps))hooks[i]={deps,fn};return hooks[i].fn;}};
 const catalog={account_id:'a'.repeat(64),items:[{product_id:'atl_basic',base_plan_id:'monthly',plan_id:'11111111-1111-4111-8111-111111111111',name:'Basic',duration_months:1,amount_minor:50000}],status:'',state:'',auto_renews:false,needs_acknowledgement:false};
@@ -9,7 +10,7 @@ const product={platform:'android',id:'atl_basic',subscriptionOfferDetailsAndroid
 const iap={connected:true,subscriptions:[product],availablePurchases:[],fetchProducts:async()=>{},getAvailablePurchases:async()=>{},finishTransaction:async()=>finished++,requestPurchase:async request=>{calls.push({path:'native-checkout',request});}};
 let result={active:true,pending:false,needs_acknowledgement:false,expires_at:new Date(Date.now()+86400000).toISOString()};
 const request=async(token,path,config={})=>{calls.push({path,token,...config});if(path.endsWith('/prepare'))return{account_id:catalog.account_id};if(path.endsWith('/verify')){if(held)await held;return result;}return catalog;};
-const context={exports:{},Set,Date,Promise,Error,require:name=>{
+const context={exports:{},Set,Date,Promise,Error,setTimeout:fn=>{const id=++nextTimer;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),require:name=>{
  if(name==='react')return react;
  if(name==='react-native')return{ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},AppState:{addEventListener:()=>({remove(){}})},Linking:{openURL:async()=>{}},Pressable:'Button',View:'View'};
  if(name==='expo-iap')return{useIAP:value=>{options=value;return iap;}};
@@ -34,6 +35,7 @@ const button=label=>{const found=nodes(tree).find(n=>n.type==='Button'&&text(n)=
  assert.equal(calls.filter(c=>c.path.endsWith('/prepare')).length,1);assert.equal(calls.filter(c=>c.path==='native-checkout').length,1);
  const native=calls.find(c=>c.path==='native-checkout').request;assert.equal(native.request.google.obfuscatedAccountIdAndroid,catalog.account_id);assert.equal(native.request.google.subscriptionOffers[0].offerToken,'safe-offer');
  assert.equal(changed,0,'native checkout resolution cannot grant access');assert.equal(finished,0);
+ for(const fn of [...timers.values()])fn();await settle();assert.ok(text(tree).includes('taking longer than expected'));assert.equal(calls.filter(c=>c.path==='native-checkout').length,1,'timeout must not replay checkout');
  const purchase={platform:'android',store:'google',productId:'atl_basic',currentPlanId:'monthly',purchaseToken:'sensitive-purchase-token',purchaseState:'purchased'};
  held=new Promise(resolve=>resolveHeld=resolve);options.onPurchaseSuccess(purchase);options.onPurchaseSuccess(purchase);await settle();assert.equal(calls.filter(c=>c.path.endsWith('/verify')).length,1);resolveHeld();held=null;await settle();assert.equal(changed,1);assert.equal(finished,1);assert.ok(text(tree).includes('payment verified'));
  result={...result,pending:true,active:false};options.onPurchaseSuccess(purchase);await settle();assert.equal(finished,1);assert.ok(text(tree).includes('Payment is pending'));
