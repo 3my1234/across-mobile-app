@@ -45,11 +45,12 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -Dorg.gradle.jvmargs='-Xmx4g -XX:MaxMetaspaceSize=1g'
+          ./gradlew :app:assembleRelease :app:bundleRelease --no-daemon --max-workers=2 -PreactNativeArchitectures=arm64-v8a -Dorg.gradle.jvmargs='-Xmx4g -XX:MaxMetaspaceSize=1g'
       - name: Label compile artifact and calculate checksum
         run: |
           mkdir -p provider-android-evidence
           cp android/app/build/outputs/apk/release/app-release.apk provider-android-evidence/provider-compile-only-arm64.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab provider-android-evidence/provider-compile-only-arm64.aab
           sha256sum provider-android-evidence/provider-compile-only-arm64.apk > provider-android-evidence/SHA256SUMS
           printf '%s\n' 'Compile-only artifact, generated test signing, non-production API endpoint. Not a production release or an integrated staging/device acceptance result.' > provider-android-evidence/README.txt
       - uses: actions/upload-artifact@v4
