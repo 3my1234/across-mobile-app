@@ -53,6 +53,15 @@ jobs:
           cp android/app/build/outputs/bundle/release/app-release.aab provider-android-evidence/provider-compile-only-arm64.aab
           sha256sum provider-android-evidence/provider-compile-only-arm64.apk > provider-android-evidence/SHA256SUMS
           printf '%s\n' 'Compile-only artifact, generated test signing, non-production API endpoint. Not a production release or an integrated staging/device acceptance result.' > provider-android-evidence/README.txt
+      - name: Audit actual native artifacts and manifest
+        run: |
+          python3 scripts/test_android_artifact.py
+          python3 scripts/audit-android-artifact.py android/app/build/outputs/bundle/release/app-release.aab > provider-android-evidence/aab-native-alignment.json
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging android/app/build/outputs/apk/release/app-release.apk > provider-android-evidence/manifest.txt
+          grep -F "package: name='com.atlanticexpress.mobile'" provider-android-evidence/manifest.txt
+          grep -F "targetSdkVersion:'36'" provider-android-evidence/manifest.txt
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/release/app-release.apk > provider-android-evidence/compile-only-signing.txt
       - uses: actions/upload-artifact@v4
         with:
           name: provider-android-compile-only
