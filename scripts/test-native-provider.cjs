@@ -62,6 +62,9 @@ function load(path, dependencies = {}, globals = {}) {
   next = {response: {ok: false, status: 403}, body: {message: 'Owner access required'}};
   await assert.rejects(api.providerRequest('member', '/providers/me/subscription-renewal'), error => error.status === 403 && error.message === 'Owner access required');
   assert.equal(calls.length, 2, 'denied mutation is never automatically replayed');
+  next = {response: {ok: true}, body: {active: true}};
+  await api.providerRequest('account-session', '/providers/me/play-billing/verify', {method: 'POST', body: JSON.stringify({purchase_token: 'synthetic-only-purchase-token'})});
+  assert.equal(calls[2][2], 45000, 'store confirmation must outlive the bounded server verification and acknowledgement');
   await assert.rejects(api.providerRequest('token', 'https://other.test'), /Unsupported/);
   next = {response:{ok:true,status:200},body:{email:'new-customer@example.test'}};await api.providerRequest('new-customer', '/profile');await api.providerRequest('new-customer','/notifications');await api.providerRequest('new-customer','/notifications/read-all',{method:'PATCH'});await assert.rejects(api.providerRequest('new-customer','/profile',{method:'PUT'}),/Unsupported/);
   next = {response: {ok: false, status: 503, headers: {get: () => 'synthetic-request-id'}}, body: {message: 'Temporarily unavailable'}};

@@ -32,16 +32,22 @@ const context={exports:{},Error,process:{env:{EXPO_PUBLIC_DISTRIBUTION_CHANNEL:'
  if(name==='./nativeProviderPolicy')return {hasPaidProviderAccess:p=>p.subscription?.status==='active'};
  if(name==='./utils')return {money:value=>'NGN '+value};
  if(name==='./providerSubscriptionPolicy')return policy;
+ if(name==='./PlayProviderSubscription')return {PlayProviderSubscription:'PlaySubscription'};
  throw Error('Unexpected import '+name);
 }};
 vm.runInNewContext(compile('components/NativeProviderSubscription.tsx'),context);
-function render(){index=0;effects=[];changed=false;tree=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});effects.forEach(fn=>fn());}
+function render(){index=0;effects=[];changed=false;tree=context.exports.DirectProviderSubscription({token:'synthetic-owner',provider,onChanged});effects.forEach(fn=>fn());}
 async function settle(){for(let i=0;i<12;i++){await new Promise(resolve=>setImmediate(resolve));if(changed)render();}}
 function nodes(node){return !node||typeof node!=='object'?[]:[node,...(node.children||[]).flatMap(nodes)];}
 const text=node=>typeof node==='string'?node:node?.children?.map(text).join('')||'';
 function button(label){const result=nodes(tree).find(node=>node.type==='Button'&&text(node)===label);assert.ok(result,'missing '+label);return result;}
 const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout'));
 (async()=>{
+ context.process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL='play';
+ let selected=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});assert.ok(nodes(selected).some(node=>node.type==='PlaySubscription'),'Play builds must select native store billing');
+ provider.subscription={status:'active',billing_provider:'flutterwave',billing_mode:'recurring'};
+ selected=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});assert.ok(nodes(selected).some(node=>node.props.managementOnly===true),'existing direct subscribers retain cancellation without external purchase routing');
+ provider.subscription={status:'inactive'};context.process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL='direct';
  render();await settle();button('Continue: NGN 500').props.onPress();assert.equal(checkouts().length,0);
  let release;held=new Promise(resolve=>release=resolve);failCheckout=true;
  const confirm=alert[2].find(item=>item.text==='Continue to payment').onPress;confirm();confirm();await settle();

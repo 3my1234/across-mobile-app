@@ -28,6 +28,8 @@
     },
     "production": {
       "env": {
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_DISTRIBUTION_CHANNEL": "play",
         "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com",
         "EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT": "true"
       },
