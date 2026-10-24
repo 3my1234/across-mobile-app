@@ -43,6 +43,11 @@ const text=node=>typeof node==='string'?node:node?.children?.map(text).join('')|
 function button(label){const result=nodes(tree).find(node=>node.type==='Button'&&text(node)===label);assert.ok(result,'missing '+label);return result;}
 const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout'));
 (async()=>{
+ context.process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL='play';
+ let selected=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});assert.ok(nodes(selected).some(node=>node.type==='PlaySubscription'),'Play builds must select native store billing');
+ provider.subscription={status:'active',billing_provider:'flutterwave',billing_mode:'recurring'};
+ selected=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});assert.ok(nodes(selected).some(node=>node.props.managementOnly===true),'existing direct subscribers retain cancellation without external purchase routing');
+ provider.subscription={status:'inactive'};context.process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL='direct';
  render();await settle();button('Continue: NGN 500').props.onPress();assert.equal(checkouts().length,0);
  let release;held=new Promise(resolve=>release=resolve);failCheckout=true;
  const confirm=alert[2].find(item=>item.text==='Continue to payment').onPress;confirm();confirm();await settle();

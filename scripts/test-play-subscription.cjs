@@ -9,6 +9,7 @@ const purchase={store:'google',platform:'android',productId:'atl_basic',currentP
  assert.equal(policy.playOffer(plan,[product]).displayPrice,'₦500.00');
  for(const replacement of [{priceAmountMicros:'499000000'},{priceAmountMicros:'invalid'},{priceCurrencyCode:'USD'},{billingPeriod:'P1Y'},{recurrenceMode:2}]){const copy=JSON.parse(JSON.stringify(product));Object.assign(copy.subscriptionOfferDetailsAndroid[0].pricingPhases.pricingPhaseList[0],replacement);assert.equal(policy.playOffer(plan,[copy]),null);}
  const trial=JSON.parse(JSON.stringify(product));trial.subscriptionOfferDetailsAndroid[0].offerId='trial';assert.equal(policy.playOffer(plan,[trial]),null);
+ for(const months of [3,6,12]){const prepaid=JSON.parse(JSON.stringify(product));const phase=prepaid.subscriptionOfferDetailsAndroid[0].pricingPhases.pricingPhaseList[0];phase.billingPeriod=`P${months}M`;phase.recurrenceMode=3;assert.ok(policy.playOffer({...plan,duration_months:months,prepaid:true},[prepaid]),'prepaid period must use one-off store offer');assert.equal(policy.playOffer({...plan,duration_months:months},[prepaid]),null);}
  assert.throws(()=>policy.playPurchasePayload({...purchase,obfuscatedAccountIdAndroid:'b'.repeat(64)},catalog));
  assert.throws(()=>policy.playPurchasePayload({...purchase,currentPlanId:undefined},{...catalog,items:[plan,{...plan,base_plan_id:'yearly'}]}));
  let verifies=0,finishes=0,changed=0,release;

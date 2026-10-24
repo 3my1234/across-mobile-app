@@ -1,6 +1,6 @@
 import type {ProductSubscription, Purchase} from 'expo-iap';
 
-export type PlayPlan = {product_id: string; base_plan_id: string; plan_id: string; name: string; duration_months: number; amount_minor: number};
+export type PlayPlan = {product_id: string; base_plan_id: string; plan_id: string; name: string; duration_months: number; amount_minor: number; purchasable?: boolean; prepaid?: boolean};
 export type PlayCatalog = {account_id: string; items: PlayPlan[]; status: string; state: string; expires_at?: string; auto_renews: boolean; needs_acknowledgement: boolean};
 const sku = /^[a-z0-9][a-z0-9._-]{0,199}$/;
 export function playCatalog(value: unknown): PlayCatalog {
@@ -9,7 +9,7 @@ export function playCatalog(value: unknown): PlayCatalog {
   const seen = new Set<string>();
   for (const plan of item.items) {
     const key = `${plan.product_id}:${plan.base_plan_id}`;
-    if (!sku.test(plan.product_id) || !sku.test(plan.base_plan_id) || typeof plan.name !== 'string' || ![1, 12].includes(plan.duration_months) || !Number.isSafeInteger(plan.amount_minor) || plan.amount_minor <= 0 || seen.has(key)) throw Error('Google Play plans could not load.');
+    if (!sku.test(plan.product_id) || !sku.test(plan.base_plan_id) || typeof plan.name !== 'string' || ![1, 3, 6, 12].includes(plan.duration_months) || !Number.isSafeInteger(plan.amount_minor) || plan.amount_minor <= 0 || seen.has(key)) throw Error('Google Play plans could not load.');
     seen.add(key);
   }
   return item;
@@ -25,7 +25,8 @@ export function playOffer(plan: PlayPlan, products: ProductSubscription[]) {
   const offer = offers[0], phases = offer.pricingPhases.pricingPhaseList;
   if (phases.length !== 1) return null;
   const price = phases[0];
-  if (!/^[0-9]{1,20}$/.test(price.priceAmountMicros) || price.priceCurrencyCode !== 'NGN' || price.billingPeriod !== (plan.duration_months === 12 ? 'P1Y' : 'P1M') || price.recurrenceMode !== 1 || BigInt(price.priceAmountMicros) !== BigInt(plan.amount_minor) * 10000n || !offer.offerToken || !price.formattedPrice) return null;
+  const periods = plan.duration_months === 12 ? ['P1Y', 'P12M'] : [`P${plan.duration_months}M`];
+  if (!/^[0-9]{1,20}$/.test(price.priceAmountMicros) || price.priceCurrencyCode !== 'NGN' || !periods.includes(price.billingPeriod) || price.recurrenceMode !== (plan.prepaid ? 3 : 1) || BigInt(price.priceAmountMicros) !== BigInt(plan.amount_minor) * 10000n || !offer.offerToken || !price.formattedPrice) return null;
   return {offerToken: offer.offerToken, displayPrice: price.formattedPrice};
 }
 
