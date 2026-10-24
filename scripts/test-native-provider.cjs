@@ -24,6 +24,10 @@ function load(path, dependencies = {}, globals = {}) {
   assert.equal(policy.privateDocumentPreviewURL('https://storage.example.test/private?signature=synthetic'), 'https://storage.example.test/private?signature=synthetic');
   for (const url of ['http://storage.example.test/private', 'https://user:password@example.test/private', 'javascript:alert(1)', '/relative']) assert.throws(() => policy.privateDocumentPreviewURL(url));
   for (const [mime, bytes] of [['application/pdf', 500], ['image/jpeg', 0], ['image/jpeg', 10 * 1024 * 1024 + 1]]) assert.ok(policy.verificationImageError(mime, bytes));
+  assert.equal(policy.nativeProviderView('view=products&listing=11111111-1111-4111-8111-111111111111'),'products');
+  assert.equal(policy.providerRouteContext('view=listings&listing=11111111-1111-4111-8111-111111111111').listing,'11111111-1111-4111-8111-111111111111');
+  assert.equal(policy.nativeProviderView('view=products&listing=invalid'),'legacy');
+  assert.equal(policy.nativeProviderView('view=profile&listing=11111111-1111-4111-8111-111111111111'),'legacy');
   assert.equal(policy.nativeProviderView('view=subscription'), 'subscription');
   assert.equal(policy.nativeProviderView('view=driver'), 'driver');
   assert.equal(policy.nativeProviderView('view=driver&ticket=invalid'), 'legacy');

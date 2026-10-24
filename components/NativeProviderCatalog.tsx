@@ -19,7 +19,7 @@ import {NativeProviderAvailability} from './NativeProviderAvailability';
 import {NativeProviderProductOptions} from './NativeProviderProductOptions';
 import {NativeProviderDeliveryOffer} from './NativeProviderDeliveryOffer';
 
-export function NativeProviderCatalog({embedded = false, token, kind, provider, onClose, onNavigationGuard}: {onNavigationGuard?: (guard: ((action: () => void) => void) | null) => void; embedded?: boolean; token: string; kind: 'listings' | 'products'; provider: ProviderAccount; onClose: () => void}) {
+export function NativeProviderCatalog({embedded = false, token, kind, provider, onClose, onNavigationGuard,initialItemID=''}: {initialItemID?:string;onNavigationGuard?: (guard: ((action: () => void) => void) | null) => void; embedded?: boolean; token: string; kind: 'listings' | 'products'; provider: ProviderAccount; onClose: () => void}) {
   const c = useAccountDesign(), safeInsets = useSafeAreaInsets(), insets = embedded ? {top: 0, bottom: 0} : safeInsets, endpoint = `/providers/me/${kind}`;
   const [items, setItems] = useState<ProviderPost[]>([]), [cursor, setCursor] = useState(''), [policy, setPolicy] = useState<PostPolicy | null>(null);
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
@@ -71,6 +71,8 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
     const editable = editablePostSnapshot(kind, snapshot, item.id);
     if (mounted.current) {setDraft(editable); setAddressQuery(''); setAddressResults([]); setConfirmed(false); setError(''); setNotice(''); setFieldErrors({}); setNumericText({});}
   });
+  const initialEdit=useRef(false);
+  useEffect(()=>{if(!initialItemID||initialEdit.current||loading||!policy)return;initialEdit.current=true;void run(async()=>{const snapshot=kind==='listings'?await providerRequest(token,`${endpoint}/${initialItemID}`):(await providerRequest(token,`${endpoint}?product_id=${encodeURIComponent(initialItemID)}&limit=1`)).items?.find((item:ProviderPost)=>item.id===initialItemID);if(!snapshot)throw Error('This listing is unavailable.');const editable=editablePostSnapshot(kind,snapshot,initialItemID);if(mounted.current){setDraft(editable);setConfirmed(false);}});},[initialItemID,loading,policy]);
   const images = draft ? kind === 'listings' ? draft.media_urls || [] : draft.image_urls || [] : [];
   const videos = draft ? kind === 'listings' ? draft.attributes?.video_urls || [] : draft.video_urls || [] : [];
   const setImages = (urls: string[]) => patch(kind === 'listings' ? 'media_urls' : 'image_urls', urls);

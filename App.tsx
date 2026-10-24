@@ -211,6 +211,7 @@ function AcrossApp() {
   }
   useEffect(() => {setProviderToolReturn(null);}, [token]);
   const chatCacheOwner=useRef(token);useEffect(()=>{const previous=chatCacheOwner.current;if(previous&&previous!==token){void privateChatStore.clear(previous);setShowSettings(false);}chatCacheOwner.current=token;},[token]);
+  const manageOwnListing=(kind:'product'|'service',id:string)=>{setSelectedProduct(null);setProviderWorkspaceRoute(`view=${kind==='product'?'products':'listings'}&listing=${encodeURIComponent(id)}`);setProviderWorkspaceVisible(true);};
   const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
   const [pendingProviderReturn,setPendingProviderReturn]=useState(false);
   useEffect(()=>{
@@ -2040,7 +2041,7 @@ function AcrossApp() {
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
-            ListHeaderComponent={<><DiscoverySections owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || selectedCategory || ''} active={!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
+            ListHeaderComponent={<><DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <Text style={{ color: theme.color("#191919", "color"), fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
                 <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
@@ -2050,7 +2051,7 @@ function AcrossApp() {
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         )}
 
-        {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialListingId={discoveryServiceID} discoveryActive={!selectedProduct&&!showSettings&&!showNotifications&&!showReferrals} country={catalogCountry} destinationState={catalogState} destinationCity={catalogCity} onOpenProduct={setSelectedProduct} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />}
+        {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialListingId={discoveryServiceID} onManageListing={manageOwnListing} discoveryActive={!selectedProduct&&!showSettings&&!showNotifications&&!showReferrals} country={catalogCountry} destinationState={catalogState} destinationCity={catalogCity} onOpenProduct={setSelectedProduct} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />}
         {activeTab === "messages" && !providerWorkspaceVisible && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
@@ -2297,7 +2298,7 @@ function AcrossApp() {
       </Modal>
 
       </>}
-      {!providerWorkspaceVisible && selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} onOpenService={openDiscoveryService} />}
+      {!providerWorkspaceVisible && selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} onOpenService={openDiscoveryService} onManageListing={manageOwnListing} />}
       <Modal visible={showSettings} animationType="slide" onRequestClose={returnToProvider}><View style={{flex:1,paddingTop:insets.top,backgroundColor:accountColors.background}}>
         <View style={{flexDirection:'row',alignItems:'center',padding:12,gap:12}}><Pressable onPress={returnToProvider} accessibilityLabel="Close settings" style={{padding:10}}><Ionicons name="arrow-back" size={24} color={accountColors.text}/></Pressable><Ionicons name="settings-outline" size={24} color={accountColors.accent}/><Text preserveTypography style={{fontSize:22,fontWeight:'700'}}>Settings</Text></View>
         <ScrollView contentContainerStyle={{padding:16,paddingBottom:insets.bottom+24}}>

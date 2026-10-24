@@ -1,3 +1,4 @@
+import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
 import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
 import {PostVideos} from "./PostVideos";
@@ -221,14 +222,24 @@ interface DetailProps {
   onProductChange: (product: Product) => void;
   onSelectProduct: (product: Product) => void;
   onOpenService?: (id:string)=>void;
+  onManageListing?: (kind:'product'|'service',id:string)=>void;
   getCartQuantity: (sku: string) => number;
 }
 
-export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity,onOpenService }: DetailProps) {
+export function ProductDetailScreen({ product: initialProduct, destination, token, cartQuantity, onClose, onAdd, onRemove, onProductChange, onSelectProduct, getCartQuantity,onOpenService,onManageListing }: DetailProps) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const [sellerChat,setSellerChat]=useState(false);
-  const contactSeller=()=>{recordDiscoveryContact(token,'product',initialProduct.id);if(!token){Alert.alert("Sign in required","Sign in to message this seller.");return;}setSellerChat(true);};
+  const contactAccess=useBusinessContact(token,initialProduct.provider_id||initialProduct.provider_identity?.id);
+  const contactLabel=contactAccess.checking?'Checking access...':contactAccess.error?'Retry messaging access':contactAccess.own?(contactAccess.canManage&&onManageListing?'Manage listing':'Your business listing'):'Message seller';
+  const contactDisabled=contactAccess.checking || contactAccess.own&&(!contactAccess.canManage||!onManageListing);
+  const contactSeller=()=>{
+   if(contactAccess.checking)return;
+   if(contactAccess.error){contactAccess.retry();return;}
+   if(contactAccess.own){if(contactAccess.canManage)onManageListing?.('product',initialProduct.id);return;}
+   if(!token){Alert.alert("Sign in required","Sign in to message this seller.");return;}
+   recordDiscoveryContact(token,'product',initialProduct.id);setSellerChat(true);
+  };
   useEffect(()=>recordDiscoveryDetail(token,'product',initialProduct.id,initialProduct.category_path),[token,initialProduct.id]);
   const insets = useSafeAreaInsets();
   const bottomInset = Math.max(insets.bottom, Platform.OS === "android" ? 16 : 8);
@@ -497,7 +508,9 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <View style={styles.detailDescriptionBlock}>
               <Text style={styles.detailSectionTitle}>How to buy</Text>
               {allowsCheckout && <Text style={styles.detailDescription}>Pay securely through Flutterwave. Choose card or bank transfer at checkout where available. Your payment is confirmed first; the seller&apos;s bank payout usually takes one business day for local payments or five business days for international payments, and can take longer. This payout timing is separate from delivery.</Text>}
-              {allowsContact && <><Text style={styles.detailDescription}>Message the seller to agree payment and delivery. Atlantic Express does not collect product payments. Payments and delivery are agreed directly with the seller.</Text><Pressable style={styles.photoExpand} onPress={contactSeller}><Text style={styles.secondaryButtonText}>Message seller</Text></Pressable></>}
+              {!!contactAccess.error&&<Pressable onPress={contactAccess.retry}><Text accessibilityRole="alert" style={{color:'#C62828'}}>{contactAccess.error}</Text></Pressable>}
+              {contactAccess.own&&<Text style={styles.detailDescription}>Your business listing. You cannot message your own business.</Text>}
+              {allowsContact && <><Text style={styles.detailDescription}>Message the seller to agree payment and delivery. Atlantic Express does not collect product payments. Payments and delivery are agreed directly with the seller.</Text><Pressable accessibilityRole="button" disabled={contactDisabled} style={[styles.photoExpand,contactDisabled&&styles.disabled]} onPress={contactSeller}><Text style={styles.secondaryButtonText}>{contactLabel}</Text></Pressable></>}
             </View>
             <View style={styles.detailDescriptionBlock} onLayout={event => { sectionOffsets.current.reviews = event.nativeEvent.layout.y; }}>
               <Text style={styles.detailSectionTitle}>Reviews</Text>
@@ -547,7 +560,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             <Pressable style={[styles.quantityButton, (outOfStock || atMax) && styles.disabled]} onPress={() => onAdd(product)} disabled={outOfStock || atMax}><Ionicons name="add" size={20} color={theme.color("#101817")} /></Pressable>
           </View>}
           {allowsCheckout && product.payment_mode==="both" && <Pressable accessibilityLabel="Message seller" onPress={contactSeller} style={{minHeight:44,minWidth:44,alignItems:"center",justifyContent:"center"}}><Ionicons name="chatbubble-outline" size={24} color={theme.color("#191919")}/></Pressable>}
-          <Pressable style={[styles.detailCartButton,allowsCheckout && outOfStock && styles.disabled]} onPress={()=>{if(!allowsCheckout){contactSeller();return;}if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={allowsCheckout && outOfStock}><Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
+          <Pressable style={[styles.detailCartButton,allowsCheckout && outOfStock && styles.disabled]} onPress={()=>{if(!allowsCheckout){contactSeller();return;}if(outOfStock)return;if(cartQuantity===0)onAdd(product);else onClose();}} disabled={allowsCheckout ? outOfStock : contactDisabled}><Text style={styles.primaryButtonText}>{!allowsCheckout ? contactLabel : outOfStock ? "Out of stock" : cartQuantity>0 ? "Added · Keep shopping" : "Add to cart"}</Text></Pressable>
         </View>}
       </KeyboardFrame>
       <Modal visible={galleryOpen} animationType="fade" transparent={false} statusBarTranslucent onRequestClose={() => setGalleryOpen(false)}>
@@ -566,8 +579,8 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           >
             {(galleryPhotos || images).map((uri, index) => <ResilientImage key={`full-${uri}-${index}`} uri={uri} style={{ width: windowWidth, height: Math.max(320, windowHeight - insets.top - bottomInset - 132) }} resizeMode="contain" />)}
           </ScrollView>
-          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if(!allowsCheckout){contactSeller();return;} if (cartQuantity === 0 && !outOfStock) onAdd(product); }} disabled={allowsCheckout && outOfStock}>
-            <Text style={styles.primaryButtonText}>{!allowsCheckout ? "Message seller" : outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
+          <Pressable style={styles.galleryAddButton} onPress={() => { setGalleryOpen(false); if(!allowsCheckout){contactSeller();return;} if (cartQuantity === 0 && !outOfStock) onAdd(product); }} disabled={allowsCheckout ? outOfStock : contactDisabled}>
+            <Text style={styles.primaryButtonText}>{!allowsCheckout ? contactLabel : outOfStock ? "Out of stock" : cartQuantity > 0 ? "Already in cart" : "Add to cart"}</Text>
           </Pressable>
         </View>
       </Modal>

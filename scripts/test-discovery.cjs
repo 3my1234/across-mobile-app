@@ -7,6 +7,10 @@ const card={id:'product',kind:'product',provider_id:'provider',title:'Phone',cat
 function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatMap(nodes)];}
 (async()=>{
  const session=api.discoverySession('owner-one');api.rememberDiscoveryTopics('owner-one',['Phones']);await api.discoveryFeed({owner:'owner-one',country:'NG'});assert.ok(calls.at(-1).url.includes('interests=Phones'));assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,0,'returning listings must never count an impression');
+ await api.discoveryFeed({owner:'owner-one',country:'NG',kind:'product'});assert.equal(new URL(calls.at(-1).url).searchParams.get('kind'),'product');
+ await api.discoveryFeed({owner:'owner-one',country:'NG',kind:'service'});assert.equal(new URL(calls.at(-1).url).searchParams.get('kind'),'service');
+ await api.discoveryFeed({owner:'owner-one',country:'NG'});assert.equal(new URL(calls.at(-1).url).searchParams.has('kind'),false,'home stays mixed');
+ await api.discoveryFeed({owner:'owner-one',country:'NG',sourceKind:'product',sourceID:'detail'});assert.equal(new URL(calls.at(-1).url).searchParams.get('source_kind'),'product');
  api.recordDiscovery(card,'impression',999);await api.flushDiscovery();assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,0);
  let index=0,hooks=[],effects=[],interval,foreground,now=10000;
  const react={createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)}),useRef:initial=>{const i=index++;return hooks[i]||(hooks[i]={current:initial});},useEffect:fn=>effects.push(fn)};
@@ -23,5 +27,12 @@ function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatM
  api.recordDiscovery({...card,receipt:'old-account'},'click');assert.notEqual(api.discoverySession('owner-two'),session);await api.flushDiscovery();await api.discoveryFeed({owner:'owner-two',country:'NG'});assert.ok(!calls.at(-1).url.includes('Phones'),'interests do not cross accounts');assert.ok(!calls.some(call=>call.options?.body?.includes('owner-one')),'no raw account or token identifiers in metrics');
  release={};product=undefined;const stale=api.openDiscovery(card,{country:'NG'},value=>product=value,()=>{});api.discoverySession('owner-three');release.resolve();release=null;await stale;assert.equal(product,undefined,'late detail response cannot navigate a replacement account');
  release={};product=undefined;const earlier=api.openDiscovery(card,{country:'NG'},value=>product=value,()=>{});const earlierRelease=release;release=null;await api.openDiscovery({...card,id:'new-service',kind:'service'},{country:'NG'},()=>{},()=>{});earlierRelease.resolve();await earlier;assert.equal(product,undefined,'a slow prior product cannot override a later service choice');
+ // The Home catalogue is explicitly "All products", not the generic mixed feed.
+ const appSource=fs.readFileSync('App.tsx','utf8'),serviceSource=fs.readFileSync('components/MarketplaceScreen.tsx','utf8');
+ assert.match(appSource,/<DiscoverySections kind="product"/);assert.match(appSource,/selectedCategory === 'All' \? '' : selectedCategory/,'All is a UI sentinel, not a discovery search term');assert.match(serviceSource,/<DiscoverySections kind="service"/);
+ for(const [kind,noun]of [['product','Products'],['service','Services']]){
+  let state=0;const ui={...context,exports:{},require:name=>name==='react'?{...react,useEffect(){},useRef:x=>({current:x}),useState:()=>[state++===0?{similar:[],recommended:[],promoted:[]}:state===2?'':0,()=>{}]}:context.require(name)};
+  vm.runInNewContext(compile(sectionSource),ui);const tree=ui.exports.DiscoverySections({owner:null,kind,onOpen(){}});const rails=nodes(tree).filter(x=>x.props.title);assert.ok(rails.some(x=>x.props.title===`Recommended ${noun}`));assert.ok(rails.some(x=>x.props.title===`Promoted ${noun}`));
+ }
  console.log('Discovery passed: actual UI half-visible/one-second/background gates, no serve-counting, batched dedup, same detail routes, contact intent, stale navigation and account-isolated topics.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

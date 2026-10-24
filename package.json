@@ -17,6 +17,7 @@
     "test:marketplace": "node scripts/test-provider-chat.cjs && node scripts/test-product-loading.cjs && node scripts/test-product-chat-options.cjs",
     "test:checkout": "node scripts/test-cart-review.cjs",
     "test:notifications": "node scripts/test-notification-setup.cjs",
+    "test:business-contact": "node scripts/test-business-contact.cjs",
     "ios": "expo run:ios",
     "test:theme": "node scripts/test-theme.cjs",
     "check:provider-staging": "node scripts/check-provider-staging.cjs",
