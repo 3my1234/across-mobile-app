@@ -13,6 +13,8 @@ dist/
 build/
 .tmp/
 coverage/
+__pycache__/
+*.pyc
 
 npm-debug.log*
 yarn-debug.log*
