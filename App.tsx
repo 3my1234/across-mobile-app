@@ -1,3 +1,8 @@
+import {NativeReferrals} from './components/NativeReferrals';
+import {validateSignupReferral} from './components/referralApi';
+import {ProviderEntryGate, WorkspaceIntent} from './components/ProviderEntryGate';
+import {rememberSignupWorkspace, signupWorkspaceFor} from './components/workspaceIntent';
+import {NativeNotificationDiagnostics} from './components/NativeNotificationDiagnostics';
 import {AccountIcon,AccountSectionHeading,XPRewardSummary,accountDesign,useAccountDesign} from './components/AccountDesign';
 import {acknowledgeNotificationDelivery} from './components/messageReceipts';
 import {ReadReceiptSetting} from './components/ReadReceiptSetting';
@@ -11,6 +16,7 @@ import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextI
 import { SupportConversation } from "./components/SupportConversation";
 import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
 import { ProviderWorkspace } from "./components/ProviderWorkspace";
+import {isProviderSubscriptionReturn} from './components/providerSubscriptionPolicy';
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
@@ -138,6 +144,12 @@ function AcrossApp() {
   const { login: loginWithOAuth, state: oauthState } = useLoginWithOAuth();
   const [stage, setStage] = useState<AppStage>("booting");
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
+  const [referralCode,setReferralCode] = useState("");
+  const [showReferrals,setShowReferrals] = useState(false);
+  const [workspaceIntent, setWorkspaceIntent] = useState<WorkspaceIntent>("auto");
+  const googleWorkspaceIntent = useRef<WorkspaceIntent>('auto');
+  const googleVerificationInFlight = useRef(false);
+  const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [productFeed, setProductFeed] = useState<{key: string; status: "loading" | "ready" | "error"}>({key: "", status: "loading"});
@@ -158,6 +170,8 @@ function AcrossApp() {
   useEffect(()=>{setCommunityMode('chats');setCommunityConversationId('');setCommunityHallRoomId('');},[token]);
   const [notificationNavigationKey,setNotificationNavigationKey]=useState(0);
   const notificationNavigationRequest=useRef(0);
+  const workspaceEntryNavigation = useRef({token, request: notificationNavigationRequest.current});
+  if (workspaceEntryNavigation.current.token !== token) workspaceEntryNavigation.current = {token, request: notificationNavigationRequest.current};
   const rewardsOffset=useRef(0);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -183,8 +197,26 @@ function AcrossApp() {
   const paymentConfirmationIssue = useRef("");
   const [showPaymentHistory,setShowPaymentHistory]=useState(false);
   const [showSettings,setShowSettings]=useState(false);
+  const [providerToolReturn, setProviderToolReturn] = useState<{token: string; route: string} | null>(null);
+  function returnToProvider() {
+    setShowSettings(false);
+    if (providerToolReturn && providerToolReturn.token === token && sessionTokenRef.current === token) {setProviderWorkspaceRoute(providerToolReturn.route); setProviderWorkspaceVisible(true);}
+    setProviderToolReturn(null);
+  }
+  useEffect(() => {setProviderToolReturn(null);}, [token]);
   const chatCacheOwner=useRef(token);useEffect(()=>{const previous=chatCacheOwner.current;if(previous&&previous!==token){void privateChatStore.clear(previous);setShowSettings(false);}chatCacheOwner.current=token;},[token]);
   const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
+  const [pendingProviderReturn,setPendingProviderReturn]=useState(false);
+  useEffect(()=>{
+    let mounted=true;
+    const receive=(url:string|null)=>{if(mounted&&url&&isProviderSubscriptionReturn(url))setPendingProviderReturn(true);};
+    void Linking.getInitialURL().then(receive).catch(()=>{});
+    const listener=Linking.addEventListener('url',event=>receive(event.url));
+    return ()=>{mounted=false;listener.remove();};
+  },[]);
+  useEffect(()=>{
+    if(token&&pendingProviderReturn){setProviderWorkspaceRoute('view=subscription');setProviderWorkspaceVisible(true);setPendingProviderReturn(false);}
+  },[token,pendingProviderReturn]);
   const cartHydrated = useRef(false);
   const cartStorageWrites = useRef(Promise.resolve());
   const restoredPendingPayment = useRef(false);
@@ -242,6 +274,12 @@ function AcrossApp() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationStatus, setNotificationStatus] = useState("");
+  const notificationTestFlight = useRef(false);
+  const [notificationTestBusy, setNotificationTestBusy] = useState(false);
+  const [notificationTestId, setNotificationTestId] = useState('');
+  const [notificationTestReceivedId, setNotificationTestReceivedId] = useState('');
+  useEffect(() => {setNotificationTestId(''); setNotificationTestReceivedId('');}, [token]);
+  useEffect(() => {setNotificationTestBusy(false);}, [token]);
   const [deliveryConfirmOrder, setDeliveryConfirmOrder] = useState<OrderSummary | null>(null);
   const [focusedOrderId, setFocusedOrderId] = useState("");
   const [profile, setProfile] = useState<any>(null);
@@ -436,13 +474,13 @@ function AcrossApp() {
   useCatalogFreshness(async () => {
     if (stockView === "international") setInternationalRefreshVersion(version => version + 1);
     await loadProducts(true);
-  }, stage === "app");
+  }, stage === "app" && !providerWorkspaceVisible);
 
   useEffect(() => {
-    if (stage === "app" && (activeTab === "home" || activeTab === "cart")) void loadProducts(true);
+    if (stage === "app" && !providerWorkspaceVisible && (activeTab === "home" || activeTab === "cart")) void loadProducts(true);
     // The loader coalesces requests and rejects an older destination response.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, activeTab]);
+  }, [stage, activeTab, providerWorkspaceVisible]);
 
   useEffect(() => {
     if (stage !== "auth" || (privyReady && !googleSessionClearing)) {
@@ -488,20 +526,20 @@ function AcrossApp() {
 	}, [showFlashSale, flashSaleSearch]);
 
   useEffect(() => {
-    if (stage !== "app" || activeTab !== "home" || showFlashSale) return;
+    if (stage !== "app" || providerWorkspaceVisible || activeTab !== "home" || showFlashSale) return;
     void loadFlashSales(true, "");
     // Request ordering is guarded by flashSaleRequest inside the loader.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, activeTab, showFlashSale]);
+  }, [stage, activeTab, providerWorkspaceVisible, showFlashSale]);
 
   useEffect(() => {
-    if (stage !== "app" || activeTab !== "home" || showFlashSale || selectedProduct || discountPromptSeen.current || flashSaleProducts.length === 0) return;
+    if (stage !== "app" || workspaceEntryToken !== token || providerWorkspaceVisible || activeTab !== "home" || showFlashSale || selectedProduct || discountPromptSeen.current || flashSaleProducts.length === 0) return;
     const hasRealDiscount = flashSaleProducts.some(product => (product.compare_at_price ?? 0) > (product.flash_sale_price || product.price));
     if (!hasRealDiscount) return;
     discountPromptSeen.current = true;
     const timer = setTimeout(() => setShowDiscountOffer(true), 700);
     return () => clearTimeout(timer);
-  }, [stage, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
+  }, [stage, token, workspaceEntryToken, providerWorkspaceVisible, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
 
   useEffect(() => {
     if (!oauthState) return;
@@ -575,6 +613,8 @@ function AcrossApp() {
     const interval = setInterval(() => { if (AppState.currentState === "active") { void pollBuyerActivity(token); void registerPushNotifications(token); } }, 60000);
     const pushForeground = AppState.addEventListener("change", next => { if (next === "active") void registerPushNotifications(token, undefined, true); });
     const received = Notifications.addNotificationReceivedListener(notification => {
+      const data = notification.request.content.data;
+      if (data?.notification_type === 'sound_test' && typeof data.notification_id === 'string') setNotificationTestReceivedId(data.notification_id);
       void acknowledgeNotificationDelivery(token,notification.request.content.data || {});
       void Promise.all([loadNotifications(token), loadOrders(token)]);
     });
@@ -706,6 +746,22 @@ function AcrossApp() {
     try { return await setup; } finally { if (pushSetupFlight.current === setup) pushSetupFlight.current = null; }
   }
 
+  async function sendNotificationTest() {
+    if (!token || notificationTestFlight.current) return;
+    const actor = token, version = soundPreferenceVersion.current;
+    if (!notificationSoundEnabled) {setNotificationStatus('Turn notification sound on before sending a test.'); return;}
+    notificationTestFlight.current = true; setNotificationTestBusy(true); setNotificationTestId('');
+    try {
+      if (!await registerPushNotifications(actor, true, true) || actor !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return;
+      const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/notifications/test-push`, {method: 'POST', headers: {Authorization: `Bearer ${actor}`, 'Content-Type': 'application/json'}, body: JSON.stringify({token: pushTokenRef.current})}, 15000);
+      if (actor !== sessionTokenRef.current || version !== soundPreferenceVersion.current) return;
+      if (!response.ok || body?.queued !== true) throw Error(typeof body?.message === 'string' ? body.message : 'The notification test could not be queued.');
+      if (typeof body.notification_id === 'string' && /^[a-f0-9-]{36}$/i.test(body.notification_id)) setNotificationTestId(body.notification_id);
+      setNotificationStatus('Test queued for this phone. Queued does not confirm delivery or sound. Check the phone notification; if silent, check phone settings. Wait 30 seconds before another test.');
+    } catch (failure) {if (actor === sessionTokenRef.current && version === soundPreferenceVersion.current) setNotificationStatus(failure instanceof Error ? failure.message : 'Notification test failed. Retry when connected.');}
+    finally {notificationTestFlight.current = false; if (actor === sessionTokenRef.current) setNotificationTestBusy(false);}
+  }
+
   async function markNotificationRead(id: string, reload = true) {
     if (!token) return;
     const actor=token;
@@ -800,6 +856,9 @@ function AcrossApp() {
     sessionTokenRef.current=s.access_token;
     setToken(s.access_token);
     setStage("app");
+    setReferralCode("");
+    // Retain the email-bound provider journey across sign-in and restarts;
+    // the entry gate verifies the signed-in identity before restoring it.
     // The app-stage effects own catalogue/profile loading once.
   }
 
@@ -815,6 +874,8 @@ function AcrossApp() {
       SecureStore.deleteItemAsync(CART_KEY),
       SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY)
     ]);
+    setReferralCode(""); setShowReferrals(false);
+    setWorkspaceEntryToken(null); setWorkspaceIntent("auto"); setProviderWorkspaceVisible(false);
     setToken(null);
     setProducts([]);
     setProductFeed({key: "", status: "loading"});
@@ -1048,7 +1109,7 @@ function AcrossApp() {
 	}
 
   useEffect(() => {
-    if (stage !== "app" || !token) return;
+    if (stage !== "app" || !token || providerWorkspaceVisible) return;
     let inFlight = false;
     const refreshPage = async () => {
       if(activeTab === "account" && showPaymentHistory) return;
@@ -1068,7 +1129,7 @@ function AcrossApp() {
     return () => { clearInterval(timer); foreground.remove(); supportTicketRequest.current++; supportMessageRequest.current++; };
     // Load on entry and foreground; refresh only the visible page without resetting drafts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, token, activeTab, selectedTicket?.id, editingProfile,showPaymentHistory]);
+  }, [stage, token, providerWorkspaceVisible, activeTab, selectedTicket?.id, editingProfile,showPaymentHistory]);
 
   async function refreshAppData(includeSupport = false) {
     if (refreshing) return;
@@ -1086,6 +1147,11 @@ function AcrossApp() {
   async function authenticate(path: string, payload: Record<string, string>) {
     setBusy(true);
     try {
+      if (path.endsWith("/signup")) {
+        if (workspaceIntent === "auto") throw Error("Choose Customer or Provider before registering.");
+        await validateSignupReferral(payload.referral_code || "");
+        await rememberSignupWorkspace(payload.email || "", workspaceIntent);
+      } else if (path.endsWith("/login")) setWorkspaceIntent(await signupWorkspaceFor(payload.email || ""));
       const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Client-Country-Code": catalogCountry }, body: JSON.stringify(payload) });
       const d = await readResponseBody(r);
       if (d.requires_email_verification) {
@@ -1142,6 +1208,8 @@ function AcrossApp() {
       return;
     }
     if (oauthBusy) return;
+    // Carry only a navigation preference through OAuth, never a provider role.
+    googleWorkspaceIntent.current = authMode === 'signup' ? workspaceIntent : 'auto';
     setOauthBusy(true);
     try {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
@@ -1154,19 +1222,23 @@ function AcrossApp() {
   }
 
   async function finishPrivyLogin() {
+    if (googleVerificationInFlight.current) return;
+    googleVerificationInFlight.current = true;
     setBusy(true);
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
       if (!privyToken) throw new Error("Could not get access token");
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken }) });
+      await validateSignupReferral(referralCode);
+      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) });
       const d = await readResponseBody(r);
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
+      setWorkspaceIntent(googleWorkspaceIntent.current);
       await saveSession(d); setOauthBusy(false);
     } catch (e) {
       setOauthBusy(false);
       await privyLogout().catch(() => undefined);
       Alert.alert("Sign-in failed", e instanceof Error ? e.message : "");
-    } finally { setBusy(false); }
+    } finally { googleVerificationInFlight.current = false; googleWorkspaceIntent.current = 'auto'; setBusy(false); }
   }
 
   async function getPrivyAccessTokenWithRetry() {
@@ -1840,7 +1912,9 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-	if (stage === "auth") return <AuthScreen mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen referralCode={referralCode} onReferralCode={setReferralCode} workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+
+  if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === workspaceEntryNavigation.current.request) setProviderWorkspaceVisible(true);}}/>;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -1851,6 +1925,8 @@ function AcrossApp() {
     <View style={[s.safe, { paddingTop: insets.top }]}>
       <StatusBar style={theme.dark ? "light" : "dark"} />
 
+      {!providerWorkspaceVisible && <>
+      {providerToolReturn?.token === token && activeTab === 'support' && <Pressable accessibilityRole="button" accessibilityLabel="Back to provider tools" onPress={returnToProvider} style={{padding: 14, minHeight: 44}}><Text>Back</Text></Pressable>}
       {/* Notification Bell */}
       <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100,flexDirection:'row',alignItems:'center' }}>
         <Pressable onPress={() => setShowNotifications(v => !v)} style={{ padding: 6 }}>
@@ -1969,7 +2045,7 @@ function AcrossApp() {
         )}
 
         {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />}
-        {activeTab === "messages" && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
+        {activeTab === "messages" && !providerWorkspaceVisible && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
           <Text style={s.panelTitle}>Contact sellers</Text><Text style={s.muted}>Product payments are arranged directly with sellers. Open a product and tap Message seller. Previous paid orders remain available in Track and payment history.</Text>
@@ -2015,7 +2091,8 @@ function AcrossApp() {
                 </View>
               </View>
             )}
-            <Pressable style={s.quickLinkCard} onPress={()=>{setProviderWorkspaceRoute('');setProviderWorkspaceVisible(true);}}><AccountIcon name="storefront-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Provider workspace</Text><Text style={s.quickLinkMeta}>Manage your business, listings and customer chats.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
+            <Pressable accessibilityLabel="Open provider workspace" style={s.quickLinkCard} onPress={()=>{setProviderWorkspaceRoute('');setProviderWorkspaceVisible(true);}}><AccountIcon name="storefront-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Provider workspace / Become a provider</Text><Text style={s.quickLinkMeta}>Apply or manage your business with this same account.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
+            <Pressable style={s.quickLinkCard} onPress={()=>setShowReferrals(true)}><AccountIcon name="gift-outline"/><View style={s.quickLinkCopy}><Text style={s.quickLinkTitle}>Refer and earn XP</Text><Text style={s.quickLinkMeta}>Invite customers and providers. View your code and rewards.</Text></View><Ionicons name="chevron-forward" size={18}/></Pressable>
             <View onLayout={event=>{rewardsOffset.current=event.nativeEvent.layout.y;}}>{xpReserved>0&&<Text style={s.muted}>{xpReserved} XP reserved for pending checkout.</Text>}<XPRewardSummary balance={xpBalance} claimed={xpClaimed} busy={busy} onClaim={()=>void claimDailyXP()}/></View>
             {withdrawalEnabled && token && <View style={accountCard}><XPWithdrawalPanel key={token} token={token} balance={xpBalance} onRefresh={()=>loadXPBalance(token)}/></View>}
             <View style={s.quickLinks}>
@@ -2201,7 +2278,7 @@ function AcrossApp() {
         </View>
       )}
 
-      <Modal visible={showDiscountOffer} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
+      <Modal visible={showDiscountOffer && !providerWorkspaceVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
         <View style={{ flex: 1, padding: 22, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("rgba(0,0,0,0.58)", "backgroundColor") }}>
           <View style={{ width: "100%", maxWidth: 360, borderRadius: 22, padding: 24, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
             <Pressable style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", zIndex: 2 }} onPress={() => setShowDiscountOffer(false)} accessibilityLabel="Close discount offer"><Ionicons name="close" size={24} color={theme.color("#595959")} /></Pressable>
@@ -2213,19 +2290,22 @@ function AcrossApp() {
         </View>
       </Modal>
 
-      {selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
-      <Modal visible={showSettings} animationType="slide" onRequestClose={()=>setShowSettings(false)}><View style={{flex:1,paddingTop:insets.top,backgroundColor:accountColors.background}}>
-        <View style={{flexDirection:'row',alignItems:'center',padding:12,gap:12}}><Pressable onPress={()=>setShowSettings(false)} accessibilityLabel="Close settings" style={{padding:10}}><Ionicons name="arrow-back" size={24} color={accountColors.text}/></Pressable><Ionicons name="settings-outline" size={24} color={accountColors.accent}/><Text preserveTypography style={{fontSize:22,fontWeight:'700'}}>Settings</Text></View>
+      </>}
+      {!providerWorkspaceVisible && selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} />}
+      <Modal visible={showSettings} animationType="slide" onRequestClose={returnToProvider}><View style={{flex:1,paddingTop:insets.top,backgroundColor:accountColors.background}}>
+        <View style={{flexDirection:'row',alignItems:'center',padding:12,gap:12}}><Pressable onPress={returnToProvider} accessibilityLabel="Close settings" style={{padding:10}}><Ionicons name="arrow-back" size={24} color={accountColors.text}/></Pressable><Ionicons name="settings-outline" size={24} color={accountColors.accent}/><Text preserveTypography style={{fontSize:22,fontWeight:'700'}}>Settings</Text></View>
         <ScrollView contentContainerStyle={{padding:16,paddingBottom:insets.bottom+24}}>
-          <Pressable style={[s.quickLinkCard,{marginBottom:12}]} onPress={()=>{setShowSettings(false);setShowPaymentHistory(false);setActiveTab('account');setEditingProfile(true);}}><AccountIcon name="person-outline"/><Text style={{flex:1,fontWeight:'700'}}>Edit profile and contact details</Text><Ionicons name="chevron-forward" size={18} color={accountColors.text}/></Pressable>
+          <Pressable style={[s.quickLinkCard,{marginBottom:12}]} onPress={()=>{setProviderToolReturn(null);setShowSettings(false);setShowPaymentHistory(false);setActiveTab('account');setEditingProfile(true);}}><AccountIcon name="person-outline"/><Text style={{flex:1,fontWeight:'700'}}>Edit profile and contact details</Text><Ionicons name="chevron-forward" size={18} color={accountColors.text}/></Pressable>
           <View style={accountCard}><AccountSectionHeading icon="color-palette-outline" title="Appearance" subtitle="Choose a theme or follow your phone settings."/><View accessibilityRole="radiogroup" style={{flexDirection:'row',gap:8}}>{(['system','light','dark'] as const).map(choice=><Pressable key={choice} accessibilityRole="radio" accessibilityState={{checked:theme.preference===choice}} accessibilityLabel={choice+' appearance'} onPress={()=>theme.setPreference(choice)} style={[accountDesign.themeTile,{backgroundColor:theme.preference===choice?accountColors.soft:accountColors.background,borderColor:theme.preference===choice?accountColors.accent:accountColors.line}]}><Ionicons name={choice==='system'?'desktop-outline':choice==='light'?'sunny-outline':'moon-outline'} size={25} color={accountColors.text}/><Text style={{fontSize:12,fontWeight:'600'}}>{choice[0].toUpperCase()+choice.slice(1)}</Text>{theme.preference===choice&&<Ionicons name="checkmark-circle" size={16} color={accountColors.accent} style={{position:'absolute',top:6,right:6}}/>}</Pressable>)}</View></View>
           <View style={accountCard}><View style={{flexDirection:'row',alignItems:'center',gap:10}}><View style={{flex:1}}><AccountSectionHeading icon="notifications-outline" title="Notification sound" subtitle="Play a sound for orders, messages, services and account updates."/></View><Switch accessibilityLabel="Notification sound" value={soundEnabled} trackColor={{false:accountColors.line,true:'#087B58'}} thumbColor="#FFFFFF" onValueChange={()=>void toggleNotificationSound()}/></View>
-            {!!notificationStatus&&<View style={[accountDesign.action,{backgroundColor:accountColors.soft,borderColor:accountColors.line}]}><Text accessibilityRole="alert" style={[accountDesign.caption,{color:accountColors.text,flex:1}]}>{notificationStatus}</Text></View>}
+            <Pressable accessibilityRole="button" disabled={notificationTestBusy || !token} onPress={()=>void sendNotificationTest()} style={[accountDesign.action,{backgroundColor:accountColors.soft,borderColor:accountColors.line,opacity:notificationTestBusy?.5:1}]}><Text>{notificationTestBusy ? 'Preparing test...' : 'Send a test to this phone'}</Text></Pressable>{!!notificationStatus&&<View style={[accountDesign.action,{backgroundColor:accountColors.soft,borderColor:accountColors.line}]}><Text accessibilityRole="alert" style={[accountDesign.caption,{color:accountColors.text,flex:1}]}>{notificationStatus}</Text></View>}
+            {token && notificationTestId && <NativeNotificationDiagnostics key={`${token}:${notificationTestId}`} token={token} notificationId={notificationTestId} received={notificationTestReceivedId === notificationTestId}/>}
             <Pressable style={[accountDesign.action,{backgroundColor:accountColors.background,borderColor:accountColors.line}]} onPress={()=>void Linking.openSettings().catch(()=>Alert.alert('Phone settings','Open your phone Settings, select Apps > Atl > Notifications, and enable sound for Messages and updates.'))}><Ionicons name="phone-portrait-outline" size={21} color={accountColors.text}/><Text style={{flex:1,fontWeight:'600'}}>Phone settings</Text><Ionicons name="open-outline" size={18} color={accountColors.text}/></Pressable><Text style={[accountDesign.body,{color:accountColors.muted}]}>Allow Atl notifications, enable sound for Messages and updates, and check your notification volume and Do Not Disturb setting.</Text></View>
           <View style={accountCard}><AccountSectionHeading icon="shield-checkmark-outline" title="Privacy and storage" subtitle="Recent chats are encrypted on this device so they can open before syncing. Signing out removes this local copy."/>{token&&<ReadReceiptSetting token={token} active={showSettings}/>}<Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{if(token)void privateChatStore.clear(token,false).then(()=>Alert.alert('Local history cleared','Your messages remain on Atlantic Express and will sync again.'));}}><Ionicons name="trash-outline" size={20} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Clear local chat history</Text></Pressable></View>
           <Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{setShowSettings(false);void logout();}}><Ionicons name="log-out-outline" size={21} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Sign out</Text></Pressable>
         </ScrollView></View></Modal>
-      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()}/>}
+      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderToolReturn({token,route:'view=more'});setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{setProviderToolReturn({token,route:'view=more'});void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {showReferrals&&token&&<NativeReferrals key={token} token={token} onClose={()=>setShowReferrals(false)} onOpenXP={()=>{setShowReferrals(false);void openNotification({notification_type:"xp_earned"});}}/>}
     </View>
   );
 }

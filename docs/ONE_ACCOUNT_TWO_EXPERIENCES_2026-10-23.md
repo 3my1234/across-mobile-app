@@ -1,0 +1,15 @@
+# One account, two experiences
+
+The approved product rule replaces the earlier ban on Town Hall creation by provider-associated accounts. Every authenticated account may act as a customer. Provider onboarding, verification, paid participation and resource ownership remain separate server-side permissions.
+
+The same signed-in user owns customer Town Hall requests and their existing business association. Switching workspaces does not create a new user, sign out, migrate data or replace a business profile with the personal profile. Customer Account offers **Provider workspace / Become a provider**, opening the existing native same-account onboarding or business workspace. Personal account images come from the personal profile; business images and name come from the provider identity.
+
+Google and email/password are available for both initial workspace choices. Email registration still requires verification. Google uses the existing signed Privy token verification endpoint; the client sends no claimed email, role or approval. Provider signup intent only opens native onboarding after authentication. Duplicate OAuth completion is coalesced. Ordinary Google sign-in continues to detect the account's actual provider association.
+
+Town Hall creation is offered in the customer workspace only when the API returns `can_create=true`. The provider workspace explains how to switch to customer using the same account. It retains provider-oriented participation tools and can still manage requests owned by that user. An older backend denial remains authoritative until the backend release is approved.
+
+Backend companion: draft PR #72, based on deployed main f811095, independent of foundation PR #66. It permits authenticated buyer actions and blocks own-business applications, admission, provider messages/offers and selection, including staff and stale offers. Provider verification/payment eligibility remains checked for participation. OAuth cannot reactivate inactive accounts, replace an existing linked subject or silently change a linked email. Existing inactive email accounts must verify email or contact support before using Google.
+
+Validation: TypeScript, all 29 native-provider regression suites, marketplace/chat, page/history/payment retry and payment-history checks passed locally. Expanded auth coordinator tests exercise Google provider signup, existing-account auto detection, failure cleanup and duplicate completion. Town Hall tests cover authoritative allowed/denied creation and provider workspace restrictions. Workspace tests verify actual business avatar/banner use. Targeted lint has zero errors and existing warnings.
+
+Release acceptance remains separate: qualify backend PostgreSQL CI and final mobile source CI; obtain explicit approval before merging/deploying the backend or generating EAS. On-device checks must cover existing customer/provider Google and email login, workspace switching, personal/business identity, provider-created customer request, independent-provider response and same-business refusal. No production change, provider PWA retirement or EAS submission is part of this implementation.

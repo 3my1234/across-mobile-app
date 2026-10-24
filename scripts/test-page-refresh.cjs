@@ -15,7 +15,7 @@ async function main() {
   const appState = {currentState: "active", addEventListener: (_, cb) => {foreground=cb; return {remove: () => {foreground=null;}};}};
   const start = source.lastIndexOf("  useEffect(() => {",source.indexOf("    const refreshPage = async () => {"));
   const end = source.indexOf("\n  async function refreshAppData",start);
-  run(source.slice(start,end), {stage:"app", token:"buyer", activeTab:"support", selectedTicket:null, editingProfile:false,showPaymentHistory:false, AppState:appState,
+  run(source.slice(start,end), {stage:"app", token:"buyer", providerWorkspaceVisible:false, activeTab:"support", selectedTicket:null, editingProfile:false,showPaymentHistory:false, AppState:appState,
     useEffect: callback => {cleanup=callback();}, setInterval: cb => {tick=cb; return 1;}, clearInterval: () => {tick=null;},
     loadSupportTickets: async () => {loads++;}, loadTicketMessages: async () => {},
     supportTicketRequest:{current:0}, supportMessageRequest:{current:0}});
@@ -24,6 +24,10 @@ async function main() {
   appState.currentState="background"; tick(); await flush(); assert.equal(loads,2,"background pages must not poll");
   appState.currentState="active"; foreground("active"); await flush(); assert.equal(loads,3,"foreground must revalidate");
   cleanup(); assert.equal(tick,null); assert.equal(foreground,null);
+
+  // Hidden customer pages must not install another timer behind provider tools.
+  run(source.slice(start,end), {stage:'app', token:'buyer', providerWorkspaceVisible:true, activeTab:'account', selectedTicket:null, editingProfile:false,showPaymentHistory:false,
+    useEffect: callback => callback(), setInterval: () => {throw Error('hidden buyer page timer');}});
 
   const pending=[]; let tickets=[], error="", loading=false;
   const state = {privateChatStore:{get:async()=>null,put(){}},token:"buyer", sessionTokenRef:{current:"buyer"}, supportTicketRequest:{current:0}, supportReads:{current:new Map()}, supportTickets:[], supportTicketsRef:{current:[]}, setTicketListCursor:()=>{},

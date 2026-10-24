@@ -1,0 +1,13 @@
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict'), ts = require('typescript');
+const policy = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/providerProfilePolicy.ts', 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020}}).outputText, {exports: policy, URL});
+const form = {business_name: 'Business', description: 'About', contact_email: 'owner@example.test', contact_phone: '+2340000000', website_url: '', address_line: 'Street', city: 'City', state: 'State', country_code: 'ng', logo_url: 'https://storage.test/old', verification_status: 'approved'};
+const fresh = {logo_url: 'https://storage.test/new'};
+const payload = policy.providerProfilePayload(form, fresh);
+assert.equal(payload.logo_url, fresh.logo_url, 'text save preserves latest branding instead of reverting old form logo');
+assert.equal(payload.country_code, 'NG');
+for (const key of ['business_name', 'description', 'contact_email', 'contact_phone', 'website_url', 'address_line', 'city', 'state']) assert.equal(payload[key], form[key], 'full profile write preserves '+key);
+assert.equal(payload.verification_status, undefined, 'form cannot set approval or permissions');
+assert.equal(policy.providerProfilePayload(form, {logo_url: ''}).logo_url, '', 'removed branding stays removed');
+for (const changes of [{contact_email: 'bad'}, {country_code: 'Nigeria'}, {website_url: 'http://example.test'}, {website_url: 'https://user:pass@example.test'}]) assert.throws(() => policy.providerProfilePayload({...form, ...changes}, fresh));
+console.log('Provider profile tests passed: full fields, fresh branding preservation, approval exclusion and validation.');

@@ -55,7 +55,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow Atlantic Express to access your photos to attach images to reviews and seller messages."
+          "photosPermission": "Allow Atlantic Express to choose photos for messages, reviews, business listings and verification.",
+          "cameraPermission": "Allow Atlantic Express to take clear verification and business photos when you choose to use the camera."
         }
       ],
       [
@@ -63,7 +64,8 @@
         {
           "locationWhenInUsePermission": "Allow Atlantic Express to use your location while you find nearby services, share a location pin, or choose to be available as a driver."
         }
-      ]
+      ],
+      "@maplibre/maplibre-react-native"
     ],
     "extra": {
       "eas": {

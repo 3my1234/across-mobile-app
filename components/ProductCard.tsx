@@ -3,7 +3,7 @@ import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React from "react";
 import {View,  Pressable, StyleSheet} from "react-native";
 import { Product } from "./types";
-import { money } from "./utils";
+import { priceMoney } from "./utils";
 import { ResilientImage } from "./ResilientImage";
 import { ReviewStars } from "./ReviewStars";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,7 +18,7 @@ interface Props {
 export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
-  const currentPrice = Number(product.flash_sale_price || product.price);
+  const currentPrice = Number(product.price);
   const comparePrice = Number(product.compare_at_price || 0);
   const discountPercent = comparePrice > currentPrice && comparePrice > 0
     ? Math.round(((comparePrice - currentPrice) / comparePrice) * 100)
@@ -45,13 +45,13 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
         {product.fulfillment_mode === "merchant_cross_border" && product.stock_state !== "import_on_demand" && product.inventory_country_code && <Text style={styles.abroad}>Ships from {product.inventory_country_code}</Text>}
         <View style={styles.footer}>
           <View style={styles.priceCopy}>
-            <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{money(currentPrice, product.currency)}</Text>
+            <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(currentPrice, product.currency)}</Text>
+            {comparePrice > currentPrice && <Text style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(comparePrice, product.currency)}</Text>}
             {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
           </View>
           <Pressable hitSlop={6} accessibilityLabel={`Message seller about ${product.title}`} onPress={event=>{event.stopPropagation();onPress();}} style={styles.cartButton}><Ionicons name="chatbubble-outline" size={19} color={theme.color("#191919")}/></Pressable>
         </View>
         {comparePrice > currentPrice && <View style={styles.discountRow}>
-          <Text style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{money(comparePrice, product.currency)}</Text>
           <Text style={styles.discountBadge} numberOfLines={1}>-{discountPercent}%</Text>
         </View>}
         <View style={styles.metaRow}>
@@ -78,9 +78,9 @@ const baseStyles = StyleSheet.create({
   priceCopy: {flex:1,minWidth:0},
   cartButton: {minWidth:34,minHeight:32,paddingHorizontal:5,borderWidth:1,borderColor:"#191919",borderRadius:16,alignItems:"center",justifyContent:"center",flexDirection:"row",gap:2},
   cartCount:{fontSize:10,color:"#191919",fontWeight:"700"},
-  price: { color: "#FF4747", fontSize: 15, fontWeight: "900" },
+  price: { color: "#FF4747", fontSize: 13, fontWeight: "800" },
   discountRow: { marginTop: 3, flexDirection: "row", alignItems: "center", gap: 6 },
-  compare: { flex: 1, minWidth: 0, color: "#C62828", fontSize: 11, fontWeight: "900", textDecorationLine: "line-through", textDecorationColor: "#C62828" },
+  compare: { minWidth: 0, color: "#C62828", fontSize: 11, fontWeight: "700", textDecorationLine: "line-through", textDecorationColor: "#C62828" },
   discountBadge: { flexShrink: 0, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 2, overflow: "hidden", color: "#FFFFFF", backgroundColor: "#D71920", fontSize: 9, fontWeight: "900" },
   badge: { marginTop: 6, color: "#FF4747", fontSize: 11, fontWeight: "900" },
   metaRow: { marginTop: 3, flexDirection: "row", justifyContent: "space-between", gap: 6 },

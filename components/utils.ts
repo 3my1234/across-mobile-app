@@ -10,6 +10,12 @@ export function money(value: number, currency = "NGN") {
   }
 }
 
+// Concise display for narrow product cards; no K/M rounding of actual prices.
+export function priceMoney(value: number, currency = "NGN") {
+  try {return new Intl.NumberFormat("en-NG", {style: "currency", currency, currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 2}).format(value);}
+  catch {return money(value, currency);}
+}
+
 export function normalizeMediaUrl(rawUrl: string): string {
   const raw = String(rawUrl || "").trim();
   if (!raw) return "";
@@ -62,7 +68,15 @@ export async function fetchJSONWithTimeout(url: string, init?: RequestInit, time
   try {
     return await Promise.race([deadline, (async () => {
       const response = await fetch(url, { ...init, signal: controller.signal });
-      const body = response.status===304 ? {} : await response.json();
+      let body: any = {};
+      if (![204, 205, 304].includes(response.status)) {
+        try {body = await response.json();}
+        catch (error) {
+          // Fiber/proxies can return plain text for HTTP errors. Preserve the
+          // actual status so a missing provider is not reported as no network.
+          if (response.ok) throw error;
+        }
+      }
       return { response, body };
     })()]);
   } finally { clearTimeout(timer!); }
@@ -103,12 +117,12 @@ export function mapProduct(raw: any): import("./types").Product {
   return {
     id: raw.id, sku: raw.sku, title: raw.title, description: raw.description ?? "",
     category_path: raw.category_path ?? [], image_urls: normalizeMediaUrls(raw.image_urls ?? []),
-    currency: raw.currency ?? "NGN", price: raw.price ?? raw.local_selling_price ?? 0,
+    currency: raw.currency ?? raw.currency_code ?? "NGN", price: Number(raw.price ?? raw.local_selling_price ?? 0),
     video_urls: raw.video_urls || raw.factory_details?.video_urls || [],
     updated_at: raw.updated_at ?? raw.factory_details?.catalog_updated_at,
     catalog_version: raw.catalog_version ?? raw.factory_details?.catalog_version,
     delivery_fee: Number(raw.delivery_fee || 0),
-    compare_at_price: raw.compare_at_price, inventory_count: raw.inventory_count ?? 0,
+    compare_at_price: Number(raw.compare_at_price || 0), inventory_count: raw.inventory_count ?? 0,
     origin_hub: raw.origin_hub ?? { id: "", name: "", city: "" },
     is_flash_sale: raw.is_flash_sale, flash_sale_price: raw.flash_sale_price,
     review_count: Number(raw.review_count || 0), sold_count: Number(raw.sold_count || 0), average_rating: Number(raw.average_rating || 0),

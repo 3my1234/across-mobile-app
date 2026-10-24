@@ -1,0 +1,11 @@
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict'), ts = require('typescript');
+const policy = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/providerOnboardingPolicy.ts', 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020}}).outputText, {exports: policy, URL});
+const form = {business_name: ' Example business ', provider_type: 'service_professional', provider_type_other: '', description: ' Work ', contact_email: ' contact@example.test ', contact_phone: ' +2340000000 ', website_url: '', address_line: ' Test street ', city: ' Abuja ', state: 'FCT', country_code: 'ng', is_driver: true};
+const payload = policy.providerApplicationPayload(form);
+assert.equal(payload.country_code, 'NG'); assert.equal(payload.business_name, 'Example business'); assert.equal(payload.is_driver, true); assert.equal(form.country_code, 'ng', 'payload preparation does not mutate form');
+assert.equal(payload.user_id, undefined, 'account identity comes from bearer authentication, never client-selected ownership');
+for (const [type] of policy.providerTypes) assert.equal(policy.providerApplicationPayload({...form, provider_type: type, provider_type_other: 'Custom work'}).provider_type, type);
+for (const changes of [{city: ''}, {state: ''}, {business_name: ''}, {contact_email: 'bad'}, {contact_phone: ''}, {provider_type: 'admin'}, {provider_type: 'other', provider_type_other: ''}, {country_code: 'Nigeria'}, {website_url: 'javascript:alert(1)'}, {website_url: 'https://user:pass@example.test'}]) assert.throws(() => policy.providerApplicationPayload({...form, ...changes}));
+assert.equal(policy.providerApplicationPayload({...form, website_url: 'https://example.test'}).website_url, 'https://example.test');
+console.log('Provider onboarding tests passed: same-account payload, category coverage, driver declaration, normalization and actionable validation.');

@@ -9,11 +9,16 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT": "true"
       }
     },
     "preview": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com"
+        "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com",
+        "EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT": "true",
+        "EXPO_PUBLIC_DISTRIBUTION_CHANNEL": "direct"
       },
       "autoIncrement": true,
       "distribution": "internal",
@@ -23,11 +28,34 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com"
+        "EXPO_PUBLIC_API_URL": "https://api.atlxpres.com",
+        "EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT": "true"
       },
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      }
+    },
+    "provider-staging": {
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "staging",
+        "EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT": "true",
+        "EXPO_PUBLIC_DISTRIBUTION_CHANNEL": "direct"
+      },
+      "autoIncrement": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "provider-preview": {
+      "extends": "preview",
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT": "true",
+        "EXPO_PUBLIC_DISTRIBUTION_CHANNEL": "direct"
       }
     }
   }
