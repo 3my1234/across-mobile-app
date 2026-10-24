@@ -47,11 +47,14 @@ export function createPlayPurchaseProcessor(verify: (body: ReturnType<typeof pla
     const flight = (async () => {
       const result = await verify(payload);
       if (result.refund_state) return result.refund_state === 'confirmed' ? 'Google Play confirmed a refund for this duplicate purchase. Your previous subscription remains unchanged.' : 'Your previous subscription remains unchanged. A refund for this duplicate purchase has been requested; confirmation is still pending.';
+      if (typeof result.active !== 'boolean' || typeof result.pending !== 'boolean' || typeof result.needs_acknowledgement !== 'boolean' || result.active && result.pending) throw Error('Billing status needs a refresh before this purchase can finish.');
       // Local purchase callbacks never grant access or acknowledge an unpaid
       // purchase. The backend must have committed and acknowledged it first.
       if (result.pending) return 'Payment is pending in Google Play. Do not pay again; restore purchases when it completes.';
       if (!result.active) {await changed(); return 'This purchase is not currently active. Check Google Play for payment or renewal details.';}
-      if (!Number.isFinite(Date.parse(result.expires_at)) || Date.parse(result.expires_at) <= Date.now()) throw Error('Payment status needs another check. Restore purchases before paying again.');
+      // The server decides activity. A phone clock must not reject a payment
+      // that the verified server already committed and acknowledged.
+      if (!Number.isFinite(Date.parse(result.expires_at))) throw Error('Payment status needs another check. Restore purchases before paying again.');
       await changed();
       if (result.needs_acknowledgement) return 'Paid access was verified. Final confirmation is being retried; restore purchases before paying again.';
       await finish(purchase);

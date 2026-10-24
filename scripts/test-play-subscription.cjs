@@ -22,5 +22,6 @@ const purchase={store:'google',platform:'android',productId:'atl_basic',currentP
  const failing=policy.createPlayPurchaseProcessor(async()=>{verifies++;throw Error('network');},async()=>finishes++,async()=>changed++);const before=verifies;await assert.rejects(()=>failing(purchase,catalog));assert.equal(verifies,before+1,'uncertain payment is not automatically replayed');assert.equal(finishes,1);
  outcome={...outcome,needs_acknowledgement:false,expires_at:'invalid'};await assert.rejects(()=>process(purchase,catalog));assert.equal(finishes,1);
  outcome={...outcome,refund_state:'requested',active:false};assert.match(await process(purchase,catalog),/confirmation is still pending/);assert.equal(finishes,1,'unfulfilled duplicate must not be acknowledged');
+ outcome={...outcome,refund_state:undefined,active:'yes'};await assert.rejects(()=>process(purchase,catalog));assert.equal(finishes,1,'malformed activity must not finish a purchase');
  console.log('Play subscription: exact store prices, ownership, duplicate callbacks, pending/uncertain recovery and server-authoritative acknowledgement PASS.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

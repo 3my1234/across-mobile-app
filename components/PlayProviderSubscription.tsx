@@ -75,6 +75,7 @@ export function PlayProviderSubscription({token, provider, onChanged}: {token: s
     <Text>{hasPaidProviderAccess(provider) ? `Your paid access ends ${new Date(provider.subscription!.current_period_end!).toLocaleString()}.` : 'No current paid access. Your existing conversations remain available.'}</Text>
     {catalog?.state && <Text>{catalog.auto_renews ? 'Automatic renewal is on in Google Play.' : 'Google Play automatic renewal is off or this purchase is inactive.'}</Text>}
     {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
+    {busy === 'verify' && <View style={{gap: 6}}><ActivityIndicator accessibilityLabel="Checking Google Play payment"/><Text>Checking your Google Play payment. Please do not pay again.</Text></View>}
     {button('Restore purchases and refresh status', 'restore', () => void restore(), !iap.connected)}
     {button('Reload available plans', 'catalog', () => {void refresh().catch(() => {if (alive.current) setError('Plans could not load. Retry when connected.');});})}
     {button('Manage or cancel in Google Play', 'manage', () => {void Linking.openURL('https://play.google.com/store/account/subscriptions?package=com.atlanticexpress.mobile').catch(() => setError('Google Play could not open. Open Play Store → Payments and subscriptions → Subscriptions.'));})}
