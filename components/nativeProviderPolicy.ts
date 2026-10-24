@@ -4,7 +4,7 @@ export type ProviderAccount = {
   can_sell_products?: boolean; can_offer_services?: boolean;
   description?: string; website_url?: string; address_line?: string; city?: string; state?: string; country_code?: string;
   provider_identity?: {avatar_url?: string; banner_url?: string; tier?: string};
-  subscription?: {status: string; current_period_end?: string; billing_mode?: string};
+  subscription?: {status: string; current_period_end?: string; billing_mode?: string; billing_provider?: 'flutterwave' | 'google_play'};
 };
 export const verificationKinds = [
   ['government_id', 'Government ID'], ['business_registration', 'Business registration'],
