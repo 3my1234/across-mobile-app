@@ -15,7 +15,12 @@ async function main(){
   fetchWithTimeout:(url,options)=>new Promise(resolve=>pending.push({url,options,resolve})),apiMessage:(_,fallback)=>fallback,
   setLoading:()=>{},setChatSending:()=>{},setChatLoading:()=>{},setChatError:()=>{},setConversationCursor:()=>{},setConversations:()=>{},
   setSelectedConversation:value=>{conversation=value;},setConversationMessages:value=>{messages=typeof value==='function'?value(messages):value;},loadConversations:async()=>{},Alert:{alert:()=>{throw Error('Unexpected alert');}}};
+ g.contactAccess={checking:false,error:'',own:false,canManage:false};
  const ctx=run(source.slice(source.indexOf('  async function startConversation()'),source.indexOf('  useEffect(()=>{',source.indexOf('  async function startConversation()'))),g);
+ let managed;g.onManageListing=(kind,id)=>{managed={kind,id};};
+ g.contactAccess.own=true;g.contactAccess.canManage=true;await ctx.startConversation();assert.equal(managed.kind,'service');assert.equal(managed.id,'service');assert.equal(pending.length,0,'own-business action never opens chat');
+ g.contactAccess.canManage=false;managed=null;await ctx.startConversation();assert.equal(managed,null,'staff cannot navigate into an owner edit action');assert.equal(pending.length,0);
+ g.contactAccess.own=false;g.contactAccess.checking=true;await ctx.startConversation();assert.equal(pending.length,0,'wait for identity before opening chat');g.contactAccess.checking=false;
  g.loading=true; // Background page loading must not disable direct chat.
  const first=ctx.startConversation();assert.equal(pending[0].options.method,undefined,'opening chat must not send an empty enquiry');pending.shift().resolve({ok:true,json:async()=>({items:[]})});await first;assert.equal(conversation.id,'');assert.equal(conversation.listing_id,'service');
  const send=ctx.sendConversationMessage('Hello');assert.match(pending[0].url,/listings\/service\/conversations$/);assert.equal(JSON.parse(pending[0].options.body).message,'Hello');pending.shift().resolve({ok:true,json:async()=>({id:'thread',message_id:'new',body:'Hello',created_at:'2026-10-06T10:00:00Z'})});await new Promise(r=>setImmediate(r));assert.match(pending[0].url,/thread\/messages\?limit=50/);pending.shift().resolve({ok:true,json:async()=>({items:[{id:'new',created_at:'2026-10-06T10:00:00Z',body:'Hello'}]})});await send;assert.equal(messages[0].id,'new');

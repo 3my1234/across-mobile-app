@@ -5,12 +5,13 @@ export class ProviderRequestError extends Error {
 }
 export async function providerRequest(token: string, path: string, options: RequestInit = {}) {
   const method = (options.method || 'GET').toUpperCase();
+  const playConfirmation = method === 'POST' && path === '/providers/me/play-billing/verify';
   const shared = method === 'GET' && ['/profile', '/notifications'].includes(path) || method === 'PATCH' && path === '/notifications/read-all';
   if (!path.startsWith('/providers/') && path !== '/marketplace/subscription-plans' && !shared) throw new Error('Unsupported provider operation');
   try {
     const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1${path}`, {
       ...options, cache: 'no-store', headers: {...options.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
-    }, path.endsWith('/videos/complete') ? 90000 : options.method === 'POST' && /\/subscription-(renewal|checkout|confirm)$/.test(path) ? 45000 : 15000);
+    }, path.endsWith('/videos/complete') ? 90000 : playConfirmation || method === 'POST' && /\/subscription-(renewal|checkout|confirm)$/.test(path) ? 45000 : 15000);
     if (!response.ok) {
       const rawID = response.headers?.get('X-Request-ID') || '';
       const requestID = /^[a-zA-Z0-9-]{1,80}$/.test(rawID) ? rawID : '';

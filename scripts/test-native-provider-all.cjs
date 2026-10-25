@@ -3,7 +3,7 @@ const suites = [
   'test-native-provider', 'test-provider-entry', 'test-workspace-transport', 'test-auth-workspace', 'test-provider-workspace', 'test-provider-workspace-ux', 'test-provider-onboarding', 'test-provider-onboarding-screen',
   'test-provider-profile', 'test-provider-publishing', 'test-provider-catalog-screen', 'test-price-display', 'test-referrals', 'test-provider-inbox', 'test-provider-driver',
   'test-provider-bookings', 'test-provider-booking-screen', 'test-provider-booking-images', 'test-provider-orders', 'test-notification-destinations', 'test-provider-address-search', 'test-provider-location-picker', 'test-notification-diagnostics', 'test-notification-setup',
-  'test-town-hall-feed', 'test-provider-subscription', 'test-provider-subscription-screen', 'test-provider-fulfillment-screen', 'test-provider-staging',
+  'test-business-contact', 'test-discovery', 'test-provider-chat', 'test-town-hall-feed', 'test-provider-subscription', 'test-provider-subscription-screen', 'test-play-subscription', 'test-play-subscription-screen', 'test-provider-fulfillment-screen', 'test-provider-staging',
 ];
 for (const suite of suites) {
   const result = spawnSync(process.execPath, [`scripts/${suite}.cjs`], {stdio: 'inherit'});

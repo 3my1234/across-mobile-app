@@ -17,10 +17,11 @@
     "test:marketplace": "node scripts/test-provider-chat.cjs && node scripts/test-product-loading.cjs && node scripts/test-product-chat-options.cjs",
     "test:checkout": "node scripts/test-cart-review.cjs",
     "test:notifications": "node scripts/test-notification-setup.cjs",
+    "test:business-contact": "node scripts/test-business-contact.cjs",
     "ios": "expo run:ios",
     "test:theme": "node scripts/test-theme.cjs",
     "check:provider-staging": "node scripts/check-provider-staging.cjs",
-    "eas-build-pre-install": "node scripts/check-provider-staging.cjs --eas-hook"
+    "eas-build-pre-install": "node scripts/check-release-distribution.cjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",
@@ -39,6 +40,7 @@
     "expo-dev-client": "~6.0.21",
     "expo-document-picker": "~14.0.8",
     "expo-font": "~14.0.12",
+    "expo-iap": "3.3.4",
     "expo-image-picker": "~17.0.11",
     "expo-linking": "~8.0.10",
     "expo-location": "~19.0.8",

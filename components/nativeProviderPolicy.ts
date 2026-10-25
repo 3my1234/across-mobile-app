@@ -4,7 +4,7 @@ export type ProviderAccount = {
   can_sell_products?: boolean; can_offer_services?: boolean;
   description?: string; website_url?: string; address_line?: string; city?: string; state?: string; country_code?: string;
   provider_identity?: {avatar_url?: string; banner_url?: string; tier?: string};
-  subscription?: {status: string; current_period_end?: string; billing_mode?: string};
+  subscription?: {status: string; current_period_end?: string; billing_mode?: string; billing_provider?: 'flutterwave' | 'google_play'};
 };
 export const verificationKinds = [
   ['government_id', 'Government ID'], ['business_registration', 'Business registration'],
@@ -40,12 +40,13 @@ export function nativeProviderView(route: string) {
   if (view === 'support' && ['conversation', 'shared', 'hall'].some(key => query.has(key))) return 'legacy';
   if (['conversation', 'shared', 'hall'].some(key => query.has(key))) return ['conversation', 'shared', 'hall'].every(key => !query.has(key) || validProviderID(query.get(key))) ? 'messages' : 'legacy';
   if (['event', 'notification'].some(key => query.has(key) && !validProviderID(query.get(key)))) return 'legacy';
+  if (query.has('listing') && (!['products','listings'].includes(view) || !validProviderID(query.get('listing')))) return 'legacy';
   if (query.has('request') && (view !== 'requests' || !validProviderID(query.get('request')))) return 'legacy';
   return ['overview', 'notifications', 'profile', 'verification', 'subscription', 'products', 'listings', 'messages', 'support', 'driver', 'requests', 'merchant-orders'].includes(view) ? view : 'legacy';
 }
 export function providerRouteContext(route: string) {
   const query = new URLSearchParams(route), id = (key: string) => validProviderID(query.get(key)) ? query.get(key)! : '';
-  return {event: id('event'), notification: id('notification'), request: id('request')};
+  return {event: id('event'), notification: id('notification'), request: id('request'), listing: id('listing')};
 }
 export function providerSupportTicket(route: string) {
   if (nativeProviderView(route) !== 'support') return undefined;

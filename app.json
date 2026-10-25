@@ -1,6 +1,6 @@
 {
   "expo": {
-    "owner": "athlantic-express",
+    "owner": "atlxpres1991",
     "name": "Atl",
     "slug": "across",
     "scheme": "across",
@@ -65,11 +65,12 @@
           "locationWhenInUsePermission": "Allow Atlantic Express to use your location while you find nearby services, share a location pin, or choose to be available as a driver."
         }
       ],
-      "@maplibre/maplibre-react-native"
+      "@maplibre/maplibre-react-native",
+      "expo-iap"
     ],
     "extra": {
       "eas": {
-        "projectId": "1f1853ee-4359-4a4c-a95f-55f94e90b102"
+        "projectId": "c4fe2811-84a1-48bb-9939-3a3e532d1a29"
       }
     }
   }

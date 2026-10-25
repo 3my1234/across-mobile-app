@@ -1,3 +1,4 @@
+import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
 import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
 import type {Product} from './types';
@@ -38,6 +39,7 @@ import { filterNearbySnapshot, readCachedContact, readNearbySnapshot, writeCache
 
 type Listing = {
   id: string;
+  provider_id?: string;
   listing_type: string;
   title: string;
   description: string;
@@ -130,7 +132,7 @@ function bookingQuantityCopy(listingType: string) {
   return { label: "Number of people receiving this service", help: "Enter 1 when booking only for yourself. This is not the number of days.", unit: "person" };
 }
 
-export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore",initialConversationId="",initialListingId="",country="NG",destinationState="",destinationCity="",discoveryActive=true,onOpenProduct,onConversationVisibilityChange }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;initialListingId?:string;country?:string;destinationState?:string;destinationCity?:string;discoveryActive?:boolean;onOpenProduct?:(product:Product)=>void;onConversationVisibilityChange?:(visible:boolean)=>void }) {
+export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore",initialConversationId="",initialListingId="",country="NG",destinationState="",destinationCity="",discoveryActive=true,onOpenProduct,onManageListing,onConversationVisibilityChange }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;initialListingId?:string;country?:string;destinationState?:string;destinationCity?:string;discoveryActive?:boolean;onOpenProduct?:(product:Product)=>void;onManageListing?:(kind:'product'|'service',id:string)=>void;onConversationVisibilityChange?:(visible:boolean)=>void }) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
@@ -161,6 +163,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const conversationsRead = useRef<{actor: string | null; generation: number} | null>(null);
   const conversationRef = useRef(selectedConversation); conversationRef.current = selectedConversation;
   const [selected, setSelected] = useState<Listing | null>(null);
+  const contactAccess=useBusinessContact(token,selected?.provider_id||selected?.provider_identity?.id);
  const discoveryListingRead=useRef(0),discoveryVisible=useRef(discoveryActive);discoveryVisible.current=discoveryActive;
  async function openDiscoveryService(id:string){const request=++discoveryListingRead.current,actor=token;try{const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings/${encodeURIComponent(id)}`);if(request!==discoveryListingRead.current||chatActor.current!==actor||!discoveryVisible.current)return;if(!response.ok||body.id!==id)throw Error('Service unavailable');await openListing(body);}catch{if(request===discoveryListingRead.current&&chatActor.current===actor)Alert.alert('Service unavailable','Refresh and choose another listing.');}}
  useEffect(()=>{if(initialListingId)void openDiscoveryService(initialListingId);return()=>{discoveryListingRead.current++;};},[initialListingId,token]);
@@ -431,6 +434,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }
 
   async function startConversation() {
+    if(contactAccess.checking)return;
+    if(contactAccess.error){contactAccess.retry();return;}
+    if(contactAccess.own){if(selected&&contactAccess.canManage)onManageListing?.('service',selected.id);return;}
     if(selected)recordDiscoveryContact(token,'service',selected.id);
     if (!selected || chatOpening.current) return;
     chatOpening.current = true;
@@ -704,8 +710,10 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Chat with this provider</Text>
             <Text style={styles.meta}>Discuss what you need, availability and payment directly in your chat.</Text>
-            <Pressable disabled={openingChat} style={[styles.primary, openingChat && styles.disabled]} onPress={() => void startConversation()}>
-              <Text style={styles.primaryText}>{openingChat ? "Opening chat..." : "Message provider"}</Text>
+            {contactAccess.own&&<Text style={styles.fieldHelp}>Your business listing. You cannot message your own business.</Text>}
+            {!!contactAccess.error&&<Text accessibilityRole="alert" style={{color:'#C62828'}}>{contactAccess.error}</Text>}
+            <Pressable disabled={openingChat||contactAccess.checking||contactAccess.own&&(!contactAccess.canManage||!onManageListing)} style={[styles.primary, (openingChat||contactAccess.checking||contactAccess.own&&!contactAccess.canManage) && styles.disabled]} onPress={() => void startConversation()}>
+              <Text style={styles.primaryText}>{contactAccess.checking?"Checking access...":contactAccess.error?"Retry messaging access":contactAccess.own?(contactAccess.canManage&&onManageListing?"Manage listing":"Your business listing"):openingChat ? "Opening chat..." : "Message provider"}</Text>
             </Pressable>
             <Pressable disabled={requiresSafetyAcknowledgement && !safetyAcknowledged} style={[styles.secondary, requiresSafetyAcknowledgement && !safetyAcknowledged && styles.disabled]} onPress={revealContact}>
               <Text style={styles.secondaryText}>View verified provider contact</Text>
@@ -750,7 +758,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               style={styles.results}
               data={items}
               keyExtractor={item => item.id}
-              ListHeaderComponent={<DiscoverySections owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
+              ListHeaderComponent={<DiscoverySections kind="service" owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
               numColumns={2}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadListings(true)} tintColor="#FF4747" />}
               onEndReached={() => { if (listingCursor && !loadingMore) void loadListings(false, listingCursor); }}

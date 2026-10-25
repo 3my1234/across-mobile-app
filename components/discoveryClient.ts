@@ -3,7 +3,7 @@ import {API_URL} from './config';
 import {fetchJSONWithTimeout, mapProduct} from './utils';
 import type {Product} from './types';
 export type DiscoveryCard = {kind:'product'|'service';id:string;provider_id:string;title:string;categories:string[];city:string;image_urls:string[];price:number|null;price_mode?:string;compare_at_price?:number;currency:string;placement:'similar'|'recommended'|'promoted';label?:string;receipt:string};
-type Context = {owner:string|null;country:string;state?:string;city?:string;search?:string;sourceKind?:'product'|'service';sourceID?:string};
+type Context = {owner:string|null;country:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string};
 let actor:string|null|undefined, session='', topics:string[]=[], pending: {receipt:string;type:string;visible_ms?:number}[]=[], timer:ReturnType<typeof setTimeout>|undefined, sending=false, epoch=0, navigation=0;
 const seen = new Set<string>();
 const recentlyVisible=new Map<string,number>();
@@ -20,6 +20,7 @@ export async function discoveryFeed(context:Context) {
  for(const [key,at]of recentlyVisible){if(Date.now()-at>20*60*1000)recentlyVisible.delete(key);}
  if(recentlyVisible.size)query.set('recent',Array.from(recentlyVisible.keys()).slice(-24).join(','));
  if(context.search?.trim())query.set('search',context.search.trim().slice(0,100));
+ if(context.kind)query.set('kind',context.kind);
  if(context.sourceID){query.set('source_id',context.sourceID);query.set('source_kind',context.sourceKind||'product');}
  const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/discovery?${query}`,{cache:'no-store'},10000);
  if(!response.ok)throw Error('Discovery is temporarily unavailable.');
