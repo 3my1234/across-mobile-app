@@ -11,13 +11,13 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
   const c = useAccountDesign();
   const [items, setItems] = useState<Service[]>([]), [selected, setSelected] = useState('');
   const [cursor, setCursor] = useState(''), [page, setPage] = useState(''), [reload, setReload] = useState(0);
-  const [loading, setLoading] = useState(true), [online, setOnline] = useState(false), [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true), [online, setOnline] = useState(false), [busy, setBusy] = useState(false), [starting, setStarting] = useState(false);
   const [message, setMessage] = useState('Offline. Choose a service to become available nearby.'), [error, setError] = useState('');
   const [presence, setPresence] = useState<ReturnType<typeof providerAvailabilitySession> | null>(null);
   useEffect(() => {
     let alive = true;
     const session = providerAvailabilitySession(token,providerID);
-    const unsubscribe=session.subscribe((available,text)=>{if(alive){setOnline(available);setMessage(text);}});
+    const unsubscribe=session.subscribe((available,text,pending)=>{if(alive){setOnline(available);setMessage(text);setStarting(pending);}});
     setPresence(session);setSelected(session.listingID);
     // App lifecycle owns the lease. Leaving this panel to answer chats does
     // not silently switch availability off; background/sign-out still stop it.
@@ -41,12 +41,12 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
     <Text>Customers see approximate distance. Your exact location is shared in chat only when you explicitly send a location pin.</Text>
     {loading && <ActivityIndicator accessibilityLabel="Loading approved driver services"/>}
     {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}
-    {items.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{checked: selected === item.id, disabled: online || busy}} disabled={online || busy} onPress={() => setSelected(item.id)} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: selected === item.id ? c.soft : c.surface}}><Text>{item.title}</Text></Pressable>)}
+    {items.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{checked: selected === item.id, disabled: online || starting || busy}} disabled={online || starting || busy} onPress={() => setSelected(item.id)} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: selected === item.id ? c.soft : c.surface}}><Text>{item.title}</Text></Pressable>)}
     {!items.length && !loading && !error && <Text>Create a driver or courier service, keep your paid subscription active and have all three transport documents approved first. The server checks approval every time availability updates.</Text>}
     {!!cursor && button('Load more services', () => setPage(cursor), loading || busy || online)}
     {button('Refresh services', () => {setPage(''); setReload(value => value + 1);}, loading || busy || online)}
     <Text accessibilityLiveRegion="polite">{message}</Text>
-    {button('Available for customers', () => {if (presence && !presence.start(selected)) setMessage('Wait for the current update to finish, keep the app open, then retry.');}, !selected || !presence || online || busy)}
+    {button('Available for customers', () => {if (presence && !presence.start(selected)) setMessage('Wait for the current update to finish, keep the app open, then retry.');}, !selected || !presence || online || starting || busy)}
     {button('Go offline', () => {setBusy(true); void presence?.stop().finally(() => setBusy(false));}, !presence || busy)}
   </View>;
 }
