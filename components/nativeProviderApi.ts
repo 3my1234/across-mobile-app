@@ -7,7 +7,8 @@ export async function providerRequest(token: string, path: string, options: Requ
   const method = (options.method || 'GET').toUpperCase();
   const playConfirmation = method === 'POST' && path === '/providers/me/play-billing/verify';
   const shared = method === 'GET' && ['/profile', '/notifications'].includes(path) || method === 'PATCH' && path === '/notifications/read-all';
-  if (!path.startsWith('/providers/') && path !== '/marketplace/subscription-plans' && !shared) throw new Error('Unsupported provider operation');
+  const contactAccess = method === 'GET' && /^\/marketplace\/providers\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\/contact-access$/i.test(path);
+  if (!contactAccess && !path.startsWith('/providers/') && path !== '/marketplace/subscription-plans' && !shared) throw new Error('Unsupported provider operation');
   try {
     const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1${path}`, {
       ...options, cache: 'no-store', headers: {...options.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
