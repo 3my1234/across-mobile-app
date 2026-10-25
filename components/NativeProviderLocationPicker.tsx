@@ -14,7 +14,7 @@ export function validProviderPin(value: unknown): value is Pin {
 }
 
 // Native map renderer; no portal/WebView, Google key, or application API token.
-export function NativeProviderLocationPicker({initial, onChoose, onClose}: {initial?: Pin; onChoose: (pin: Pin) => void; onClose: () => void}) {
+export function NativeProviderLocationPicker({initial, onChoose, onClose,title='Choose service / stock location',hint='Tap the map, or hold and drag the pin. Your post changes only after you confirm and save it.'}: {title?:string;hint?:string;initial?: Pin; onChoose: (pin: Pin) => void; onClose: () => void}) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
   const [pin, setPin] = useState<Pin | null>(() => validProviderPin(initial) ? initial : null);
   const [camera, setCamera] = useState(() => ({centerCoordinate: validProviderPin(initial) ? [initial.longitude, initial.latitude] : [8.6753, 9.082], zoomLevel: validProviderPin(initial) ? 15 : 5}));
@@ -39,7 +39,7 @@ export function NativeProviderLocationPicker({initial, onChoose, onClose}: {init
   };
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" disabled={disabled} accessibilityState={{disabled, busy: busy && activeAction === label}} onPress={() => {setActiveAction(label); action();}} style={({pressed}) => [s.button, {backgroundColor: pressed ? c.soft : c.surface, borderColor: c.line, opacity: disabled && !busy ? .5 : 1}]}><View style={{flexDirection: 'row', gap: 8, alignItems: 'center'}}>{busy && activeAction === label && <ActivityIndicator accessibilityLabel={`${label} in progress`}/>}<Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></View></Pressable>;
   return <Modal animationType="slide" onRequestClose={close}><View style={{flex: 1, paddingTop: insets.top, paddingBottom: insets.bottom, backgroundColor: c.background}}>
-    <ScrollView style={{maxHeight: '40%', flexGrow: 0}} contentContainerStyle={s.controls} keyboardShouldPersistTaps="handled"><Text style={s.title}>Choose service / stock location</Text><Text>Tap the map, or hold and drag the pin. Your post changes only after you confirm and save it.</Text>
+    <ScrollView style={{maxHeight: '40%', flexGrow: 0}} contentContainerStyle={s.controls} keyboardShouldPersistTaps="handled"><Text style={s.title}>{title}</Text><Text>{hint}</Text>
       <Input accessibilityLabel="Find a location on the map" value={query} editable={!busy} onChangeText={value => {setQuery(value); setResults([]);}} placeholder="Address, city or landmark" style={[s.input, {borderColor: c.line}]}/>
       <View style={s.row}>{button('Search address', () => void run(async () => {const found = await providerAddressSearch(query); if (mounted.current && !closed.current) setResults(found);}), busy)}{button('Use GPS', () => void run(async () => {const value = await currentForegroundLocation(); if (mounted.current && !closed.current) move(value.coords);}), busy)}</View>
       {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}

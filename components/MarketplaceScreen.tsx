@@ -742,7 +742,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       </View>
       {mode === "explore" ? (
         <>
-          <Pressable accessibilityLabel="Find available drivers nearby" onPress={()=>{if(!token){Alert.alert("Sign in","Sign in to find nearby drivers.");return;}setShowDrivers(true);}} style={{padding:12,backgroundColor:theme.dark?"#173E32":"#D9F2E8",borderRadius:16,marginHorizontal:12,marginTop:8}}><Text style={{fontWeight:"700"}}>🚗 Drivers nearby · Find a ride</Text></Pressable>
+          <Pressable accessibilityLabel="Find available drivers and couriers nearby" onPress={()=>{if(!token){Alert.alert("Sign in","Sign in to find nearby drivers.");return;}setShowDrivers(true);}} style={{padding:12,backgroundColor:theme.dark?"#173E32":"#D9F2E8",borderRadius:16,marginHorizontal:12,marginTop:8}}><Text style={{fontWeight:"700"}}>🚗 Drivers nearby · Find a ride</Text></Pressable>
           <View style={styles.searchTools}>
             <View style={styles.search}><Ionicons name="search" size={18} color={theme.color("#777")} /><TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" /></View>
             <Pressable hitSlop={4} accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={theme.color(nearby ? "#FFFFFF" : "#FF4747")} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>Near me</Text></Pressable>

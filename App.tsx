@@ -1,3 +1,4 @@
+import {DriverPresenceNotice,useDriverPresenceLifecycle} from './components/DriverPresenceNotice';
 import {DiscoverySections} from './components/DiscoverySections';
 import {AccountDeletionRequest} from './components/AccountDeletionRequest';
 import {openDiscovery,DiscoveryCard} from './components/discoveryClient';
@@ -154,6 +155,7 @@ function AcrossApp() {
   const googleVerificationInFlight = useRef(false);
   const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  useDriverPresenceLifecycle(token);
   const [products, setProducts] = useState<Product[]>([]);
   const [productFeed, setProductFeed] = useState<{key: string; status: "loading" | "ready" | "error"}>({key: "", status: "loading"});
   const [stockView, setStockView] = useState<"all" | "local" | "international">("all");
@@ -1934,6 +1936,7 @@ function AcrossApp() {
 
       {!providerWorkspaceVisible && <>
       {providerToolReturn?.token === token && activeTab === 'support' && <Pressable accessibilityRole="button" accessibilityLabel="Back to provider tools" onPress={returnToProvider} style={{padding: 14, minHeight: 44}}><Text>Back</Text></Pressable>}
+      <DriverPresenceNotice token={token}/>
       {/* Notification Bell */}
       <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100,flexDirection:'row',alignItems:'center' }}>
         <Pressable onPress={() => setShowNotifications(v => !v)} style={{ padding: 6 }}>

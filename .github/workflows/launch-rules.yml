@@ -1,7 +1,7 @@
 name: Mobile launch checks
 on:
   pull_request:
-    branches: [main]
+    branches: [main, fix/play-launch-readiness]
   push:
     branches: [main]
 jobs:

@@ -13,7 +13,7 @@ type Dependencies = {
   publish: (payload: DriverPresencePayload) => Promise<unknown>;
   remove: () => Promise<unknown>;
   foreground: () => boolean;
-  state: (online: boolean, message: string) => void;
+  state: (online: boolean, message: string, status?: 'starting'|'online'|'offline') => void;
 };
 const cleanupByProvider = new Map<string, Promise<void>>();
 // One foreground lease, one heartbeat at a time. Never queue a restart behind
@@ -33,11 +33,11 @@ export function createDriverPresence(deps: Dependencies) {
         if (!active(epoch)) return;
         const payload = driverPresencePayload(listing, position);
         await deps.publish(payload);
-        if (active(epoch)) deps.state(true, 'Available nearby · location updated just now');
+        if (active(epoch)) deps.state(true, 'Available nearby - location updated just now', 'online');
       } catch (error) {
         if (!active(epoch)) return;
         enabled = false; version++; clear();
-        deps.state(false, `${error instanceof Error ? error.message : 'Availability could not update.'} You are offline on this device. Nearby visibility expires within two minutes if the connection is unavailable.`);
+        deps.state(false, `${error instanceof Error ? error.message : 'Availability could not update.'} You are offline on this device. Nearby visibility expires within two minutes if the connection is unavailable.`,'offline');
         // PUT failures can be ambiguous. Clear the lease, without retrying PUT.
         try {await deps.remove();} catch { /* Server TTL remains the fallback. */ }
       }
@@ -49,7 +49,7 @@ export function createDriverPresence(deps: Dependencies) {
   }
   function stop() {
     enabled = false; version++; clear();
-    deps.state(false, 'Offline on this device. Nearby visibility expires within two minutes if the connection is unavailable.');
+    deps.state(false, 'Offline on this device. Nearby visibility expires within two minutes if the connection is unavailable.','offline');
     if (stopping) return stopping;
     const previousCleanup = cleanupByProvider.get(deps.sessionKey);
     // A late PUT must finish before DELETE. No new start is accepted until the
@@ -67,7 +67,7 @@ export function createDriverPresence(deps: Dependencies) {
     start(id: string) {
       if (enabled || flight || stopping || cleanupByProvider.has(deps.sessionKey) || !deps.foreground()) return false;
       listing = id; enabled = true; version++;
-      deps.state(false, 'Finding your current location…'); void tick(); return true;
+      deps.state(false, 'Finding your current location...', 'starting'); void tick(); return true;
     },
     stop,
   };
