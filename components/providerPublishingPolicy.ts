@@ -23,14 +23,16 @@ export function editablePostSnapshot(kind: 'listings' | 'products', snapshot: Pr
   if (snapshot.status === 'archived' || snapshot.moderation_status === 'archived') throw new Error('This post has been archived. Refresh your posts.');
   const editable = JSON.parse(JSON.stringify(snapshot));
   if (kind === 'listings' && !['fixed', 'from', 'quote'].includes(editable.attributes?.price_mode)) editable.attributes = {...editable.attributes, price_mode: editable.price == null ? 'quote' : 'fixed'};
+  editable._retained_images = [...(kind === 'listings' ? editable.media_urls || [] : editable.image_urls || [])];
+  editable._retained_videos = [...(kind === 'listings' ? editable.attributes?.video_urls || [] : editable.video_urls || [])];
   return editable;
 }
 export const serviceTypes = ['hotel', 'short_let', 'car_rental', 'car_wash', 'mechanic', 'plumber', 'carpenter', 'fuel_station', 'food_vendor', 'artisan', 'shop_rental', 'property', 'land'];
-export function postMediaError(policy: PostPolicy, images: string[], videos: string[]) {
+export function postMediaError(policy: PostPolicy, images: string[], videos: string[], retainedImages: string[] = [], retainedVideos: string[] = []) {
   if (!Number.isInteger(policy.max_images) || policy.max_images < 1 || !Number.isInteger(policy.max_videos) || policy.max_videos < 0) return 'Your plan limits are unavailable. Refresh before saving.';
   if (images.length < 1) return 'Add at least one clear image.';
-  if (images.length > policy.max_images) return `Your plan allows ${policy.max_images} image(s) per post. Remove images or upgrade.`;
-  if (videos.length > policy.max_videos) return 'Your plan does not allow this many videos. Remove videos or upgrade.';
+  if (images.length > policy.max_images && !(images.length <= retainedImages.length && images.every(url => retainedImages.includes(url)))) return `Your plan allows ${policy.max_images} image(s) per post. Remove images or upgrade.`;
+  if (videos.length > policy.max_videos && !(videos.length <= retainedVideos.length && videos.every(url => retainedVideos.includes(url)))) return 'Your plan does not allow this many videos. Remove videos or upgrade.';
   return '';
 }
 export function makeServiceDraft(provider: ProviderPost): ProviderPost {
@@ -44,7 +46,7 @@ export function postDraftErrors(kind: 'listings' | 'products', draft: ProviderPo
   catch (error) {return {[error instanceof PostDraftValidationError ? error.field : 'form']: error instanceof Error ? error.message : 'Please check this listing.'};}
 }
 export function validatePostDraft(kind: 'listings' | 'products', draft: ProviderPost, policy: PostPolicy, confirmedLocation: boolean) {
-  const media = postMediaError(policy, kind === 'listings' ? draft.media_urls || [] : draft.image_urls || [], kind === 'listings' ? draft.attributes?.video_urls || [] : draft.video_urls || []);
+  const media = postMediaError(policy, kind === 'listings' ? draft.media_urls || [] : draft.image_urls || [], kind === 'listings' ? draft.attributes?.video_urls || [] : draft.video_urls || [], draft._retained_images || [], draft._retained_videos || []);
   if (media) throw new PostDraftValidationError(media.toLowerCase().includes('video') ? 'videos' : 'images', media);
   for (const field of ['title', 'description']) if (!String(draft[field] || '').trim()) throw new PostDraftValidationError(field, field === 'title' ? 'Enter a name for this listing.' : 'Describe what you are offering.');
   const lat = kind === 'listings' ? draft.latitude : draft.inventory_latitude, lon = kind === 'listings' ? draft.longitude : draft.inventory_longitude;
@@ -82,6 +84,7 @@ export function postPayload(kind: 'listings' | 'products', draft: ProviderPost):
   // Keep all fetched write fields, including delivery offers, videos, attributes,
   // sale terms and geolocation; never rebuild PATCH from only visible inputs.
   const payload = JSON.parse(JSON.stringify(draft));
+  delete payload._retained_images; delete payload._retained_videos;
   if (kind === 'listings' && payload.attributes.price_mode === 'quote') payload.price = null;
   if (kind === 'products') {payload.payment_mode = 'contact'; payload.atlantic_last_mile = false;}
   return payload;

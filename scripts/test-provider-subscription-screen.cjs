@@ -22,6 +22,8 @@ const request=async(token,path,options={})=>{
  return path.endsWith('subscription-plans')?{items:[plan]}:renewal;
 };
 const context={exports:{},Error,process:{env:{EXPO_PUBLIC_DISTRIBUTION_CHANNEL:'direct'}},require:name=>{
+ if(name==='./ProviderTierDetails')return{ProviderTierDetails:'TierDetails',ProviderTierUsage:'TierUsage'};
+ if(name==='./providerTierBenefits')return{tierExplanation:'Verified provider plan benefits'};
  if(name==='react')return react;
  if(name==='react-native')return {ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},AppState:{addEventListener:()=>({remove(){}})},Platform:{OS:'android'},Pressable:'Button',View:'View'};
  if(name==='expo-secure-store')return {getItemAsync:async()=>stored,setItemAsync:async(key,value)=>{stored=value},deleteItemAsync:async()=>{stored=null}};

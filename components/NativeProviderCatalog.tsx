@@ -86,7 +86,7 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
     if (video) {
       if (mime !== 'video/mp4' || !asset.duration || asset.duration > limits.max_video_seconds * 1000 || !asset.fileSize || asset.fileSize > 50 * 1024 * 1024) throw new Error('Choose an MP4 up to 50 MB, with each video no longer than 60 seconds.');
     } else {const validation = verificationImageError(mime, asset.fileSize || 0); if (validation) throw new Error(validation);}
-    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || (video ? 'post.mp4' : 'post.jpg'), mime_type: mime, purpose: video ? 'post_video' : 'listing'})});
+    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || (video ? 'post.mp4' : 'post.jpg'), mime_type: mime, purpose: video ? 'post_video' : 'listing', post_id: draft?.id || undefined, post_kind: kind})});
     await putProviderPhoto(signed.upload_url, asset.uri, mime, video ? 50 * 1024 * 1024 : 10 * 1024 * 1024);
     if (video) {const verified = await providerRequest(token, '/providers/me/videos/complete', {method: 'POST', body: JSON.stringify({key: signed.key})}); if (mounted.current) setVideos([...videos, verified.url]);}
     else if (mounted.current) setImages([...images, signed.view_url]);

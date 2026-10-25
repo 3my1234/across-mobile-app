@@ -1,3 +1,5 @@
+import {ProviderTierDetails, ProviderTierUsage} from './ProviderTierDetails';
+import {tierExplanation, TierUsage} from './providerTierBenefits';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, AppState, Platform, Pressable, View} from 'react-native';
 import * as SecureStore from 'expo-secure-store';
@@ -18,6 +20,7 @@ export function NativeProviderSubscription({token, provider, onChanged}: {token:
 }
 export function DirectProviderSubscription({token, provider, onChanged, managementOnly = false}: {token: string; provider: ProviderAccount; onChanged: () => Promise<void>; managementOnly?: boolean}) {
   const c = useAccountDesign(), storageKey = `across.providerCheckout.v1.${provider.id}`;
+  const [usage, setUsage] = useState<TierUsage|null>(null);
   const [plans, setPlans] = useState<ProviderPlan[]>([]), [renewal, setRenewal] = useState<Renewal | null>(null);
   const [pending, setPending] = useState<PendingProviderCheckout | null>(null), [loaded, setLoaded] = useState(false);
   const [months, setMonths] = useState(1), [method, setMethod] = useState('card');
@@ -30,17 +33,17 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
   const checkoutEnabled = !managementOnly && Platform.OS === 'android' && process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL === 'direct';
   const refresh = useCallback(async () => {
     const version = ++readVersion.current;
-    const [status, catalog, raw] = await Promise.all([providerRequest(token, '/providers/me/subscription-renewal'), providerRequest(token, '/marketplace/subscription-plans'), SecureStore.getItemAsync(storageKey)]);
+    const [status, catalog, raw, limits] = await Promise.all([providerRequest(token, '/providers/me/subscription-renewal'), providerRequest(token, '/marketplace/subscription-plans'), SecureStore.getItemAsync(storageKey), providerRequest(token, '/providers/me/post-policy').catch(() => null)]);
     let saved: PendingProviderCheckout | null;
     try {saved = status.can_manage ? pendingProviderCheckout(raw, provider.id) : null;}
     catch (failure) {
-      if (alive.current && version === readVersion.current) {setRenewal(status); setPlans(catalog.items || []); setPending({provider_id: provider.id, created_at: new Date().toISOString()}); setLoaded(true);}
+      if (alive.current && version === readVersion.current) {setUsage(limits?.usage || null); setRenewal(status); setPlans(catalog.items || []); setPending({provider_id: provider.id, created_at: new Date().toISOString()}); setLoaded(true);}
       throw failure;
     }
-    if (alive.current && version === readVersion.current) {setRenewal(status); setPlans(catalog.items || []); setPending(saved); setLoaded(true);}
+    if (alive.current && version === readVersion.current) {setUsage(limits?.usage || null); setRenewal(status); setPlans(catalog.items || []); setPending(saved); setLoaded(true);}
   }, [token, provider.id, storageKey]);
   const invalidateReads = useCallback(() => {readVersion.current++;}, []);
-  useEffect(() => {alive.current = true; void refresh().catch(failure => {if (alive.current) setError(failure instanceof Error ? failure.message : 'Billing status could not load.');}); return () => {alive.current = false; invalidateReads();};}, [refresh, invalidateReads]);
+  useEffect(() => {alive.current = true; setUsage(null); void refresh().catch(failure => {if (alive.current) setError(failure instanceof Error ? failure.message : 'Billing status could not load.');}); return () => {alive.current = false; invalidateReads();};}, [refresh, invalidateReads]);
   const run = async (action: () => Promise<void>) => {
     if (flight.current || !alive.current) return; flight.current = true; setBusy(true); setError('');
     try {await action();} catch (failure) {if (alive.current) setError(failure instanceof Error ? failure.message : 'Payment could not be confirmed. Check its status before paying again.');}
@@ -98,10 +101,11 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
     <Text>{renewal?.renewal_status === 'uncertain' ? 'Cancellation is not confirmed. Automatic billing may still be active.' : renewal?.renewal_status === 'stopped' ? 'Automatic renewal stopped.' : provider.subscription?.billing_mode === 'one_time' ? 'Prepaid access does not renew automatically.' : 'Monthly card renewals continue until cancelled.'}</Text>
     {!!renewal?.next_plan_name && <Text>Next-period choice: {renewal.next_plan_name}{renewal.change_at ? `, after ${new Date(renewal.change_at).toLocaleString()}` : ''}. Complete its checkout after your current paid period ends.</Text>}
     {busy && <ActivityIndicator/>}{!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
+    <ProviderTierUsage usage={usage}/><Text style={{fontWeight:'700'}}>Compare all plans</Text><Text>{tierExplanation}</Text>
     {button('Refresh billing status', () => void run(refresh))}
     {renewal?.can_manage && <>{button('Check payment status', () => void run(() => confirm(pending)))}{pending && button('Reopen saved checkout', () => void run(() => openCheckout(pending)), !checkoutEnabled || !pending.checkout_link)}{(paid || managementOnly && provider.subscription?.billing_mode === 'recurring' && renewal.renewal_status !== 'stopped') && button(renewal.renewal_status === 'uncertain' ? 'Retry cancellation' : 'Stop automatic renewal', () => changeRenewal())}</>}
     {checkoutEnabled && !paid && <><Text>Payment method</Text>{button(`${method === 'card' ? 'Selected: ' : ''}Card`, () => {setMethod('card'); if (![1, 12].includes(months)) setMonths(1);})}{button(`${method === 'banktransfer' ? 'Selected: ' : ''}One-off bank transfer`, () => setMethod('banktransfer'))}<Text>Paid period</Text><View style={{gap: 6}}>{(method === 'card' ? [1, 12] : [1, 3, 6, 12]).map(value => <View key={value}>{button(`${months === value ? 'Selected: ' : ''}${value} month(s)${value === 12 ? ' · yearly, 10% off' : ''}`, () => setMonths(value))}</View>)}</View></>}
-    {!managementOnly && plans.map(plan => <View key={plan.id} style={{padding: 14, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: c.line}}><Text style={{fontSize: 18, fontWeight: '700'}}>{plan.name}</Text><Text>{money(plan.amount_ngn)} / month</Text>{!!plan.description && <Text>{plan.description}</Text>}{Number.isInteger(plan.listing_limit) && <Text>{plan.listing_limit} posts total across products and services</Text>}{plan.post_policy && <><Text>{plan.post_policy.max_images} images per post; {plan.post_policy.max_videos ? `up to ${plan.post_policy.max_videos} videos, ${plan.post_policy.max_video_seconds} seconds each` : 'no videos'}</Text><Text>{plan.post_policy.town_hall ? 'Town Hall included' : 'Town Hall unavailable'} ? {plan.post_policy.visibility.replace(/_/g, ' ')} visibility</Text></>}{plan.period_prices?.filter(price => price.duration_months === 12).map(price => <Text key={price.duration_months}>{money(price.amount_ngn)} / year, prepaid</Text>)}{checkoutEnabled && months === 1 && method === 'card' && plan.card_available === false && <Text>Monthly card renewal is unavailable. Choose prepaid transfer or yearly card.</Text>}{renewal?.can_manage && (paid ? plan.id !== renewal.current_plan_id && button('Choose for next period', () => changeRenewal(plan), !!pending, plan.id) : checkoutEnabled && button(providerPeriodPrice(plan, months) === undefined ? 'Price unavailable ? refresh billing' : `Continue: ${money(providerPeriodPrice(plan, months)!)}`, () => start(plan), !loaded || !!pending || renewal.renewal_status === 'uncertain' || providerPeriodPrice(plan, months) === undefined || months === 1 && method === 'card' && plan.card_available === false, plan.id))}</View>)}
+    {!managementOnly && plans.map(plan => <View key={plan.id} style={{padding: 14, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: c.line}}><Text style={{fontSize: 18, fontWeight: '700'}}>{plan.name}</Text><Text>{money(plan.amount_ngn)} / month</Text>{!!plan.description && <Text>{plan.description}</Text>}<ProviderTierDetails plan={plan}/>{paid && plan.id === renewal?.current_plan_id && <Text>Current plan</Text>}{plan.period_prices?.filter(price => price.duration_months === 12).map(price => <Text key={price.duration_months}>{money(price.amount_ngn)} / year, prepaid</Text>)}{checkoutEnabled && months === 1 && method === 'card' && plan.card_available === false && <Text>Monthly card renewal is unavailable. Choose prepaid transfer or yearly card.</Text>}{renewal?.can_manage && (paid ? plan.id !== renewal.current_plan_id && button('Choose for next period', () => changeRenewal(plan), !!pending, plan.id) : checkoutEnabled && button(providerPeriodPrice(plan, months) === undefined ? 'Price unavailable ? refresh billing' : `Continue: ${money(providerPeriodPrice(plan, months)!)}`, () => start(plan), !loaded || !!pending || renewal.renewal_status === 'uncertain' || providerPeriodPrice(plan, months) === undefined || months === 1 && method === 'card' && plan.card_available === false, plan.id))}</View>)}
     {!managementOnly && !checkoutEnabled && <Text>New purchases are unavailable in this distribution. Existing paid access, payment verification and renewal management remain available.</Text>}
   </View>;
 }

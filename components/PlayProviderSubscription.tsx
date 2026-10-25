@@ -1,3 +1,5 @@
+import {ProviderTierDetails, ProviderTierUsage} from './ProviderTierDetails';
+import {tierExplanation, type TierUsage} from './providerTierBenefits';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, AppState, Linking, Pressable, View} from 'react-native';
 import {useIAP, type Purchase} from 'expo-iap';
@@ -10,6 +12,8 @@ import {createPlayPurchaseProcessor, playCatalog, playOffer, type PlayCatalog, t
 export function PlayProviderSubscription({token, provider, onChanged}: {token: string; provider: ProviderAccount; onChanged: () => Promise<void>}) {
   const c = useAccountDesign(), [catalog, setCatalog] = useState<PlayCatalog | null>(null), [busy, setBusy] = useState(''), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const alive = useRef(true), action = useRef(false), catalogRef = useRef<PlayCatalog | null>(null), processor = useRef<ReturnType<typeof createPlayPurchaseProcessor> | null>(null);
+  const [usage, setUsage] = useState<TierUsage|null>(null);
+  const readVersion=useRef(0);
   const onPurchase = useRef<(purchase: Purchase) => void>(() => {});
   const iap = useIAP({onPurchaseSuccess: purchase => onPurchase.current(purchase), onPurchaseError: failure => {
     if (alive.current) {setBusy(''); setNotice(failure.code === 'user-cancelled' ? 'Checkout closed. Restore purchases if a payment was sent. A checkout reservation expires after 15 minutes.' : 'Google Play could not finish checkout. Restore purchases before paying again.');}
@@ -24,13 +28,15 @@ export function PlayProviderSubscription({token, provider, onChanged}: {token: s
     return () => clearTimeout(timer);
   }, [busy]);
   const refresh = useCallback(async () => {
-    const result = playCatalog(await providerRequest(token, '/providers/me/play-billing'));
-    if (alive.current) {catalogRef.current = result; setCatalog(result);}
+    const version=++readVersion.current;
+    const [raw,limits]=await Promise.all([providerRequest(token, '/providers/me/play-billing'),providerRequest(token, '/providers/me/post-policy').catch(()=>null)]);
+    const result=playCatalog(raw);
+    if (alive.current && version===readVersion.current) {catalogRef.current = result; setCatalog(result); setUsage(limits?.usage||null);}
   }, [token]);
   useEffect(() => {
     alive.current = true;
     processor.current = createPlayPurchaseProcessor(body => providerRequest(token, '/providers/me/play-billing/verify', {method: 'POST', body: JSON.stringify(body)}), purchase => iap.finishTransaction({purchase, isConsumable: false}), async () => {if (alive.current) {await onChanged(); await refresh();}});
-    return () => {alive.current = false; processor.current = null; catalogRef.current = null;};
+    return () => {alive.current = false; readVersion.current++; processor.current = null; catalogRef.current = null;};
   }, [token, provider.id, onChanged, refresh, iap.finishTransaction]);
   onPurchase.current = purchase => {
     const current = catalogRef.current, process = processor.current;
@@ -80,8 +86,9 @@ export function PlayProviderSubscription({token, provider, onChanged}: {token: s
     {button('Reload available plans', 'catalog', () => {void refresh().catch(() => {if (alive.current) setError('Plans could not load. Retry when connected.');});})}
     {button('Manage or cancel in Google Play', 'manage', () => {void Linking.openURL('https://play.google.com/store/account/subscriptions?package=com.atlanticexpress.mobile').catch(() => setError('Google Play could not open. Open Play Store → Payments and subscriptions → Subscriptions.'));})}
     {!iap.connected && <Text>Connecting to Google Play. Install this version through Google Play to make store purchases.</Text>}
-    {catalog?.items.map(plan => {let offer; try {offer = playOffer(plan, iap.subscriptions);} catch {offer = null;} return <View key={`${plan.product_id}:${plan.base_plan_id}`} style={{padding: 14, gap: 8, borderRadius: 12, borderWidth: 1, borderColor: c.line}}><Text style={{fontWeight: '700'}}>{plan.name}</Text><Text>{offer ? `${offer.displayPrice} / ${plan.prepaid ? `${plan.duration_months} month(s), prepaid` : plan.duration_months === 12 ? 'year' : 'month'}` : 'Google Play price is unavailable. Refresh before purchasing.'}</Text>{button('Subscribe with Google Play', `${plan.product_id}:${plan.base_plan_id}`, () => start(plan), plan.purchasable === false || !offer || !iap.connected || hasPaidProviderAccess(provider))}</View>;})}
+    <ProviderTierUsage usage={usage}/><Text style={{fontWeight:"700"}}>Compare available plans</Text>
+    {catalog?.items.map(plan => {let offer; try {offer = playOffer(plan, iap.subscriptions);} catch {offer = null;} return <View key={`${plan.product_id}:${plan.base_plan_id}`} style={{padding: 14, gap: 8, borderRadius: 12, borderWidth: 1, borderColor: c.line}}><Text style={{fontWeight: '700'}}>{plan.name}</Text><Text>{offer ? `${offer.displayPrice} / ${plan.prepaid ? `${plan.duration_months} month(s), prepaid` : plan.duration_months === 12 ? 'year' : 'month'}` : 'Google Play price is unavailable. Refresh before purchasing.'}</Text><ProviderTierDetails plan={plan}/>{plan.amount_ngn !== undefined && <Text>Monthly plan price: NGN {plan.amount_ngn.toLocaleString()}</Text>}{button('Subscribe with Google Play', `${plan.product_id}:${plan.base_plan_id}`, () => start(plan), plan.purchasable === false || !offer || !iap.connected || hasPaidProviderAccess(provider))}</View>;})}
     {catalog && !catalog.items.length && <Text>No Google Play subscription products are available yet. Existing provider access is preserved.</Text>}
-    <Text>Google Play controls recurring payments. Cancellation stops future renewal; paid access continues until the confirmed expiry. If your current subscription was purchased directly, manage its renewal in the original checkout channel or contact Support.</Text>
+    <Text>{tierExplanation}</Text><Text>Google Play controls recurring payments. Cancellation stops future renewal; paid access continues until the confirmed expiry. If your current subscription was purchased directly, manage its renewal in the original checkout channel or contact Support.</Text>
   </View>;
 }

@@ -1,6 +1,7 @@
+import type {TierBenefits} from "./providerTierBenefits";
 import type {ProductSubscription, Purchase} from 'expo-iap';
 
-export type PlayPlan = {product_id: string; base_plan_id: string; plan_id: string; name: string; duration_months: number; amount_minor: number; purchasable?: boolean; prepaid?: boolean};
+export type PlayPlan = {listing_limit?: number; amount_ngn?: number; post_policy?: TierBenefits; product_id: string; base_plan_id: string; plan_id: string; name: string; duration_months: number; amount_minor: number; purchasable?: boolean; prepaid?: boolean};
 export type PlayCatalog = {account_id: string; items: PlayPlan[]; status: string; state: string; expires_at?: string; auto_renews: boolean; needs_acknowledgement: boolean};
 const sku = /^[a-z0-9][a-z0-9._-]{0,199}$/;
 export function playCatalog(value: unknown): PlayCatalog {

@@ -11,6 +11,8 @@ const iap={connected:true,subscriptions:[product],availablePurchases:[],fetchPro
 let result={active:true,pending:false,needs_acknowledgement:false,expires_at:new Date(Date.now()+86400000).toISOString()};
 const request=async(token,path,config={})=>{calls.push({path,token,...config});if(path.endsWith('/prepare'))return{account_id:catalog.account_id};if(path.endsWith('/verify')){if(held)await held;return result;}return catalog;};
 const context={exports:{},Set,Date,Promise,Error,setTimeout:fn=>{const id=++nextTimer;timers.set(id,fn);return id;},clearTimeout:id=>timers.delete(id),require:name=>{
+ if(name==='./ProviderTierDetails')return{ProviderTierDetails:'TierDetails',ProviderTierUsage:'TierUsage'};
+ if(name==='./providerTierBenefits')return{tierExplanation:'Verified provider plan benefits'};
  if(name==='react')return react;
  if(name==='react-native')return{ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},AppState:{addEventListener:()=>({remove(){}})},Linking:{openURL:async()=>{}},Pressable:'Button',View:'View'};
  if(name==='expo-iap')return{useIAP:value=>{options=value;return iap;}};
