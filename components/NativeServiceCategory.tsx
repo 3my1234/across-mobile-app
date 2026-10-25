@@ -8,6 +8,8 @@ const entries = serviceCategoryGroups.flatMap(group => group.services.map(name =
 export function serviceCategoryMatches(value: string, group = '', limit = 20, offset = 0) {
   let query = value.trim().toLowerCase();
   if (['uber', 'bolt', 'taxi', 'drop', 'lift', 'ride', 'drivers'].includes(query)) query = 'driver';
+  if (['rider', 'riders', 'dispatch rider', 'dispatch riders'].includes(query)) query = 'dispatch';
+  if (query === 'motorcycle courier') query = 'courier';
   return entries.filter(item => (!group || group === item.group) && (!query || `${item.name} ${item.group}`.toLowerCase().includes(query))).slice(offset, offset + limit);
 }
 export function serviceCategoryType(value: string) {

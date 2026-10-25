@@ -1,3 +1,4 @@
+import {DriverPresenceNotice} from './DriverPresenceNotice';
 import {NativeProviderPromotions} from './NativeProviderPromotions';
 import {ProviderPanelBackContext} from './ProviderPanel';
 import {Ionicons} from '@expo/vector-icons';
@@ -171,6 +172,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     {!roots.includes(view) && !['products', 'listings', 'merchant-orders', 'notifications', 'referrals', 'messages'].includes(view) && <View style={{paddingHorizontal: 16}}>{button('Back', back)}</View>}
     {!!error && <View style={{padding: 12, gap: 8}}><Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>{button('Refresh account', () => void load())}</View>}
     {!!notice && <Text style={{padding: 12, color: c.accent}}>{notice}</Text>}{busy && <ActivityIndicator/>}
+    <DriverPresenceNotice token={token}/>
     <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(isDriver ? 'drivers_license' : 'government_id'); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
     <View accessibilityLabel="Provider navigation" style={[s.tabs, {backgroundColor: c.surface, borderColor: c.line}]}>{([['overview', 'Overview', 'home-outline'], ['catalog', 'Listings', 'list-outline'], ['requests', 'Bookings', 'calendar-outline'], ['messages', 'Chats', 'chatbubbles-outline'], ['more', 'More', 'ellipsis-horizontal']] as const).map(([id, label, icon]) => <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected: selected === id, disabled: busy}} disabled={busy} onPress={() => tab(id)} style={({pressed}) => ({flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 60, gap: 4, backgroundColor: pressed ? c.soft : c.surface})}><Ionicons name={icon} size={22} color={selected === id ? c.accent : c.muted}/><Text style={{fontSize: 11, color: selected === id ? c.accent : c.muted}}>{label}</Text></Pressable>)}</View>
   </KeyboardFrame></Modal></ProviderPanelBackContext.Provider>;

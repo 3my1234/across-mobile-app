@@ -1,7 +1,7 @@
 name: Discovery mobile viewability and navigation
 on:
   pull_request:
-    branches: [main, feat/native-provider-account]
+    branches: [main, feat/native-provider-account, fix/play-launch-readiness]
   workflow_dispatch:
 permissions:
   contents: read
