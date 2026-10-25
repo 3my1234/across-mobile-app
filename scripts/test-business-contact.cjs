@@ -14,6 +14,18 @@ async function main(){
  render('staff','business');render('new-customer','business');requests[2].resolve({own_business:true,can_manage:false});await settle();assert.equal(render('new-customer','business').checking,true,'stale membership response is ignored');requests[3].resolve({own_business:false,can_manage:false});await settle();assert.equal(render('new-customer','business').own,false);
  render('staff','business');requests[4].resolve({own_business:true,can_manage:false});await settle();access=render('staff','business');assert.equal(access.own,true);assert.equal(access.canManage,false);
  render('staff','other-business');requests[5].reject(Error('offline'));await settle();access=render('staff','other-business');assert.match(access.error,/retry/i);assert.equal(access.own,false);access.retry();access=render('staff','other-business');assert.equal(access.checking,true);requests[6].resolve({own_business:false,can_manage:false});await settle();assert.equal(render('staff','other-business').error,'');
+ // Use the real guarded transport as well as the hook: the original regression
+ // threw Unsupported provider operation before any HTTP request was sent.
+ const businessID='11111111-1111-4111-8111-111111111111',wire=[];
+ const transport={exports:{},require:name=>name==='./config'?{API_URL:'https://api.example.test'}:{fetchJSONWithTimeout:async(url,options)=>{wire.push({url,options});const actor=options.headers.Authorization;return {response:{ok:true,status:200},body:{own_business:actor==='Bearer real-owner',can_manage:actor==='Bearer real-owner'}};}}};
+ vm.runInNewContext(compile(fs.readFileSync('components/nativeProviderApi.ts','utf8')),transport);
+ const actual={exports:{},encodeURIComponent,require:name=>name==='react'?React:transport.exports};vm.runInNewContext(compile(fs.readFileSync('components/useBusinessContact.ts','utf8')),actual);
+ cleanups.forEach(fn=>fn?.());cells=[];previous=[];cleanups=[];effects=[];
+ const actualRender=actor=>{index=0;const out=actual.exports.useBusinessContact(actor,businessID);effects.splice(0).forEach(fn=>fn());return out;};
+ actualRender('real-customer');await settle();assert.equal(actualRender('real-customer').error,'');assert.equal(actualRender('real-customer').own,false);assert.equal(wire.length,1);assert.equal(wire[0].url,`https://api.example.test/api/v1/marketplace/providers/${businessID}/contact-access`);assert.equal(wire[0].options.headers.Authorization,'Bearer real-customer');assert.equal(wire[0].options.cache,'no-store');
+ actualRender('real-owner');await settle();assert.equal(actualRender('real-owner').own,true);assert.equal(actualRender('real-owner').canManage,true);assert.equal(wire.length,2);
+ for(const path of [`/marketplace/providers/${businessID}/contact-access?extra=true`,'/marketplace/providers/invalid/contact-access',`/marketplace/providers/${businessID}/other`])await assert.rejects(transport.exports.providerRequest('actor',path),/Unsupported/);
+ await assert.rejects(transport.exports.providerRequest('actor',`/marketplace/providers/${businessID}/contact-access`,{method:'POST'}),/Unsupported/);assert.equal(wire.length,2,'unsupported marketplace routes and writes never reach HTTP');
  // Exercise the actual product action for owners, staff and ordinary customers.
  const source=fs.readFileSync('components/Screens.tsx','utf8'),start=source.indexOf('  const contactSeller=()'),end=source.indexOf('  useEffect(',start);let managed=null,contacts=0,opened=0;
  const state={contactAccess:{checking:false,error:'',own:true,canManage:true},onManageListing:(kind,id)=>{managed={kind,id};},initialProduct:{id:'product'},token:'owner',recordDiscoveryContact:()=>contacts++,setSellerChat:()=>opened++,Alert:{alert:()=>{throw Error('unexpected alert');}}};

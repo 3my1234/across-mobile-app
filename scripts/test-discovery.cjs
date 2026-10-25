@@ -31,8 +31,15 @@ function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatM
  const appSource=fs.readFileSync('App.tsx','utf8'),serviceSource=fs.readFileSync('components/MarketplaceScreen.tsx','utf8');
  assert.match(appSource,/<DiscoverySections kind="product"/);assert.match(appSource,/selectedCategory === 'All' \? '' : selectedCategory/,'All is a UI sentinel, not a discovery search term');assert.match(serviceSource,/<DiscoverySections kind="service"/);
  for(const [kind,noun]of [['product','Products'],['service','Services']]){
-  let state=0;const ui={...context,exports:{},require:name=>name==='react'?{...react,useEffect(){},useRef:x=>({current:x}),useState:()=>[state++===0?{similar:[],recommended:[],promoted:[]}:state===2?'':0,()=>{}]}:context.require(name)};
-  vm.runInNewContext(compile(sectionSource),ui);const tree=ui.exports.DiscoverySections({owner:null,kind,onOpen(){}});const rails=nodes(tree).filter(x=>x.props.title);assert.ok(rails.some(x=>x.props.title===`Recommended ${noun}`));assert.ok(rails.some(x=>x.props.title===`Promoted ${noun}`));
+  const data={similar:[{...card,id:'related',kind,placement:'similar'}],recommended:[{...card,id:'general',kind,placement:'recommended'}],promoted:[{...card,id:'ad',kind}]};
+  for(const detail of [false,true]){
+   let state=0;const ui={...context,exports:{},require:name=>name==='react'?{...react,useEffect(){},useRef:x=>({current:x}),useState:()=>[state++===0?data:state===2?'':0,()=>{}]}:context.require(name)};
+   vm.runInNewContext(compile(sectionSource),ui);const props=detail?{sourceKind:kind,sourceID:'viewed-listing'}:{kind};const tree=ui.exports.DiscoverySections({owner:null,...props,onOpen(){}});const rails=nodes(tree).filter(x=>x.props.title);
+   assert.equal(rails.length,1,'one contextual recommendation OR promoted rail, never both');assert.equal(rails[0].props.title,`${detail?'Recommended':'Promoted'} ${noun}`);assert.equal(rails[0].props.cards[0].id,detail?'related':'ad','recommendations follow the viewed listing; catalogue shows only paid placement');assert.equal(rails[0].props.compact,!detail);
+  }
  }
+ index=0;hooks=[];effects=[];const adTree=context.exports.Rail({title:'Promoted Products',cards:[card],compact:true,active:true,onOpen(){}});
+ const adCard=nodes(adTree).find(n=>n.props.collapsable===false),adImage=nodes(adTree).find(n=>n.type==='Image');assert.equal(adCard.props.style.width,136);assert.equal(adImage.props.style.height,84);assert.ok(nodes(adTree).some(n=>n.children?.includes('Promoted')),'ad label remains visible');
+ index=0;hooks=[];effects=[];const detailTree=context.exports.Rail({title:'Recommended Products',cards:[{...card,placement:'similar'}],active:true,onOpen(){}});assert.ok(adCard.props.style.width<nodes(detailTree).find(n=>n.props.collapsable===false).props.style.width,'promotions are smaller than normal recommendation cards');
  console.log('Discovery passed: actual UI half-visible/one-second/background gates, no serve-counting, batched dedup, same detail routes, contact intent, stale navigation and account-isolated topics.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
