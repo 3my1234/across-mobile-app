@@ -7,19 +7,19 @@ const card={id:'product',kind:'product',provider_id:'provider',title:'Phone',cat
 function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatMap(nodes)];}
 (async()=>{
  const session=api.discoverySession('owner-one');api.rememberDiscoveryTopics('owner-one',['Phones']);await api.discoveryFeed({owner:'owner-one',country:'NG'});assert.ok(calls.at(-1).url.includes('interests=Phones'));assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,0,'returning listings must never count an impression');
- await api.discoveryFeed({owner:'owner-one',country:'NG',kind:'product'});assert.equal(new URL(calls.at(-1).url).searchParams.get('kind'),'product');
+ await api.discoveryFeed({owner:'owner-one',country:'NG',kind:'product'});assert.equal(new URL(calls.at(-1).url).searchParams.get('kind'),'product');assert.equal(new URL(calls.at(-1).url).searchParams.get('promoted_limit'),'12');
  await api.discoveryFeed({owner:'owner-one',country:'NG',kind:'service'});assert.equal(new URL(calls.at(-1).url).searchParams.get('kind'),'service');
  await api.discoveryFeed({owner:'owner-one',country:'NG'});assert.equal(new URL(calls.at(-1).url).searchParams.has('kind'),false,'home stays mixed');
- await api.discoveryFeed({owner:'owner-one',country:'NG',sourceKind:'product',sourceID:'detail'});assert.equal(new URL(calls.at(-1).url).searchParams.get('source_kind'),'product');
+ await api.discoveryFeed({owner:'owner-one',country:'NG',sourceKind:'product',sourceID:'detail'});assert.equal(new URL(calls.at(-1).url).searchParams.get('source_kind'),'product');assert.equal(new URL(calls.at(-1).url).searchParams.has('promoted_limit'),false);
  api.recordDiscovery(card,'impression',999);await api.flushDiscovery();assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,0);
  let index=0,hooks=[],effects=[],interval,foreground,now=10000;
- const react={createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)}),useRef:initial=>{const i=index++;return hooks[i]||(hooks[i]={current:initial});},useEffect:fn=>effects.push(fn)};
+ const react={useState:initial=>[initial,()=>{}],createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)}),useRef:initial=>{const i=index++;return hooks[i]||(hooks[i]={current:initial});},useEffect:fn=>effects.push(fn)};
  const native={View:'View',Pressable:'Button',ScrollView:'Scroll',AppState:{currentState:'active',addEventListener:(_event,fn)=>{foreground=fn;return {remove(){}};}},useWindowDimensions:()=>({width:400,height:800})};
  const sectionSource=fs.readFileSync('components/DiscoverySections.tsx','utf8');const context={exports:{},Date:{now:()=>now},Map,Number,Math,setInterval:fn=>{interval=fn;return fn;},clearInterval(){},require:name=>name==='react'?react:name==='react-native'?native:name==='./ThemeProvider'?{ThemedText:'Text'}:name==='./AccountDesign'?{useAccountDesign:()=>({})}:name==='./ResilientImage'?{ResilientImage:'Image'}:name==='./discoveryClient'?api:{}};
  vm.runInNewContext(compile(sectionSource+';exports.Rail=Rail;'),context);
  assert.equal(context.exports.discoveryViewable(0,750,180,100,400,800),true);assert.equal(context.exports.discoveryViewable(0,751,180,100,400,800),false);assert.equal(context.exports.discoveryViewable(0,0,0,0,400,800),false);
  const tree=context.exports.Rail({title:'Promoted',cards:[card],active:true,onOpen:entry=>requests.push(entry)});let y=900;
- nodes(tree).find(n=>n.props.ref).props.ref({measureInWindow:cb=>cb(10,y,180,200)});const cleanups=effects.map(fn=>fn());interval();now+=1500;interval();await api.flushDiscovery();assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,0,'offscreen rail is not viewable');
+ nodes(tree).find(n=>n.props.ref&&n.props.style?.width).props.ref({measureInWindow:cb=>cb(10,y,180,200)});const cleanups=effects.map(fn=>fn());interval();now+=1500;interval();await api.flushDiscovery();assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,0,'offscreen rail is not viewable');
  y=100;interval();now+=500;interval();native.AppState.currentState='background';foreground();now+=1000;interval();native.AppState.currentState='active';foreground();interval();now+=1000;interval();await api.flushDiscovery();assert.equal(JSON.parse(calls.at(-1).options.body).events[0].type,'impression');
  now+=2000;interval();await api.flushDiscovery();assert.equal(calls.filter(call=>call.url.endsWith('/events')).length,1,'repeated visibility coalesces');cleanups.forEach(fn=>fn?.());
  let product,service;await api.openDiscovery(card,{country:'NG'},value=>product=value,id=>service=id);assert.equal(product.id,'product');assert.match(calls.find(call=>call.url.includes('/products/')).url,/products\/product\?/);
@@ -39,7 +39,7 @@ function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatM
   }
  }
  index=0;hooks=[];effects=[];const adTree=context.exports.Rail({title:'Promoted Products',cards:[card],compact:true,active:true,onOpen(){}});
- const adCard=nodes(adTree).find(n=>n.props.collapsable===false),adImage=nodes(adTree).find(n=>n.type==='Image');assert.equal(adCard.props.style.width,136);assert.equal(adImage.props.style.height,84);assert.ok(nodes(adTree).some(n=>n.children?.includes('Promoted')),'ad label remains visible');
- index=0;hooks=[];effects=[];const detailTree=context.exports.Rail({title:'Recommended Products',cards:[{...card,placement:'similar'}],active:true,onOpen(){}});assert.ok(adCard.props.style.width<nodes(detailTree).find(n=>n.props.collapsable===false).props.style.width,'promotions are smaller than normal recommendation cards');
+ const adCard=nodes(adTree).find(n=>n.props.style?.width===84),adImage=nodes(adTree).find(n=>n.type==='Image');assert.ok(adCard);assert.equal(adImage.props.style.height,60);assert.equal(adImage.props.style.borderRadius,30);assert.ok(nodes(adTree).some(n=>n.children?.includes('Ad')),'ad label remains visible');
+ index=0;hooks=[];effects=[];const detailTree=context.exports.Rail({title:'Recommended Products',cards:[{...card,placement:'similar'}],active:true,onOpen(){}});assert.ok(adCard.props.style.width<nodes(detailTree).find(n=>n.props.style?.width===180).props.style.width,'promotions remain smaller than normal recommendation cards');
  console.log('Discovery passed: actual UI half-visible/one-second/background gates, no serve-counting, batched dedup, same detail routes, contact intent, stale navigation and account-isolated topics.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

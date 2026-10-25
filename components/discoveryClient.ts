@@ -21,6 +21,7 @@ export async function discoveryFeed(context:Context) {
  if(recentlyVisible.size)query.set('recent',Array.from(recentlyVisible.keys()).slice(-24).join(','));
  if(context.search?.trim())query.set('search',context.search.trim().slice(0,100));
  if(context.kind)query.set('kind',context.kind);
+ if(context.kind&&!context.sourceID)query.set('promoted_limit','12');
  if(context.sourceID){query.set('source_id',context.sourceID);query.set('source_kind',context.sourceKind||'product');}
  const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/discovery?${query}`,{cache:'no-store'},10000);
  if(!response.ok)throw Error('Discovery is temporarily unavailable.');

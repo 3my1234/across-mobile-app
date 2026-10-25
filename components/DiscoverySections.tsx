@@ -1,5 +1,5 @@
 import React,{useEffect,useRef,useState} from 'react';
-import {ActivityIndicator,AppState,Pressable,ScrollView,View,useWindowDimensions} from 'react-native';
+import {AccessibilityInfo,ActivityIndicator,AppState,Pressable,ScrollView,View,useWindowDimensions} from 'react-native';
 import {ThemedText as Text} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {ResilientImage} from './ResilientImage';
@@ -14,14 +14,48 @@ export function discoveryViewable(x:number,y:number,width:number,height:number,s
 }
 function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:DiscoveryCard[];active:boolean;onOpen:(card:DiscoveryCard)=>void;compact?:boolean}) {
  const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
+ const diameter=Math.round(Math.max(40,Math.min(60,(screen.width-28)/6))),tileWidth=diameter+24,stride=tileWidth+12;
+ const row=useRef<View|null>(null),scroll=useRef<ScrollView|null>(null),viewport=useRef({width:screen.width,content:0,x:0}),interaction=useRef({touching:false,until:0});
+ const [paused,setPaused]=useState(false);
+ const touchEnd=()=>{interaction.current={touching:false,until:Date.now()+6000};};
  useEffect(()=>{
   if(!active){entered.current.clear();return;}
   let alive=true;const measure=()=>{if(AppState.currentState!=='active'){entered.current.clear();return;}for(const card of cards){const key=card.kind+card.id,node=refs.current.get(key);if(!node||measuring.current.has(key))continue;measuring.current.add(key);node.measureInWindow((x,y,w,h)=>{measuring.current.delete(key);if(!alive||AppState.currentState!=='active')return;if(!discoveryViewable(x,y,w,h,screen.width,screen.height)){entered.current.delete(key);return;}const since=entered.current.get(key)||Date.now();entered.current.set(key,since);if(Date.now()-since>=1000)recordDiscovery(card,'impression',Date.now()-since);});}};
   const timer=setInterval(measure,500),subscription=AppState.addEventListener('change',()=>entered.current.clear());measure();
   return()=>{alive=false;clearInterval(timer);subscription.remove();entered.current.clear();};
  },[active,cards,screen.width,screen.height]);
+ useEffect(()=>{
+  if(!compact||!active||paused||cards.length<2)return;
+  let alive=true,motionAllowed=false,pending=false,preferenceChanged=false;
+  // Start only after the OS preference is known; manual swipe always remains.
+  void AccessibilityInfo.isReduceMotionEnabled().then(reduced=>{if(alive&&!preferenceChanged)motionAllowed=!reduced;}).catch(()=>{});
+  const motion=AccessibilityInfo.addEventListener('reduceMotionChanged',reduced=>{preferenceChanged=true;motionAllowed=!reduced;});
+  const timer=setInterval(()=>{
+   if(!alive||pending||!motionAllowed||AppState.currentState!=='active'||interaction.current.touching||Date.now()<interaction.current.until||!row.current)return;
+   const metrics=viewport.current,max=Math.max(0,metrics.content-metrics.width);if(max<=1)return;
+   pending=true;row.current.measureInWindow((x,y,w,h)=>{
+    pending=false;
+    if(!alive||!motionAllowed||AppState.currentState!=='active'||interaction.current.touching||Date.now()<interaction.current.until||!discoveryViewable(x,y,w,h,screen.width,screen.height))return;
+    const page=Math.max(1,Math.floor((metrics.width-24)/stride))*stride;
+    const wrap=metrics.x>=max-1,next=wrap?0:Math.min(max,metrics.x+page);
+    scroll.current?.scrollTo({x:next,animated:!wrap});
+   });
+  },6000);
+  return()=>{alive=false;clearInterval(timer);motion.remove();};
+ },[compact,active,paused,cards,stride,screen.width,screen.height]);
  if(!cards.length)return null;
- return <View style={{paddingVertical:12,gap:10}}><Text style={{fontSize:18,fontWeight:'700',paddingHorizontal:12}}>{title}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}}>{cards.map(card=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?136:180,borderWidth:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:c.surface}}><Pressable accessibilityRole="button" accessibilityLabel={`Open ${card.title}`} onPress={()=>onOpen(card)}><ResilientImage uri={card.image_urls[0]||''} style={{height:compact?84:140,width:compact?136:180}} resizeMode="cover"/><View style={{padding:compact?8:10,gap:5}}>{card.placement==='promoted'&&<Text style={{color:c.accent,fontSize:10,fontWeight:'700',alignSelf:'flex-start',borderWidth:1,borderColor:c.line,borderRadius:4,paddingHorizontal:5,paddingVertical:2}}>Promoted</Text>}<Text numberOfLines={2} style={{fontWeight:'600',fontSize:compact?12:14,minHeight:compact?32:36}}>{card.title}</Text><Text numberOfLines={1} style={{fontSize:12,color:c.muted}}>{card.kind==='product'?'Product':'Service'}{card.city?' · '+card.city:''}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={{fontWeight:'700',fontSize:compact?12:14,color:c.accent}}>{card.price===null?'Ask for a price':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}</Text>{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text numberOfLines={1} adjustsFontSizeToFit style={{fontSize:12,color:'#C62828',textDecorationLine:'line-through'}}>{card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}{compact&&<Text style={{fontSize:11,fontWeight:'700',color:c.accent}}>View {card.kind==='product'?'product':'service'}</Text>}</View></Pressable></View>)}</ScrollView></View>;
+ return <View ref={row} collapsable={false} style={{paddingVertical:compact?8:12,gap:8}}>
+  <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:12}}><Text style={{fontSize:compact?15:18,fontWeight:'700',flex:1}}>{title}</Text>{compact&&cards.length>1&&<Pressable accessibilityRole="button" accessibilityLabel={paused?'Resume promoted rotation':'Pause promoted rotation'} onPress={()=>setPaused(value=>!value)} style={{padding:8,minHeight:44}}><Text style={{fontSize:12,color:c.accent}}>{paused?'Play':'Pause'}</Text></Pressable>}</View>
+  <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}} snapToInterval={compact?stride:undefined} decelerationRate={compact?'fast':'normal'} scrollEventThrottle={100} onLayout={event=>{viewport.current.width=event.nativeEvent.layout.width;}} onContentSizeChange={width=>{viewport.current.content=width;}} onScroll={event=>{viewport.current.x=event.nativeEvent.contentOffset.x;}} onTouchStart={()=>{interaction.current.touching=true;}} onTouchEnd={touchEnd} onTouchCancel={touchEnd} onScrollBeginDrag={()=>{interaction.current.touching=true;}} onScrollEndDrag={touchEnd}>
+   {cards.map(card=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:compact?0:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:compact?'transparent':c.surface}}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${compact?'Promoted: ':''}${card.title}`} onPress={()=>onOpen(card)}>
+     <View style={compact?{alignSelf:'center',width:diameter,height:diameter}:undefined}><ResilientImage uri={card.image_urls[0]||''} style={{height:compact?diameter:140,width:compact?diameter:180,borderRadius:compact?diameter/2:0}} resizeMode="cover"/>{compact&&<Text style={{position:'absolute',right:-4,bottom:0,fontSize:9,fontWeight:'700',color:c.text,backgroundColor:c.soft,paddingHorizontal:4,borderRadius:4}}>Ad</Text>}</View>
+     <View style={{padding:compact?2:10,gap:4}}><Text numberOfLines={2} style={{fontWeight:'600',fontSize:compact?11:14,minHeight:compact?30:36,textAlign:compact?'center':'left'}}>{card.title}</Text>{!compact&&<Text numberOfLines={1} style={{fontSize:12,color:c.muted}}>{card.kind==='product'?'Product':'Service'}{card.city?' - '+card.city:''}</Text>}<Text numberOfLines={1} adjustsFontSizeToFit style={{fontWeight:'700',fontSize:compact?11:14,color:c.accent,textAlign:compact?'center':'left'}}>{card.price===null?'Ask for a price':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}</Text>{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text numberOfLines={1} adjustsFontSizeToFit style={{fontSize:11,color:'#C62828',textDecorationLine:'line-through',textAlign:compact?'center':'left'}}>{card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}</View>
+    </Pressable>
+   </View>)}
+  </ScrollView>
+ </View>;
+
 }
 export function DiscoverySections({owner,country='NG',state='',city='',search='',kind,sourceKind,sourceID,topics=[],active=true,onOpen}:{owner:string|null;country?:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string;topics?:string[];active?:boolean;onOpen:(card:DiscoveryCard)=>void}) {
  const listingKind=sourceID?sourceKind:kind, noun=listingKind==='product'?'Products':listingKind==='service'?'Services':'Listings';
