@@ -17,7 +17,10 @@ export function providerAvailabilitySession(token:string,provider:string){
   entries.set(key,value);entry=value;
  }
  const current=entry;
- return {get running(){return current.online||current.pending;},get listingID(){return current.listing;},subscribe(listener:Listener){current.listeners.add(listener);listener(current.online,current.message,current.pending);return()=>{current.listeners.delete(listener);};},start(listing:string){if(current.closed)return false;const previous=current.listing,wasWanted=current.wanted;current.listing=listing;current.wanted=true;const accepted=current.session.start(listing);if(!accepted){current.listing=previous;current.wanted=wasWanted;}return accepted;},stop(){current.wanted=false;current.pending=false;const stopped=current.session.stop();changed();return stopped;}};
+ return {get running(){return current.online||current.pending;},get listingID(){return current.listing;},subscribe(listener:Listener){current.listeners.add(listener);listener(current.online,current.message,current.pending);return()=>{current.listeners.delete(listener);};},start(listing:string){if(current.closed||current.online||current.pending)return false;current.listing=listing;current.wanted=true;const accepted=current.session.start(listing);
+ if(!accepted){current.pending=true;current.message='Starting nearby availability...';current.listeners.forEach(listener=>listener(false,current.message,true));changed();
+  void current.session.whenIdle().then(()=>{if(!current.closed&&current.wanted&&AppState.currentState==='active'){if(current.session.start(current.listing))return;}current.pending=false;current.listeners.forEach(listener=>listener(false,current.message,false));changed();});
+ }return true;},stop(){current.wanted=false;current.pending=false;const stopped=current.session.stop();changed();return stopped;}};
 }
 export async function stopDriverPresence(token:string|null,forget=false){
  const owned=[...entries.entries()].filter(([,entry])=>entry.token===token);

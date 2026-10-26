@@ -1,6 +1,6 @@
 import {setAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {transportServiceKind} from './transportServices';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, View} from 'react-native';
 import {ThemedText as Text} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
@@ -10,6 +10,7 @@ import {providerAvailabilitySession} from './driverPresenceSession';
 type Service = {id: string; title: string; category?: string; status?: string};
 export function NativeProviderDriver({token, providerID}: {token: string; providerID: string}) {
   const c = useAccountDesign();
+  const actionFlight=useRef(false);
   const [items, setItems] = useState<Service[]>([]), [selected, setSelected] = useState('');
   const [cursor, setCursor] = useState(''), [page, setPage] = useState(''), [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true), [online, setOnline] = useState(false), [busy, setBusy] = useState(false), [starting, setStarting] = useState(false);
@@ -48,7 +49,7 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
     {!!cursor && button('Load more services', () => setPage(cursor), loading || busy || online)}
     {button('Refresh services', () => {setPage(''); setReload(value => value + 1);}, loading || busy || online)}
     <View style={{minHeight:72}}><Text accessibilityLiveRegion="polite">{message}</Text></View>
-    {button('Available for customers', () => {setBusy(true);void setAutomaticDriverAvailability(providerID,true).then(()=>presence?.start(selected)).catch(failure=>setError(failure.message)).finally(()=>setBusy(false));}, !selected || !presence || online || starting || busy)}
-    {button('Go offline', () => {setBusy(true); void Promise.all([setAutomaticDriverAvailability(providerID,false),presence?.stop()]).catch(failure=>setError(failure.message)).finally(() => setBusy(false));}, !presence || busy)}
+    {button('Available for customers', () => {if(actionFlight.current)return;actionFlight.current=true;setBusy(true);void setAutomaticDriverAvailability(providerID,true).then(()=>presence?.start(selected)).catch(failure=>setError(failure.message)).finally(()=>{actionFlight.current=false;setBusy(false);});}, !selected || !presence || online || starting || busy)}
+    {button('Go offline', () => {if(actionFlight.current)return;actionFlight.current=true;setBusy(true); void Promise.all([setAutomaticDriverAvailability(providerID,false),presence?.stop()]).catch(failure=>setError(failure.message)).finally(() => {actionFlight.current=false;setBusy(false);});}, !presence || busy)}
   </View>;
 }

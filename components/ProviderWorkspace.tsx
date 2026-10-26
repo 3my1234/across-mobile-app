@@ -1,3 +1,4 @@
+import {refreshAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {DriverPresenceNotice} from './DriverPresenceNotice';
 import {NativeProviderPromotions} from './NativeProviderPromotions';
 import {ProviderPanelBackContext} from './ProviderPanel';
@@ -50,6 +51,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const tab = (next: string) => guarded(() => {setHistory([]); setView(next); setLegacyRoute('');});
   const callbacks = useRef({onOpenSupport}); callbacks.current = {onOpenSupport};
   const [provider, setProvider] = useState<ProviderAccount | null>(null);
+  useEffect(()=>{if(provider?.is_driver)void refreshAutomaticDriverAvailability(token);},[token,provider?.id,provider?.is_driver,provider?.verification_status,provider?.subscription?.status,provider?.subscription?.current_period_end]);
   const [ready, setReady] = useState(false), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);

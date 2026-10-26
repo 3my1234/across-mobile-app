@@ -72,6 +72,6 @@ export function createDriverPresence(deps: Dependencies) {
     },
     stop,
     async pause(){enabled=false;version++;clear();await flight;},
-    async whenIdle(){await stopping;await flight;},
+    async whenIdle(){await cleanupByProvider.get(deps.sessionKey);await stopping;await flight;},
   };
 }

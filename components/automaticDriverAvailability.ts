@@ -7,6 +7,8 @@ import {providerAvailabilitySession} from './driverPresenceSession';
 import {transportServiceKind} from './transportServices';
 
 const disabled=new Set<string>(),versions=new Map<string,number>();
+const refreshers=new Map<string,(force?:boolean)=>Promise<void>>();
+export function refreshAutomaticDriverAvailability(token:string){return refreshers.get(token)?.(true);}
 const key=(provider:string)=>`atl.driver.nearby.disabled.${provider}`;
 export async function setAutomaticDriverAvailability(provider:string,enabled:boolean){
  const version=(versions.get(provider)||0)+1;versions.set(provider,version);
@@ -18,13 +20,13 @@ export async function setAutomaticDriverAvailability(provider:string,enabled:boo
 // background, substitutes a business address for GPS, or bypasses backend checks.
 export function automaticDriverAvailability(token:string){
  let alive=true,flight=false,notDriver=false;
- async function refresh(){
-  if(!alive||flight||notDriver||AppState.currentState!=='active')return;
+ async function refresh(force=false){
+  if(!alive||flight||notDriver&&!force||AppState.currentState!=='active')return;
   flight=true;
   try{
    const provider=await providerRequest(token,'/providers/me');
    if(!alive)return;
-   if(!provider.is_driver){notDriver=true;return;}
+   if(!provider.is_driver){notDriver=true;return;}notDriver=false;
    if(!provider.is_active||provider.verification_status!=='approved'||!hasPaidProviderAccess(provider))return;
    const version=versions.get(provider.id)||0;
    const saved=await AsyncStorage.getItem(key(provider.id));
@@ -46,7 +48,7 @@ export function automaticDriverAvailability(token:string){
   }catch(error){if(error instanceof ProviderRequestError&&error.status===404)notDriver=true;}
   finally{flight=false;}
  }
- void refresh();
+ refreshers.set(token,refresh);void refresh();
  const timer=setInterval(()=>void refresh(),60000);
- return {refresh,dispose(){alive=false;clearInterval(timer);}};
+ return {refresh,dispose(){alive=false;clearInterval(timer);if(refreshers.get(token)===refresh)refreshers.delete(token);}};
 }

@@ -3,7 +3,7 @@ import React,{useEffect,useState} from 'react';
 import {Alert,AppState,Pressable,View} from 'react-native';
 import {ThemedText as Text} from './ThemeProvider';
 import {driverPresenceSummary,stopDriverPresence,subscribeDriverPresence,pauseDriverPresence,resumeDriverPresence} from './driverPresenceSession';
-export function useDriverPresenceLifecycle(token:string|null){useEffect(()=>{const automatic=token?automaticDriverAvailability(token):null;const listener=AppState.addEventListener('change',state=>{if(state==='background')void pauseDriverPresence(token);else if(state==='active'){void resumeDriverPresence(token);void automatic?.refresh();}});return()=>{automatic?.dispose();listener.remove();void stopDriverPresence(token,true);};},[token]);}
+export function useDriverPresenceLifecycle(token:string|null){useEffect(()=>{const automatic=token?automaticDriverAvailability(token):null;const listener=AppState.addEventListener('change',state=>{if(state==='background')void pauseDriverPresence(token);else if(state==='active'){void resumeDriverPresence(token);void automatic?.refresh(true);}});return()=>{automatic?.dispose();listener.remove();void stopDriverPresence(token,true);};},[token]);}
 export function DriverPresenceNotice({token,alwaysVisible=false}:{token:string|null;alwaysVisible?:boolean}){
  const [,render]=useState(0);useEffect(()=>subscribeDriverPresence(()=>render(n=>n+1)),[]);
  const sessions=driverPresenceSummary(token);if(!sessions.length&&!alwaysVisible)return null;
