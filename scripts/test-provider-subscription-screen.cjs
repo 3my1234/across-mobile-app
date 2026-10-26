@@ -12,11 +12,12 @@ const react = {
 const compile=path=>ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,esModuleInterop:true}}).outputText;
 const policy={};vm.runInNewContext(compile('components/providerSubscriptionPolicy.ts'),{exports:policy,URL,Error});
 const id='11111111-1111-4111-8111-111111111111',plan={id,name:'Basic',amount_ngn:500,period_prices:[{duration_months:12,amount_ngn:5400}]};
-let renewal={can_manage:true,renewal_status:'stopped'},paymentState='pending';
+let renewal={can_manage:true,renewal_status:'stopped'},paymentState='pending',cancelState='cancelled',failCancel=false;
 const provider={id,subscription:{status:'inactive'}},onChanged=async()=>{};
 const request=async(token,path,options={})=>{
  calls.push({token,path,...options});
  if(path.endsWith('subscription-checkout')){if(held)await held;if(failCheckout)throw Error('Connection interrupted');return {tx_ref:'PROVIDER-'+id,checkout_link:'https://checkout.flutterwave.com/v3/hosted/pay/test'};}
+ if(path.endsWith('subscription-checkout/cancel')){if(failCancel)throw Error('Cancellation status unavailable');return {payment_state:cancelState};}
  if(path.endsWith('subscription-confirm'))return {payment_state:paymentState};
  if(options.method==='POST'&&path.endsWith('subscription-renewal')){renewal={...renewal,renewal_status:'uncertain'};throw Error('Cancellation not confirmed');}
  return path.endsWith('subscription-plans')?{items:[plan]}:renewal;
@@ -62,6 +63,24 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  assert.ok(text(tree).includes('Connection interrupted'));assert.equal(button('Continue: NGN 500').props.disabled,true,'ambiguous checkout blocks a second payment');
  button('Check payment status').props.onPress();await settle();assert.ok(stored,'pending server result must retain recovery marker');
  paymentState='settled';button('Check payment status').props.onPress();await settle();assert.equal(stored,null);assert.ok(text(tree).includes('Payment verified'));
+
+ failCheckout=false;paymentState='pending';
+ button('Continue: NGN 500').props.onPress();alert[2].find(item=>item.text==='Continue to payment').onPress();await settle();
+ assert.ok(stored,'closing the browser must not discard a possible payment');
+ assert.equal(button('Continue: NGN 500').props.disabled,true);
+ const cancels=()=>calls.filter(call=>call.path.endsWith('subscription-checkout/cancel'));
+ button('Cancel unpaid checkout').props.onPress();assert.equal(cancels().length,0,'cancellation needs explicit unpaid confirmation');
+ failCancel=true;alert[2].find(item=>item.text==='I have not paid').onPress();await settle();
+ assert.ok(stored);assert.equal(button('Continue: NGN 500').props.disabled,true,'failed cancellation keeps payment protected');
+ failCancel=false;cancelState='pending';button('Cancel unpaid checkout').props.onPress();alert[2].find(item=>item.text==='I have not paid').onPress();await settle();assert.ok(stored,'other pending payments keep the marker');
+ cancelState='cancelled';button('Cancel unpaid checkout').props.onPress();const acceptCancel=alert[2].find(item=>item.text==='I have not paid').onPress;const beforeCancel=cancels().length;acceptCancel();acceptCancel();await settle();
+ assert.equal(cancels().length,beforeCancel+1,'duplicate cancellation taps are serialized');
+ assert.equal(stored,null);assert.equal(button('Continue: NGN 500').props.disabled,false,'verified cancellation unlocks plans');
+ button('One-off bank transfer').props.onPress();await settle();button('Continue: NGN 500').props.onPress();alert[2].find(item=>item.text==='Continue to payment').onPress();await settle();
+ assert.equal(JSON.parse(checkouts().at(-1).body).payment_method,'banktransfer','provider can retry with transfer');
+ paymentState='settled';button('Check payment status').props.onPress();await settle();
+ renewal={...renewal,has_pending_checkout:true};button('Refresh billing status').props.onPress();await settle();assert.ok(nodes(tree).some(node=>node.type==='Button'&&text(node)==='Cancel unpaid checkout'),'server pending checkout recovers without local marker');
+ renewal={...renewal,has_pending_checkout:false};button('Check payment status').props.onPress();await settle();
  provider.subscription={status:'active',current_period_end:'2027-01-01T00:00:00Z'};renewal={...renewal,renewal_status:'active',current_plan_id:id};render();
  button('Stop automatic renewal').props.onPress();alert[2].find(item=>item.text==='Confirm').onPress();await settle();
  assert.ok(text(tree).includes('Cancellation not confirmed'));assert.equal(provider.subscription.status,'active','unconfirmed cancellation cannot revoke paid access');
