@@ -1,20 +1,22 @@
 const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require('node:assert/strict');
 const compile=s=>ts.transpileModule(s,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
-let now=Date.now(),task,started=false,requests=[],active=0,maxActive=0,delay;
+let now=Date.now(),task,started=false,requests=[],active=0,maxActive=0,delay,confirmOnline=true;
 class Clock extends Date{static now(){return now;}}
 const stored=new Map(),app={currentState:'active'},service=[];
 const policy={exports:{},Date:Clock,Number,Math,Error};vm.runInNewContext(compile(fs.readFileSync('components/providerDriverPresence.ts','utf8')),policy);
-const native={providerRequest:async(token,path,options)=>{active++;maxActive=Math.max(maxActive,active);requests.push({token,path,body:JSON.parse(options.body)});if(delay)await delay;active--;return {};}};
+const native={providerRequest:async(token,path,options,observe)=>{observe?.({status:200,requestID:'test-driver-request'});active++;maxActive=Math.max(maxActive,active);requests.push({token,path,body:JSON.parse(options.body)});if(delay)await delay;active--;return confirmOnline?{online:true,expires_in:120}:{};}};
 const modules={'expo-task-manager':{defineTask:(name,fn)=>{assert.equal(name,'atl-driver-nearby-v1');task=fn;}},'expo-location':{Accuracy:{Balanced:3},hasStartedLocationUpdatesAsync:async()=>started,startLocationUpdatesAsync:async(name,options)=>{service.push(options);started=true;},stopLocationUpdatesAsync:async()=>{started=false;}},'expo-secure-store':{getItemAsync:async k=>stored.get(k)||null,setItemAsync:async(k,v)=>stored.set(k,v),deleteItemAsync:async k=>stored.delete(k)},'react-native':{AppState:app,Platform:{OS:'android'}},'./nativeProviderApi':native,'./providerDriverPresence':policy.exports};
 const context={exports:{},Date:Clock,Math,JSON,Promise,setTimeout:fn=>{now+=13000;queueMicrotask(fn);},require:name=>modules[name]};
 vm.runInNewContext(compile(fs.readFileSync('components/driverLocationTask.ts','utf8')),context);const api=context.exports;
 const position=()=>({timestamp:now,coords:{latitude:6.5,longitude:3.3,accuracy:10}}),listing='33333333-3333-4333-8333-333333333333';
 (async()=>{await api.startMinimizedDriverLocation('owner','provider',listing);assert.equal(started,true);assert.equal(service[0].foregroundService.killServiceOnDestroy,true);assert.ok(service[0].foregroundService.notificationTitle);assert.equal(service[0].distanceInterval,0,'stationary drivers still receive time updates');
- await task({data:{locations:[position()]}});assert.equal(requests.length,0,'task must not duplicate foreground heartbeat');
- app.currentState='background';now+=30000;await task({data:{locations:[position()]}});assert.equal(requests.length,1,'minimized app publishes fresh GPS');assert.equal(requests[0].token,'owner');
- await task({data:{locations:[{...position(),timestamp:now-120000}]}});assert.equal(requests.length,1,'expired location never renews presence');
+ await task({data:{locations:[position()]}});assert.equal(requests.length,1,'native location fixes publish in the foreground as well as background');
+ app.currentState='background';now+=30000;await task({data:{locations:[position()]}});assert.equal(requests.length,2,'minimized app publishes fresh GPS');assert.equal(requests[0].token,'owner');
+ await task({data:{locations:[{...position(),timestamp:now-120000}]}});assert.equal(requests.length,2,'expired location never renews presence');
+ const acknowledgements=api.driverLocationTimeline('owner').filter(e=>e.phase==='location_acknowledged').length;confirmOnline=false;now+=30000;await task({data:{locations:[position()]}});assert.equal(api.driverLocationTimeline('owner').filter(e=>e.phase==='location_acknowledged').length,acknowledgements,'HTTP 200 without online confirmation cannot claim visibility');confirmOnline=true;
  now+=30000;await Promise.all([task({data:{locations:[position()]}}),task({data:{locations:[position()]}})]);assert.equal(maxActive,1,'background callbacks cannot overlap PUTs');
  let release;delay=new Promise(r=>release=r);now+=30000;const publishing=task({data:{locations:[position()]}});for(let i=0;i<10;i++)await Promise.resolve();const stopping=api.stopMinimizedDriverLocation('owner');release();await Promise.all([publishing,stopping]);delay=null;
+ const trace=JSON.stringify(api.driverLocationTimeline('owner'));assert.ok(trace.includes('location_acknowledged'));assert.ok(trace.includes('test-driver-request'),'safe request IDs correlate device and API diagnostics');for(const field of ['latitude','longitude','owner','provider','listing_id'])assert.ok(!trace.includes(field),'diagnostics must omit '+field);
  assert.equal(stored.size,0,'late publish cannot restore signed-out credentials');assert.equal(started,false);const count=requests.length;await task({data:{locations:[position()]}});assert.equal(requests.length,count,'offline task cannot send');
  app.currentState='background';assert.equal(await api.startMinimizedDriverLocation('owner','provider',listing),false,'service is only started while app is foregrounded');
  console.log('Minimized driver updates passed: foreground service, fresh background GPS, no duplicate source, serialized updates, stale rejection and sign-out cleanup.');
