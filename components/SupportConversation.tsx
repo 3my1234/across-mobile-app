@@ -1,3 +1,4 @@
+import {ChatMessageText} from './ChatMessageText';
 import {useMessageReceipts} from './messageReceipts';
 import {MessageReceipt} from './MessageReceipt';
 import { KeyboardFrame } from "./KeyboardFrame";
@@ -35,7 +36,7 @@ export function SupportConversation({ token,ticket, messages, error, busy, onClo
       ListEmptyComponent={loading ? <ActivityIndicator color={theme.color("#FF4747")} /> : !error ? <Text style={styles.meta}>No messages yet.</Text> : null}
       renderItem={({item}) => { const mine = item.sender_type !== "admin"; return <View style={[styles.row, mine && styles.mineRow]}>
         {!mine && <Image source={LOGO} style={styles.avatar} />}
-        <View style={[styles.bubble, mine && styles.mineBubble]}><Text style={styles.message}>{item.message}</Text><View style={{flexDirection:"row",alignItems:"center",justifyContent:"flex-end",gap:5}}><Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>{mine&&item.id&&<MessageReceipt receipt={receipts[item.id]}/>}</View></View>
+        <View style={[styles.bubble, mine && styles.mineBubble]}><ChatMessageText style={styles.message} text={item.message}/><View style={{flexDirection:"row",alignItems:"center",justifyContent:"flex-end",gap:5}}><Text style={styles.time}>{new Date(item.created_at).toLocaleString()}</Text>{mine&&item.id&&<MessageReceipt receipt={receipts[item.id]}/>}</View></View>
       </View>; }} />
     {ticket.status !== "closed" ? <View style={styles.composer}><TextInput accessibilityLabel="Message Atlantic Express support" value={draft} onChangeText={setDraft} multiline maxLength={5000} placeholder="Write a message…" style={styles.input} editable={!busy}/><Pressable accessibilityLabel="Send message" disabled={busy || !draft.trim()} onPress={() => { void send().catch(() => {}); }} style={[styles.send, (busy || !draft.trim()) && styles.disabled]}>{busy ? <ActivityIndicator color={theme.color("#FFF")} /> : <Ionicons name="arrow-up" size={22} color={theme.color("#FFF")} />}</Pressable></View> : <Text style={styles.closed}>This conversation is closed. Create a new ticket if you need more help.</Text>}
   </KeyboardFrame>;

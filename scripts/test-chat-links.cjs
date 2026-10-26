@@ -1,0 +1,22 @@
+const fs=require('fs'),vm=require('vm'),ts=require('typescript'),assert=require('node:assert/strict');
+const compile=s=>ts.transpileModule(s,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText;
+const policy={exports:{},URL};vm.runInNewContext(compile(fs.readFileSync('components/chatLinks.ts','utf8')),policy);
+const parts=policy.exports.chatTextParts;
+const message='See (https://example.com/a(b)?x=1&y=2), WWW.example.org. Then https://second.example/path!';
+const result=parts(message);assert.equal(result.map(p=>p.text).join(''),message);assert.equal(result.filter(p=>p.url).length,3);assert.equal(result.find(p=>p.url).url,'https://example.com/a(b)?x=1&y=2');
+for(const text of ['javascript:alert(1)','file:///private','https://user:secret@example.com','https://','ftp://example.com'])assert.equal(parts(text).filter(p=>p.url).length,0);
+let alerts=[],opened=[],copied=[],shared=[];
+const react={createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)})};
+const ui={exports:{},require:name=>name==='react'?react:name==='react-native'?{Alert:{alert:(...args)=>alerts.push(args)},Linking:{openURL:async url=>opened.push(url)},Share:{share:async value=>shared.push(value.message)}}:name==='expo-clipboard'?{setStringAsync:async value=>copied.push(value)}:name==='./ThemeProvider'?{ThemedText:'Text',useTheme:()=>({dark:false})}:policy.exports};
+vm.runInNewContext(compile(fs.readFileSync('components/ChatMessageText.tsx','utf8')),ui);
+(async()=>{let replied=0;const tree=ui.exports.ChatMessageText({text:message,onReply:()=>replied++});assert.equal(tree.props.selectable,true);
+ const link=tree.children.find(node=>node?.props?.accessibilityRole==='link');await link.props.onPress();assert.equal(opened[0],link.props.accessibilityLabel);
+ link.props.onLongPress();let buttons=alerts.at(-1)[2];await buttons.find(b=>b.text==='Copy link').onPress();assert.equal(copied[0],opened[0]);await buttons.find(b=>b.text==='Share link').onPress();assert.equal(shared[0],opened[0]);
+ tree.props.onLongPress();buttons=alerts.at(-1)[2];buttons.find(b=>b.text==='Reply').onPress();assert.equal(replied,1);await buttons.find(b=>b.text==='Copy message').onPress();assert.equal(copied.at(-1),message);await buttons.find(b=>b.text==='Share message').onPress();assert.equal(shared.at(-1),message);
+ // Render actual Town Hall text; retaining reply and gestures must not swallow links.
+ const hall={exports:{},require:name=>name==='react'?{...react,useRef:v=>({current:v})}:name==='react-native'?{View:'View',Pressable:'Pressable',Image:'Image',PanResponder:{create:()=>({panHandlers:{}})}}:name==='./ThemeProvider'?{ThemedText:'Text',useTheme:()=>({dark:false})}:name==='./ChatMessageText'?ui.exports:name==='./MessageReceipt'?{MessageReceipt:'Receipt'}:name==='./LocationPin'?{LocationPin:'Pin'}:{}};
+ vm.runInNewContext(compile(fs.readFileSync('components/TownHallMessage.tsx','utf8')),hall);
+ const bubble=hall.exports.TownHallMessage({message:{id:'m',body:message,sender_name:'Driver',created_at:new Date().toISOString()},onPhoto(){},onReply(){replied++;}});
+ const content=bubble.children.find(n=>n?.type===ui.exports.ChatMessageText);assert.ok(content);assert.equal(content.props.text,message);assert.equal(bubble.props.onLongPress,undefined,'parent must not steal link long presses');
+ console.log('Chat links passed: safe URLs, punctuation, selection, open/copy/share, message actions and Town Hall gesture coexistence.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
