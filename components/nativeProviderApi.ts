@@ -3,7 +3,7 @@ import {fetchJSONWithTimeout} from './utils';
 export class ProviderRequestError extends Error {
   constructor(public status: number, message: string, public requestID = '') { super(requestID ? `${message} (Request ${requestID})` : message); }
 }
-export async function providerRequest(token: string, path: string, options: RequestInit = {}) {
+export async function providerRequest(token: string, path: string, options: RequestInit = {}, observe?: (response:{status:number;requestID:string})=>void) {
   const method = (options.method || 'GET').toUpperCase();
   const playConfirmation = method === 'POST' && path === '/providers/me/play-billing/verify';
   const shared = method === 'GET' && ['/profile', '/notifications'].includes(path) || method === 'PATCH' && path === '/notifications/read-all';
@@ -13,6 +13,7 @@ export async function providerRequest(token: string, path: string, options: Requ
     const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1${path}`, {
       ...options, cache: 'no-store', headers: {...options.headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json'},
     }, path.endsWith('/videos/complete') ? 90000 : playConfirmation || method === 'POST' && /\/subscription-(renewal|checkout|confirm)$/.test(path) ? 45000 : 15000);
+    if(observe){const raw=response.headers?.get('X-Request-ID')||'';observe({status:response.status,requestID:/^[a-zA-Z0-9-]{1,80}$/.test(raw)?raw:''});}
     if (!response.ok) {
       const rawID = response.headers?.get('X-Request-ID') || '';
       const requestID = /^[a-zA-Z0-9-]{1,80}$/.test(rawID) ? rawID : '';
