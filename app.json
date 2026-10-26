@@ -62,7 +62,8 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow Atlantic Express to use your location while you find nearby services, share a location pin, or choose to be available as a driver."
+          "locationWhenInUsePermission": "Allow Atlantic Express to use your location while you find nearby services, share a location pin, or choose to be available as a driver.",
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       "@maplibre/maplibre-react-native",

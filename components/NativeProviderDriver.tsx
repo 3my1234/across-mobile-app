@@ -1,5 +1,6 @@
+import {setAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {transportServiceKind} from './transportServices';
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, View} from 'react-native';
 import {ThemedText as Text} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
@@ -9,6 +10,7 @@ import {providerAvailabilitySession} from './driverPresenceSession';
 type Service = {id: string; title: string; category?: string; status?: string};
 export function NativeProviderDriver({token, providerID}: {token: string; providerID: string}) {
   const c = useAccountDesign();
+  const actionFlight=useRef(false);
   const [items, setItems] = useState<Service[]>([]), [selected, setSelected] = useState('');
   const [cursor, setCursor] = useState(''), [page, setPage] = useState(''), [reload, setReload] = useState(0);
   const [loading, setLoading] = useState(true), [online, setOnline] = useState(false), [busy, setBusy] = useState(false), [starting, setStarting] = useState(false);
@@ -31,13 +33,14 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
       const drivers = (data.items || []).filter((item: Service) => item.status === 'approved' && transportServiceKind(item.category,item.title)!==null);
       setItems(old => page ? [...old, ...drivers.filter((item: Service) => !old.some(existing => existing.id === item.id))] : drivers);
       setCursor(data.page?.next_cursor || data.next_cursor || '');
+      if(!page&&drivers.length===1)setSelected(previous=>previous||drivers[0].id);
     }).catch(failure => {if (alive) setError(failure instanceof Error ? failure.message : 'Could not load driver services.');})
       .finally(() => {if (alive) setLoading(false);});
     return () => {alive = false;};
   }, [token, page, reload]);
-  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} hitSlop={0} pressRetentionOffset={0} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><View pointerEvents="none"><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></View></Pressable>;
   return <View style={{gap: 12}}>
-    <Text>While available, location updates continue across ATL Xpress screens. Minimizing the app or signing out stops sharing. Availability expires within two minutes without an update.</Text>
+    <Text>With location permission, verified subscribed drivers become visible automatically while ATL Xpress is open. Go offline to pause visibility. Location updates continue across ATL Xpress screens. On Android, an ongoing notification keeps your availability updated when minimized. Signing out or Go offline stops sharing. Availability expires within two minutes without an update.</Text>
     <Text>Customers see approximate distance. Your exact location is shared in chat only when you explicitly send a location pin.</Text>
     {loading && <ActivityIndicator accessibilityLabel="Loading approved driver services"/>}
     {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}
@@ -45,8 +48,8 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
     {!items.length && !loading && !error && <Text>Create a driver or courier service, keep your paid subscription active and have all three transport documents approved first. The server checks approval every time availability updates.</Text>}
     {!!cursor && button('Load more services', () => setPage(cursor), loading || busy || online)}
     {button('Refresh services', () => {setPage(''); setReload(value => value + 1);}, loading || busy || online)}
-    <Text accessibilityLiveRegion="polite">{message}</Text>
-    {button('Available for customers', () => {if (presence && !presence.start(selected)) setMessage('Wait for the current update to finish, keep the app open, then retry.');}, !selected || !presence || online || starting || busy)}
-    {button('Go offline', () => {setBusy(true); void presence?.stop().finally(() => setBusy(false));}, !presence || busy)}
+    <View style={{minHeight:72}}><Text accessibilityLiveRegion="polite">{message}</Text></View>
+    {button('Available for customers', () => {if(actionFlight.current)return;actionFlight.current=true;setBusy(true);void setAutomaticDriverAvailability(providerID,true).then(()=>presence?.start(selected)).catch(failure=>setError(failure.message)).finally(()=>{actionFlight.current=false;setBusy(false);});}, !selected || !presence || online || starting || busy)}
+    {button('Go offline', () => {if(actionFlight.current)return;actionFlight.current=true;setBusy(true); void Promise.all([setAutomaticDriverAvailability(providerID,false),presence?.stop()]).catch(failure=>setError(failure.message)).finally(() => {actionFlight.current=false;setBusy(false);});}, !presence || busy)}
   </View>;
 }

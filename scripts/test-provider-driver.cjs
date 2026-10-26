@@ -27,6 +27,14 @@ function fixture(changes = {}) {
   assert.deepEqual(waiting.events, ['delete'], 'background/unmount during GPS must not send location');
   assert.equal(timers.size, 0);
 
+  // Permission/system dialogs can temporarily take focus during GPS capture.
+  let focused=true;const interruptedGPS=deferred();
+  const interrupted=fixture({foreground:()=>focused,capture:()=>interruptedGPS.promise});
+  interrupted.session.start(id);focused=false;interruptedGPS.resolve(position());await settle();
+  assert.equal(interrupted.states.at(-1).online,false);
+  focused=true;assert.equal(interrupted.session.start(id),true,'focus interruption must not leave enabled=true with no heartbeat');
+  await settle();await interrupted.session.stop();
+
   const put = deferred(), first = fixture({publish: () => {first.events.push('put'); return put.promise;}});
   first.session.start(id); await settle(); const stopping = first.session.stop(); await settle();
   assert.deepEqual(first.events, ['capture', 'put'], 'DELETE waits for in-flight PUT');
