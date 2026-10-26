@@ -1,3 +1,4 @@
+import {setAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {transportServiceKind} from './transportServices';
 import React, {useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, View} from 'react-native';
@@ -36,9 +37,9 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
       .finally(() => {if (alive) setLoading(false);});
     return () => {alive = false;};
   }, [token, page, reload]);
-  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
+  const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} hitSlop={0} pressRetentionOffset={0} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><View pointerEvents="none"><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></View></Pressable>;
   return <View style={{gap: 12}}>
-    <Text>While available, location updates continue across ATL Xpress screens. Minimizing the app or signing out stops sharing. Availability expires within two minutes without an update.</Text>
+    <Text>With location permission, verified subscribed drivers become visible automatically while ATL Xpress is open. Go offline to pause visibility. Location updates continue across ATL Xpress screens. On Android, an ongoing notification keeps your availability updated when minimized. Signing out or Go offline stops sharing. Availability expires within two minutes without an update.</Text>
     <Text>Customers see approximate distance. Your exact location is shared in chat only when you explicitly send a location pin.</Text>
     {loading && <ActivityIndicator accessibilityLabel="Loading approved driver services"/>}
     {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}
@@ -46,8 +47,8 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
     {!items.length && !loading && !error && <Text>Create a driver or courier service, keep your paid subscription active and have all three transport documents approved first. The server checks approval every time availability updates.</Text>}
     {!!cursor && button('Load more services', () => setPage(cursor), loading || busy || online)}
     {button('Refresh services', () => {setPage(''); setReload(value => value + 1);}, loading || busy || online)}
-    <Text accessibilityLiveRegion="polite">{message}</Text>
-    {button('Available for customers', () => {if(presence)presence.start(selected);}, !selected || !presence || online || starting || busy)}
-    {button('Go offline', () => {setBusy(true); void presence?.stop().finally(() => setBusy(false));}, !presence || busy)}
+    <View style={{minHeight:72}}><Text accessibilityLiveRegion="polite">{message}</Text></View>
+    {button('Available for customers', () => {setBusy(true);void setAutomaticDriverAvailability(providerID,true).then(()=>presence?.start(selected)).catch(failure=>setError(failure.message)).finally(()=>setBusy(false));}, !selected || !presence || online || starting || busy)}
+    {button('Go offline', () => {setBusy(true); void Promise.all([setAutomaticDriverAvailability(providerID,false),presence?.stop()]).catch(failure=>setError(failure.message)).finally(() => setBusy(false));}, !presence || busy)}
   </View>;
 }

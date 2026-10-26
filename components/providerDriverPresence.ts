@@ -71,5 +71,7 @@ export function createDriverPresence(deps: Dependencies) {
       deps.state(false, 'Finding your current location...', 'starting'); void tick(); return true;
     },
     stop,
+    async pause(){enabled=false;version++;clear();await flight;},
+    async whenIdle(){await stopping;await flight;},
   };
 }
