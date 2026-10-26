@@ -15,5 +15,7 @@ props={uri:'https://bucket.s3.eu-west-1.amazonaws.com/catalog/photo.jpg?X-Amz-Si
 assert.equal(utils.exports.normalizeMediaUrl(utils.exports.normalizeMediaUrl('user-uploads/a.avif')),utils.exports.normalizeMediaUrl('user-uploads/a.avif'),'portable cache URL is idempotent');
 props={uri:'https://api.test/private-chat/photo?token=short-lived'};image=render();assert.equal(image.props.cachePolicy,'memory','private/signed image routes do not enter the public disk cache');
 props={uri:original+'-updated'};image=render();assert.equal(image.props.source.cacheKey,original+'-updated','provider image replacement selects a new cache entry');
+const serviceSource=fs.readFileSync('components/MarketplaceScreen.tsx','utf8');assert.ok(serviceSource.includes('key={`${selected.id}:photo:${index}`}'),'detail image identity follows listing/slot, not a rotating URL');assert.ok(serviceSource.includes('key={`${item.id}:photo:${index}`}'),'service card image view survives URL updates');
+const productSource=fs.readFileSync('components/Screens.tsx','utf8');assert.ok(productSource.includes('key={`${product.id}:photo:${index}`}'));assert.ok(productSource.includes('key={`description-${product.id}-${index}`}'));
 hooks.forEach(h=>h?.cleanup?.());assert.equal(timers.size,0,'unmount clears all timers');
 console.log('Image recovery passed: original retries, fallback, foreground recovery, stale callbacks, stable candidate arrays and cleanup.');

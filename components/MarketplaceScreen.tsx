@@ -676,7 +676,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
           </View>
           <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
             {(selected.media_urls?.length ? selected.media_urls : [""]).map((uri, index) => (
-              <ResilientImage key={`${uri}-${index}`} uri={uri} style={[styles.hero, { width: viewportWidth }]} resizeMode="contain" />
+              <ResilientImage key={`${selected.id}:photo:${index}`} uri={uri} style={[styles.hero, { width: viewportWidth }]} resizeMode="contain" />
             ))}
           </ScrollView>
           {(selected.media_urls?.length || 0) > 1 && <Text style={styles.meta}>Swipe to view all {selected.media_urls.length} photos</Text>}
@@ -768,7 +768,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               renderItem={({ item }) => (
                 <Pressable style={styles.card} onPress={() => void openListing(item)}>
                   <View style={styles.cardGallery}>
-                    {(item.media_urls?.length ? item.media_urls.slice(0,4) : [""]).map((uri,index)=><ResilientImage key={`${uri}:${index}`} uri={uri} style={item.media_urls?.length>1 ? [styles.cardGalleryTile,item.media_urls.length===2 && {height:160},item.media_urls.length===3 && index===2 && {width:"100%"}] : styles.cardGallerySingle} resizeMode="cover"/>)}
+                    {(item.media_urls?.length ? item.media_urls.slice(0,4) : [""]).map((uri,index)=><ResilientImage key={`${item.id}:photo:${index}`} uri={uri} style={item.media_urls?.length>1 ? [styles.cardGalleryTile,item.media_urls.length===2 && {height:160},item.media_urls.length===3 && index===2 && {width:"100%"}] : styles.cardGallerySingle} resizeMode="cover"/>)}
                     {item.media_urls?.length>4 && <Text style={styles.morePhotos}>+{item.media_urls.length-4} photos</Text>}
                   </View>
                   <View style={styles.cardBody}>

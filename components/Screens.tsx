@@ -477,7 +477,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
             onMomentumScrollEnd={event => setHeroIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
           >
             {images.map((uri, index) => (
-              <Pressable key={`${uri}-${index}`} onPress={() => { setGalleryIndex(index); setGalleryPhotos(null); setGalleryOpen(true); }} accessibilityLabel={`Open product image ${index + 1} of ${images.length}`}>
+              <Pressable key={`${product.id}:photo:${index}`} onPress={() => { setGalleryIndex(index); setGalleryPhotos(null); setGalleryOpen(true); }} accessibilityLabel={`Open product image ${index + 1} of ${images.length}`}>
                 <ResilientImage uri={uri} style={[styles.detailImage, { width: windowWidth, height:windowWidth }]} resizeMode="contain" />
               </Pressable>
             ))}
@@ -547,7 +547,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
               {!!product.description && <Text style={styles.detailDescription}>{product.description}</Text>}
             </View>
             <View style={styles.productPhotoStack}>
-              {(showAllPhotos ? images : images.slice(0,3)).map((uri,index)=><Pressable key={`description-${uri}-${index}`} accessibilityLabel={`View product photo ${index+1}`} onPress={()=>{setGalleryPhotos(null);setGalleryIndex(index);setGalleryOpen(true);}}><ProductPhoto uri={uri}/></Pressable>)}
+              {(showAllPhotos ? images : images.slice(0,3)).map((uri,index)=><Pressable key={`description-${product.id}-${index}`} accessibilityLabel={`View product photo ${index+1}`} onPress={()=>{setGalleryPhotos(null);setGalleryIndex(index);setGalleryOpen(true);}}><ProductPhoto uri={uri}/></Pressable>)}
               {images.length>3 && <Pressable style={styles.photoExpand} onPress={()=>setShowAllPhotos(value=>!value)}><Text style={styles.sectionTabText}>{showAllPhotos ? "Show fewer photos" : `See all ${images.length} photos`}</Text><Ionicons name={showAllPhotos ? "chevron-up" : "chevron-down"} size={16}/></Pressable>}
             </View>
             <View style={styles.recommendationSection} onLayout={event => { sectionOffsets.current.recommended = event.nativeEvent.layout.y; }}><DiscoverySections owner={token} country={destination.country_code} state={destination.state} city={destination.city} sourceKind="product" sourceID={product.id} topics={product.category_path} active={!sellerChat&&!galleryOpen} onOpen={card=>{void openDiscovery(card,{country:destination.country_code,state:destination.state,city:destination.city},onSelectProduct,id=>onOpenService?.(id)).catch(error=>Alert.alert('Listing unavailable',error.message));}}/></View>
