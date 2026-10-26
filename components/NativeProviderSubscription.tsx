@@ -93,8 +93,8 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
     await providerRequest(token, '/providers/me/subscription-renewal', {method: 'POST', body: JSON.stringify({next_plan_id: next?.id || ''})});
     if (alive.current) {setNotice('Renewal settings updated. Paid access is preserved.'); await refresh(); await onChanged();}
   })}]);
-  const cancelUnpaid = () => Alert.alert('Cancel unpaid checkout?', 'Only continue if you have not paid or sent a bank transfer. We will close the old payment link and check its status before you can choose another payment method. If you have paid, use Check payment status instead.', [{text:'Keep checkout',style:'cancel'},{text:'I have not paid',onPress:()=>void run(async()=>{
-    const result=await providerRequest(token,'/providers/me/subscription-checkout/cancel',{method:'POST',body:JSON.stringify({tx_ref:pending?.tx_ref || ''})});
+  const cancelUnpaid = () => Alert.alert('Cancel unpaid checkout?', 'Only continue if you have not paid or sent a bank transfer. We will close your pending unpaid checkout links and check their status before you can choose another payment method. If you have paid, use Check payment status instead.', [{text:'Keep checkout',style:'cancel'},{text:'I have not paid',onPress:()=>void run(async()=>{
+    const result=await providerRequest(token,'/providers/me/subscription-checkout/cancel',{method:'POST',body:JSON.stringify({})});
     if(result.payment_state==='cancelled' || result.payment_state==='settled') {
       await SecureStore.deleteItemAsync(storageKey);
       if(alive.current){setPending(null);setNotice(result.payment_state==='settled'?'Payment verified. Your paid access has been updated.':'Unpaid checkout cancelled. Choose a plan and your preferred payment method.');await onChanged();}

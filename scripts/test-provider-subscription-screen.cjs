@@ -74,7 +74,7 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  assert.ok(stored);assert.equal(button('Continue: NGN 500').props.disabled,true,'failed cancellation keeps payment protected');
  failCancel=false;cancelState='pending';button('Cancel unpaid checkout').props.onPress();alert[2].find(item=>item.text==='I have not paid').onPress();await settle();assert.ok(stored,'other pending payments keep the marker');
  cancelState='cancelled';button('Cancel unpaid checkout').props.onPress();const acceptCancel=alert[2].find(item=>item.text==='I have not paid').onPress;const beforeCancel=cancels().length;acceptCancel();acceptCancel();await settle();
- assert.equal(cancels().length,beforeCancel+1,'duplicate cancellation taps are serialized');
+ assert.equal(cancels().length,beforeCancel+1,'duplicate cancellation taps are serialized');assert.deepEqual(JSON.parse(cancels().at(-1).body),{},'recover all owned legacy attempts rather than repeatedly closing one stale reference');
  assert.equal(stored,null);assert.equal(button('Continue: NGN 500').props.disabled,false,'verified cancellation unlocks plans');
  button('One-off bank transfer').props.onPress();await settle();button('Continue: NGN 500').props.onPress();alert[2].find(item=>item.text==='Continue to payment').onPress();await settle();
  assert.equal(JSON.parse(checkouts().at(-1).body).payment_method,'banktransfer','provider can retry with transfer');
