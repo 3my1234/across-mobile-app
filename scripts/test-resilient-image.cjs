@@ -15,7 +15,22 @@ props={uri:'https://bucket.s3.eu-west-1.amazonaws.com/catalog/photo.jpg?X-Amz-Si
 assert.equal(utils.exports.normalizeMediaUrl(utils.exports.normalizeMediaUrl('user-uploads/a.avif')),utils.exports.normalizeMediaUrl('user-uploads/a.avif'),'portable cache URL is idempotent');
 props={uri:'https://api.test/private-chat/photo?token=short-lived'};image=render();assert.equal(image.props.cachePolicy,'memory','private/signed image routes do not enter the public disk cache');
 props={uri:original+'-updated'};image=render();assert.equal(image.props.source.cacheKey,original+'-updated','provider image replacement selects a new cache entry');
-const serviceSource=fs.readFileSync('components/MarketplaceScreen.tsx','utf8');assert.ok(serviceSource.includes('key={`${selected.id}:photo:${index}`}'),'detail image identity follows listing/slot, not a rotating URL');assert.ok(serviceSource.includes('key={`${item.id}:photo:${index}`}'),'service card image view survives URL updates');
-const productSource=fs.readFileSync('components/Screens.tsx','utf8');assert.ok(productSource.includes('key={`${product.id}:photo:${index}`}'));assert.ok(productSource.includes('key={`description-${product.id}-${index}`}'));
+
+// Execute the real JSX maps and compare rendered child identity across a URL
+// refresh and a different listing. No literal key-expression assertion.
+function checkPhotoSlots(file,startMarker,multiline){
+ const source=fs.readFileSync(file,'utf8'),start=source.indexOf(startMarker);assert.ok(start>=0);
+ const end=multiline?source.indexOf('))}',start)+3:source.indexOf('\n',start);
+ const expression=source.slice(start,end).trim().slice(1,-1);
+ const scope={exports:{},React:{createElement:(type,props,...children)=>({type,props,children})},ResilientImage:'Image',Pressable:'Button',ProductPhoto:'Photo',styles:{},windowWidth:400,viewportWidth:400,showAllPhotos:true};
+ const code=ts.transpileModule('exports.render=()=>('+expression+');',{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+ vm.runInNewContext(code,scope);
+ const draw=(id,url)=>{scope.item=scope.selected=scope.product={id,media_urls:[url]};scope.images=[url];return scope.exports.render()[0].props.key;};
+ const old=draw('same-listing','https://images.test/old.jpg');assert.equal(draw('same-listing','https://images.test/new.jpg'),old,'URL update retains native image slot');assert.notEqual(draw('other-listing','https://images.test/new.jpg'),old,'different listing cannot inherit image slot');
+}
+checkPhotoSlots('components/MarketplaceScreen.tsx','{(selected.media_urls?.length ? selected.media_urls',true);
+checkPhotoSlots('components/MarketplaceScreen.tsx','{(item.media_urls?.length ? item.media_urls.slice',false);
+checkPhotoSlots('components/Screens.tsx','{images.map((uri, index)',true);
+checkPhotoSlots('components/Screens.tsx','{(showAllPhotos ? images : images.slice',false);
 hooks.forEach(h=>h?.cleanup?.());assert.equal(timers.size,0,'unmount clears all timers');
 console.log('Image recovery passed: original retries, fallback, foreground recovery, stale callbacks, stable candidate arrays and cleanup.');
