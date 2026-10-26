@@ -38,6 +38,7 @@ function withPortableImageFormat(url: string) {
   // them to Android/iOS-safe JPEG; this versioned query also avoids a stale
   // Cloudflare entry that may still contain the original AVIF bytes.
   if (!/\.avif(?:$|\?)/i.test(url)) return url;
+  if (/[?&]format=portable-v1(?:&|$)/.test(url)) return url;
   return `${url}${url.includes("?") ? "&" : "?"}format=portable-v1`;
 }
 
