@@ -45,6 +45,7 @@ export function createDriverPresence(deps: Dependencies) {
     try {await flight;} finally {
       flight = null;
       if (active(epoch)) timer = setTimeout(() => void tick(), 30000);
+      else if (enabled && epoch === version) {enabled = false; version++; clear(); deps.state(false, 'Nearby visibility paused while the app is not active.', 'offline');}
     }
   }
   function stop() {

@@ -31,6 +31,7 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
       const drivers = (data.items || []).filter((item: Service) => item.status === 'approved' && transportServiceKind(item.category,item.title)!==null);
       setItems(old => page ? [...old, ...drivers.filter((item: Service) => !old.some(existing => existing.id === item.id))] : drivers);
       setCursor(data.page?.next_cursor || data.next_cursor || '');
+      if(!page&&drivers.length===1)setSelected(previous=>previous||drivers[0].id);
     }).catch(failure => {if (alive) setError(failure instanceof Error ? failure.message : 'Could not load driver services.');})
       .finally(() => {if (alive) setLoading(false);});
     return () => {alive = false;};
@@ -46,7 +47,7 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
     {!!cursor && button('Load more services', () => setPage(cursor), loading || busy || online)}
     {button('Refresh services', () => {setPage(''); setReload(value => value + 1);}, loading || busy || online)}
     <Text accessibilityLiveRegion="polite">{message}</Text>
-    {button('Available for customers', () => {if (presence && !presence.start(selected)) setMessage('Wait for the current update to finish, keep the app open, then retry.');}, !selected || !presence || online || starting || busy)}
+    {button('Available for customers', () => {if(presence)presence.start(selected);}, !selected || !presence || online || starting || busy)}
     {button('Go offline', () => {setBusy(true); void presence?.stop().finally(() => setBusy(false));}, !presence || busy)}
   </View>;
 }

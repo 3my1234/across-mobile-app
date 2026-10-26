@@ -1,8 +1,8 @@
 import React,{useEffect,useState} from 'react';
 import {AppState,Pressable,View} from 'react-native';
 import {ThemedText as Text} from './ThemeProvider';
-import {driverPresenceSummary,stopDriverPresence,subscribeDriverPresence} from './driverPresenceSession';
-export function useDriverPresenceLifecycle(token:string|null){useEffect(()=>{const listener=AppState.addEventListener('change',state=>{if(state!=='active')void stopDriverPresence(token);});return()=>{listener.remove();void stopDriverPresence(token,true);};},[token]);}
+import {driverPresenceSummary,stopDriverPresence,subscribeDriverPresence,pauseDriverPresence,resumeDriverPresence} from './driverPresenceSession';
+export function useDriverPresenceLifecycle(token:string|null){useEffect(()=>{const listener=AppState.addEventListener('change',state=>{if(state==='background')void pauseDriverPresence(token);else if(state==='active')void resumeDriverPresence(token);});return()=>{listener.remove();void stopDriverPresence(token,true);};},[token]);}
 export function DriverPresenceNotice({token}:{token:string|null}){
  const [,render]=useState(0);useEffect(()=>subscribeDriverPresence(()=>render(n=>n+1)),[]);
  const sessions=driverPresenceSummary(token);if(!sessions.length)return null;
