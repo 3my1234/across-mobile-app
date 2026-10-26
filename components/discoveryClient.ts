@@ -4,18 +4,33 @@ import {fetchJSONWithTimeout, mapProduct} from './utils';
 import type {Product} from './types';
 export type DiscoveryCard = {kind:'product'|'service';id:string;provider_id:string;title:string;categories:string[];city:string;image_urls:string[];price:number|null;price_mode?:string;compare_at_price?:number;currency:string;placement:'similar'|'recommended'|'promoted';label?:string;receipt:string};
 type Context = {owner:string|null;country:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string};
+type Feed = {similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]};
+const feeds=new Map<string,{at:number;value:Feed}>(), flights=new Map<string,Promise<Feed>>();
+const feedFreshMS=60000,feedRetainMS=5*60000;
+function feedKey(context:Context){return JSON.stringify([context.country,context.state||'',context.city||'',context.search?.trim().slice(0,100)||'',context.kind||'',context.sourceKind||'',context.sourceID||'',topics.join(' ')]);}
+export function cachedDiscoveryFeed(context:Context):Feed|null {
+ discoverySession(context.owner);const entry=feeds.get(feedKey(context));
+ return entry&&Date.now()-entry.at<feedRetainMS?entry.value:null;
+}
 let actor:string|null|undefined, session='', topics:string[]=[], pending: {receipt:string;type:string;visible_ms?:number}[]=[], timer:ReturnType<typeof setTimeout>|undefined, sending=false, epoch=0, navigation=0;
 const seen = new Set<string>();
 const recentlyVisible=new Map<string,number>();
 const attribution=new Map<string,DiscoveryCard>();
 export function discoverySession(owner:string|null) {
-  if(actor!==owner){actor=owner;session=Crypto.randomUUID();topics=[];pending=[];seen.clear();attribution.clear();recentlyVisible.clear();epoch++;navigation++;if(timer)clearTimeout(timer);timer=undefined;}
+  if(actor!==owner){actor=owner;session=Crypto.randomUUID();topics=[];pending=[];seen.clear();attribution.clear();recentlyVisible.clear();feeds.clear();flights.clear();epoch++;navigation++;if(timer)clearTimeout(timer);timer=undefined;}
   return session;
 }
 export function rememberDiscoveryTopics(owner:string|null,values:string[]) {
  discoverySession(owner);topics=Array.from(new Set([...values.map(v=>v.trim().slice(0,40)).filter(Boolean),...topics])).slice(0,6);
 }
-export async function discoveryFeed(context:Context) {
+export function discoveryFeed(context:Context,force=false):Promise<Feed> {
+ discoverySession(context.owner);const key=feedKey(context),version=epoch,entry=feeds.get(key);
+ if(!force&&entry&&Date.now()-entry.at<feedFreshMS)return Promise.resolve(entry.value);
+ const current=flights.get(key);if(current)return current;
+ const request=loadDiscoveryFeed(context).then(value=>{if(epoch===version){feeds.delete(key);feeds.set(key,{at:Date.now(),value});while(feeds.size>24)feeds.delete(feeds.keys().next().value!);}return value;}).finally(()=>{if(flights.get(key)===request)flights.delete(key);});
+ flights.set(key,request);return request;
+}
+async function loadDiscoveryFeed(context:Context):Promise<Feed> {
  const query=new URLSearchParams({country_code:context.country,state:context.state||'',city:context.city||'',session:discoverySession(context.owner),interests:topics.join(' ').slice(0,240)});
  for(const [key,at]of recentlyVisible){if(Date.now()-at>20*60*1000)recentlyVisible.delete(key);}
  if(recentlyVisible.size)query.set('recent',Array.from(recentlyVisible.keys()).slice(-24).join(','));

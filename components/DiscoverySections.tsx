@@ -3,7 +3,8 @@ import {AccessibilityInfo,ActivityIndicator,AppState,Pressable,ScrollView,View,u
 import {ThemedText as Text} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {ResilientImage} from './ResilientImage';
-import {discoveryFeed,DiscoveryCard,recordDiscovery,rememberDiscoveryTopics} from './discoveryClient';
+import {useCatalogFreshness} from './catalogFreshness';
+import {cachedDiscoveryFeed,discoveryFeed,DiscoveryCard,recordDiscovery,rememberDiscoveryTopics} from './discoveryClient';
 
 // Continuous half-card viewability, measured in window coordinates, also works
 // when this horizontal rail sits below a vertically scrolling detail screen.
@@ -60,7 +61,17 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
 export function DiscoverySections({owner,country='NG',state='',city='',search='',kind,sourceKind,sourceID,topics=[],active=true,onOpen}:{owner:string|null;country?:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string;topics?:string[];active?:boolean;onOpen:(card:DiscoveryCard)=>void}) {
  const listingKind=sourceID?sourceKind:kind, noun=listingKind==='product'?'Products':listingKind==='service'?'Services':'Listings';
  const c=useAccountDesign(),[data,setData]=useState<{similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]}|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),sequence=useRef(0),topicsRef=useRef(topics);topicsRef.current=topics;
- useEffect(()=>{const version=++sequence.current;setData(null);setError('');if(!active)return;let alive=true;const load=()=>{if(sourceID)rememberDiscoveryTopics(owner,topicsRef.current);void discoveryFeed({owner,country,state,city,search,kind,sourceKind,sourceID}).then(next=>{if(alive&&version===sequence.current)setData(next);}).catch(()=>{if(alive&&version===sequence.current)setError('Could not load discovery. Tap to retry.');});};const delay=setTimeout(load,300);return()=>{alive=false;clearTimeout(delay);};},[owner,country,state,city,search,kind,sourceKind,sourceID,active,retry]);
+ useCatalogFreshness(()=>setRetry(n=>n+1),active);
+ useEffect(()=>{
+  const version=++sequence.current;if(!active)return;
+  let alive=true;const context={owner,country,state,city,search,kind,sourceKind,sourceID};
+  if(sourceID)rememberDiscoveryTopics(owner,topicsRef.current);
+  setData(cachedDiscoveryFeed(context));setError('');
+  const load=(force=false)=>{if(AppState.currentState!=='active')return;void discoveryFeed(context,force).then(next=>{if(alive&&version===sequence.current){setData(next);setError('');}}).catch(()=>{if(alive&&version===sequence.current)setError('Could not refresh discovery. Tap to retry.');});};
+  const delay=setTimeout(()=>load(retry>0),300),timer=setInterval(()=>load(),60000);
+  const foreground=AppState.addEventListener('change',state=>{if(state==='active')load();});
+  return()=>{alive=false;clearTimeout(delay);clearInterval(timer);foreground.remove();};
+ },[owner,country,state,city,search,kind,sourceKind,sourceID,active,retry]);
  if(!active)return null;
  const cards=data?(sourceID?data.similar:data.promoted):[];
  return <View>{!data&&!error&&<ActivityIndicator accessibilityLabel="Loading listing discovery" style={{padding:12}}/>}{!!error&&<Pressable accessibilityRole="button" onPress={()=>setRetry(n=>n+1)}><Text style={{color:c.danger,padding:12}}>{error}</Text></Pressable>}{data&&<Rail title={sourceID?`Recommended ${noun}`:`Promoted ${noun}`} cards={cards} compact={!sourceID} active={active} onOpen={onOpen}/>}</View>;
