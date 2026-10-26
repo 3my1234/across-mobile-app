@@ -61,6 +61,8 @@ jobs:
           "$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging android/app/build/outputs/apk/release/app-release.apk > provider-android-evidence/manifest.txt
           grep -F "package: name='com.atlanticexpress.mobile'" provider-android-evidence/manifest.txt
           grep -F "targetSdkVersion:'36'" provider-android-evidence/manifest.txt
+          grep -F "android.permission.FOREGROUND_SERVICE_LOCATION" provider-android-evidence/manifest.txt
+          grep -F "android.permission.FOREGROUND_SERVICE" provider-android-evidence/manifest.txt
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs android/app/build/outputs/apk/release/app-release.apk > provider-android-evidence/compile-only-signing.txt
       - uses: actions/upload-artifact@v4
         with:

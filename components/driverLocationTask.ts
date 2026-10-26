@@ -18,8 +18,7 @@ export async function publishDriverLocation(token:string,payload:DriverPresenceP
   try{await previous;}catch{}
   if(lease&&current!==lease)throw Error('Driver availability has stopped.');
   if(lease&&lease.token!==token)throw Error('Driver account changed.');
-  const wait=lease?Math.max(0,13000-(Date.now()-lease.last)):0;
-  if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
+  if(lease&&Date.now()-lease.last<13000)return; // Existing fresh presence; do not queue a duplicate heartbeat.
   if(lease&&current!==lease)throw Error('Driver availability has stopped.');
   await providerRequest(token,'/providers/me/driver-availability',{method:'PUT',body:JSON.stringify(payload)});
   if(lease&&current===lease){lease.last=Date.now();await storage(()=>SecureStore.setItemAsync(KEY,JSON.stringify(lease)));}
@@ -28,7 +27,7 @@ export async function publishDriverLocation(token:string,payload:DriverPresenceP
 export async function startMinimizedDriverLocation(token:string,provider:string,listing:string){
  if(Platform.OS!=='android'||AppState.currentState!=='active')return false;
  if(current?.token===token&&current.listing===listing&&await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK))return true;
- epoch++;const lease:Lease={token,provider,listing,generation:`${Date.now()}-${Math.random()}`,last:Date.now()};current=lease;
+ epoch++;const lease:Lease={token,provider,listing,generation:`${Date.now()}-${Math.random()}`,last:0};current=lease;
  try{
   await storage(()=>SecureStore.setItemAsync(KEY,JSON.stringify(lease)));
   if(current!==lease)return false;
