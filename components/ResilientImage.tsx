@@ -1,25 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Image, ImageProps } from "react-native";
+import { AppState, ImageProps as NativeImageProps } from "react-native";
+import { Image, ImageProps } from "expo-image";
 import { API_URL, FALLBACK_IMAGES } from "./config";
 import { normalizeMediaUrl } from "./utils";
 
-type Props = Omit<ImageProps, "source"> & { uri?: string | null; uris?: (string | null | undefined)[]; fallbackUri?: string };
+type Props = Omit<ImageProps, "source" | "onLoad" | "onError"> & { uri?: string | null; uris?: (string | null | undefined)[]; fallbackUri?: string; onLoad?:NativeImageProps['onLoad'];onError?:NativeImageProps['onError'] };
 
 // Retry the original photo before replacing it with a fallback.
 export function ResilientImage({ uri, uris, fallbackUri = FALLBACK_IMAGES[0], onError, onLoad, ...props }: Props) {
-  const signature = JSON.stringify([...(uris?.length ? uris : [uri]), fallbackUri]);
-  const candidates = useMemo(() => Array.from(new Set((JSON.parse(signature) as (string | null | undefined)[])
-    .map(value => normalizeMediaUrl(String(value || ""))).filter(Boolean))), [signature]);
+  // Signed S3 URLs can rotate without changing the object. Compare canonical
+  // public URLs so a catalogue refresh cannot reset an already loaded bitmap.
+  const signature = JSON.stringify(Array.from(new Set([...(uris?.length ? uris : [uri]), fallbackUri]
+    .map(value => normalizeMediaUrl(String(value || ""))).filter(Boolean))));
+  const candidates = useMemo(() => JSON.parse(signature) as string[], [signature]);
   const [attempt, setAttempt] = useState({ index: 0, retry: 0, cycle: 0 });
+  const recovery = useRef(0);
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loaded = useRef(false), failed = useRef(false), generation = useRef(0), mounted = useRef(true);
   const current = candidates[attempt.index] || "";
   const requestUri = (attempt.retry || attempt.cycle) && current.startsWith(`${API_URL}/api/v1/public/images/view/`)
     ? `${current}${current.includes("?") ? "&" : "?"}mobile_retry=${attempt.cycle}-${attempt.retry}` : current;
   const requestKey = `${signature}:${attempt.index}:${attempt.retry}:${attempt.cycle}`;
+  const source=useMemo(()=>({uri:requestUri,cacheKey:current}),[requestUri,current]);
   const activeRequest = useRef(requestKey); activeRequest.current = requestKey;
   useEffect(() => {
-    mounted.current = true; generation.current++; loaded.current = false; failed.current = false;
+    mounted.current = true; generation.current++; loaded.current = false; failed.current = false; recovery.current=0;
     if (retryTimer.current) clearTimeout(retryTimer.current);
     retryTimer.current = null; setAttempt({ index: 0, retry: 0, cycle: 0 });
     return () => { mounted.current = false; generation.current++; if (retryTimer.current) clearTimeout(retryTimer.current); retryTimer.current = null; };
@@ -49,16 +54,31 @@ export function ResilientImage({ uri, uris, fallbackUri = FALLBACK_IMAGES[0], on
   // Recover a stalled native image request even when no error event arrives.
   useEffect(() => {
     loaded.current = false;
-    const timeout = setTimeout(retry, 10000);
+    const timeout = setTimeout(retry, 20000);
     return () => clearTimeout(timeout);
   }, [requestKey]);
-  return <Image {...props} key={requestKey} resizeMethod={props.resizeMethod || "resize"}
-    style={[{ backgroundColor: "#E5EBE7" }, props.style]} source={{ uri: requestUri }}
+  // A temporary CDN/network failure must not leave a mounted catalogue tile on
+  // its fallback forever. Retry the original in the foreground, with a bound.
+  useEffect(()=>{
+    if((attempt.index===0 && attempt.retry<2) || recovery.current>=3)return;
+    const timeout=setTimeout(()=>{
+      if(!mounted.current || AppState.currentState==='background' || AppState.currentState==='inactive')return;
+      if(attempt.index===0 && loaded.current)return;
+      recovery.current++;loaded.current=false;failed.current=false;
+      setAttempt(previous=>({index:0,retry:0,cycle:previous.cycle+1}));
+    },30000*(recovery.current+1));
+    return()=>clearTimeout(timeout);
+  },[attempt.index,attempt.retry,attempt.cycle,signature]);
+  // Keep the same native view when a request retries. Expo Image retains cached
+  // bitmaps on disk and in memory instead of remounting a blank native image.
+  return <Image {...props} cachePolicy={current.startsWith(`${API_URL}/api/v1/public/images/view/`) ? 'memory-disk' : 'memory'} transition={120}
+    style={[{ backgroundColor: "#E5EBE7" }, props.style]} source={source}
     onLoad={event => {
       if(!mounted.current || activeRequest.current !== requestKey) return;
+      if(event.source?.url && event.source.url!==requestUri && event.source.url!==current)return;
       loaded.current = true;
       if (attempt.index === 0) failed.current = false;
       if (retryTimer.current) clearTimeout(retryTimer.current); retryTimer.current = null;
-      onLoad?.(event);
-    }} onError={event => { if(!mounted.current || activeRequest.current !== requestKey) return; retry(); onError?.(event); }}/>;
+      onLoad?.({nativeEvent:{source:{uri:requestUri,width:event.source?.width||0,height:event.source?.height||0}}} as Parameters<NonNullable<NativeImageProps['onLoad']>>[0]);
+    }} onError={event => { if(!mounted.current || activeRequest.current !== requestKey) return; retry(); onError?.({nativeEvent:{error:event.error}} as Parameters<NonNullable<NativeImageProps['onError']>>[0]); }}/>;
 }
