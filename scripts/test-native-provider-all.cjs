@@ -1,6 +1,6 @@
 const {spawnSync} = require('node:child_process');
 const suites = [
-  'test-native-provider', 'test-provider-entry', 'test-workspace-transport', 'test-auth-workspace', 'test-provider-workspace', 'test-provider-workspace-ux', 'test-provider-onboarding', 'test-provider-onboarding-screen',
+  'test-keyboard-frame', 'test-keyboard-inputs', 'test-native-provider', 'test-provider-entry', 'test-workspace-transport', 'test-auth-workspace', 'test-provider-workspace', 'test-provider-workspace-ux', 'test-provider-onboarding', 'test-provider-onboarding-screen',
   'test-provider-profile', 'test-provider-publishing', 'test-provider-catalog-screen', 'test-price-display', 'test-referrals', 'test-provider-inbox', 'test-provider-driver',
   'test-provider-bookings', 'test-provider-booking-screen', 'test-provider-booking-images', 'test-provider-orders', 'test-notification-destinations', 'test-provider-address-search', 'test-provider-location-picker', 'test-notification-diagnostics', 'test-notification-setup',
   'test-driver-presence-session', 'test-driver-location-task', 'test-driver-panel', 'test-automatic-driver-availability', 'test-chat-links', 'test-chat-composer', 'test-nearby-discovery', 'test-business-contact', 'test-promoted-carousel', 'test-discovery', 'test-discovery-cache', 'test-resilient-image', 'test-provider-chat', 'test-town-hall-feed', 'test-provider-tier-benefits', 'test-provider-subscription', 'test-provider-subscription-screen', 'test-play-subscription', 'test-play-subscription-screen', 'test-provider-fulfillment-screen', 'test-provider-staging',

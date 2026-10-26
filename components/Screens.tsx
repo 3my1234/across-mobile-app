@@ -1,3 +1,4 @@
+import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
 import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
@@ -9,7 +10,7 @@ import {ProductSellerChat} from "./ProductSellerChat";
 import React, { useState, useEffect, useRef } from "react";
 import {ActivityIndicator, Alert, Image, ImageBackground,
   findNodeHandle, Keyboard, Modal, Platform, Pressable,
-  RefreshControl, SafeAreaView, ScrollView, Share, StyleSheet,  type TextInput as NativeTextInput, View, useWindowDimensions} from "react-native";
+  RefreshControl, SafeAreaView,  Share, StyleSheet,  type TextInput as NativeTextInput, View, useWindowDimensions} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";

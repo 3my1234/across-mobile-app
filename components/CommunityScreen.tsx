@@ -1,9 +1,10 @@
+import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {TownHallIcon} from "./TownHallIcon";
 import type {ChatLocation} from './chatLocation';
 import {useInboxDeliveryReceipts} from './messageReceipts';
 import {privateChatStore} from './privateChatStore';
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, Image, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, Image, Pressable, RefreshControl,  StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { ThemedText as Text, ThemedTextInput as TextInput, useTheme, useThemedStyles } from "./ThemeProvider";
 import { KeyboardFrame } from "./KeyboardFrame";

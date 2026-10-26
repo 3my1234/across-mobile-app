@@ -1,5 +1,6 @@
+import {KeyboardScrollView as ScrollView,KeyboardFlatList as FlatList} from './KeyboardScroll';
 import React,{useEffect,useRef,useState} from "react";
-import {AccessibilityInfo,ActivityIndicator,Alert,Animated,AppState,FlatList,Image,Pressable,ScrollView,StyleSheet,View} from "react-native";
+import {AccessibilityInfo,ActivityIndicator,Alert,Animated,AppState,Image,Pressable,StyleSheet,View} from "react-native";
 import {Ionicons} from "@expo/vector-icons";
 import {ThemedText as Text,ThemedTextInput as TextInput,useTheme,useThemedStyles} from "./ThemeProvider";
 import {KeyboardFrame} from "./KeyboardFrame";

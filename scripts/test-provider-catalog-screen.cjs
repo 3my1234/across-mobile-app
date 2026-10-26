@@ -29,7 +29,7 @@ const modules = {
   './ProviderPostImages': {ProviderPostImages: 'Gallery'},
 };
 function load(path) {
-  const context = {exports: {}, URLSearchParams, require: name => {assert.ok(name in modules, name); return modules[name];}};
+  const context = {exports: {}, URLSearchParams, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};assert.ok(name in modules, name); return modules[name];}};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React, esModuleInterop: true}}).outputText, context);
   return context.exports;
 }

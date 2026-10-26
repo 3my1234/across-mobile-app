@@ -19,7 +19,7 @@ const request=async(token,path,options={})=>{
  if(path.includes('/manifests/'))return {manifest,items:[{order_id:id,package_code:'Synthetic parcel',product:{title:'<script>bad</script>',image_urls:['https://media.example.test/manifest.jpg']},buyer:{full_name:'Synthetic buyer'}}]};
  return {items:[manifest]};
 };
-const context={exports:{},URLSearchParams,Error,require:name=>{
+const context={exports:{},URLSearchParams,Error,require:name=>{if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};if(name==='./KeyboardFrame')return {KeyboardFrame:'Frame'};
  if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
  if(name==='react')return react;
  if(name==='react-native')return {ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},FlatList:'FlatList',Modal:'Modal',Pressable:'Button',ScrollView:'Scroll',Switch:'Switch',View:'View'};
@@ -28,7 +28,7 @@ const context={exports:{},URLSearchParams,Error,require:name=>{
  if(name==='expo-print')return {printAsync:async({html})=>{printed=html}};
  if(name==='./ThemeProvider')return {ThemedText:'Text',ThemedTextInput:'Input'};
  if(name==='./AccountDesign')return {useAccountDesign:()=>({})};
- if(name==='./KeyboardFrame')return {KeyboardFrame:'Frame'};
+
  if(name==='./ProviderPostImages')return {ProviderPostImages:'Gallery'};
  if(name==='./nativeProviderApi')return {providerRequest:request};
  if(name==='./providerOrderPolicy')return policy;

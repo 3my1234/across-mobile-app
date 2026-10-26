@@ -19,12 +19,12 @@ export function KeyboardFrame({children,style,behavior:_behavior,keyboardVertica
  }
  useEffect(()=>{
   alive.current=true;keyboard.current=Keyboard.metrics?.()||null;setKeyboardVisible(!!keyboard.current);measure();
-  const show=(event:KeyboardEvent)=>{keyboard.current=event.endCoordinates;setKeyboardVisible(true);if(Platform.OS==='ios')Keyboard.scheduleLayoutAnimation(event);measure();};
+  const show=(event:KeyboardEvent)=>{keyboard.current=event.endCoordinates;setKeyboardVisible(event.endCoordinates.height>0);if(Platform.OS==='ios')Keyboard.scheduleLayoutAnimation(event);measure();};
   const hide=(event:KeyboardEvent)=>{keyboard.current=null;setKeyboardVisible(false);version.current++;setOverlap(0);if(Platform.OS==='ios')Keyboard.scheduleLayoutAnimation(event);measure();};
-  const subscriptions=[Keyboard.addListener('keyboardDidShow',show),Keyboard.addListener(Platform.OS==='ios'?'keyboardWillHide':'keyboardDidHide',hide)];
+  const subscriptions=[Keyboard.addListener('keyboardDidShow',show),Keyboard.addListener('keyboardDidChangeFrame',show),Keyboard.addListener(Platform.OS==='ios'?'keyboardWillHide':'keyboardDidHide',hide)];
   if(Platform.OS==='ios')subscriptions.push(Keyboard.addListener('keyboardWillShow',show));
   return()=>{alive.current=false;version.current++;if(raf.current!==null)cancelAnimationFrame(raf.current);subscriptions.forEach(item=>item.remove());};
  },[]);
  useEffect(()=>{measure();},[enabled,keyboardVerticalOffset]);
- return <View {...props} ref={frame} collapsable={false} style={style} onLayout={event=>{onLayout?.(event);measure();}}><View style={[{flex:1,minHeight:0,paddingBottom:enabled?Math.max(overlap,keyboardVisible?0:bottomInset):bottomInset},contentContainerStyle]}>{children}</View></View>;
+ return <View {...props} ref={frame} collapsable={false} style={style} onLayout={event=>{onLayout?.(event);measure();}}><View onLayout={measure} style={[{flex:1,minHeight:0,paddingBottom:enabled?Math.max(overlap,keyboardVisible?0:bottomInset):bottomInset},contentContainerStyle]}>{children}</View></View>;
 }
