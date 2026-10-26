@@ -58,15 +58,25 @@ function fixture(changes = {}) {
   assert.equal(timers.size, 1, 'one successful heartbeat schedules one successor');
   await periodic.session.stop(); assert.equal(timers.size, 0);
 
+  let fixes=0;
+  const recoverable=fixture({capture:async()=>{if(++fixes===2)throw Error('Location timed out');return position();}});
+  recoverable.session.start(id);await settle();
+  let recoveryTick=[...timers.values()][0];timers.clear();recoveryTick();await settle();
+  assert.equal(recoverable.events.includes('delete'),false,'one GPS timeout must not delete fresh driver presence');
+  assert.equal(timers.size,1,'a failed refresh must schedule automatic recovery');
+  recoveryTick=[...timers.values()][0];timers.clear();recoveryTick();await settle();
+  assert.equal(recoverable.events.filter(e=>e==='put').length,2,'next fresh GPS fix restores publishing without manual toggles');
+  await recoverable.session.stop();
+
   const failed = fixture({publish: async () => {throw Error('Connection timed out');}});
   failed.session.start(id); await settle();
   assert.equal(failed.events.filter(item => item === 'capture').length, 1);
-  assert.equal(failed.events.at(-1), 'delete', 'ambiguous publish failure attempts to clear lease');
-  assert.equal(failed.states.at(-1).online, false); assert.equal(timers.size, 0, 'failed publish is not replayed');
+  assert.equal(failed.events.includes('delete'),false,'network uncertainty must retain server-managed expiry, not delete presence');
+  assert.equal(failed.states.at(-1).online, false); assert.equal(timers.size,1,'network failure schedules a fresh capture, never a stale payload replay');
   await failed.session.stop();
 
-  const revoked = fixture({capture: async () => {throw Error('Location permission denied');}, remove: async () => {throw Error('No network');}});
+  const revoked = fixture({capture: async () => {throw Object.assign(Error('Location permission denied'),{status:403});}, remove: async () => {throw Error('No network');}});
   revoked.session.start(id); await settle(); await revoked.session.stop();
-  assert.ok(revoked.states.some(state => state.message.includes('within two minutes')), 'offline cleanup failure explains server expiry');
+  assert.ok(revoked.states.some(state=>state.message.includes('stopped')),'authorization failure stops availability instead of retrying indefinitely');
   console.log('Driver availability passed: fresh accurate GPS, foreground-only publishing, no overlapping heartbeats, late PUT/stop/remount ordering, failure cleanup and lease expiry.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

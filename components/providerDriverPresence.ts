@@ -19,7 +19,7 @@ const cleanupByProvider = new Map<string, Promise<void>>();
 // One foreground lease, one heartbeat at a time. Never queue a restart behind
 // an old stop: its delayed DELETE could remove the newly published lease.
 export function createDriverPresence(deps: Dependencies) {
-  let enabled = false, version = 0, listing = '';
+  let enabled = false, version = 0, listing = '', failures = 0, lastAcknowledgedAt = 0;
   let flight: Promise<void> | null = null, stopping: Promise<void> | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const active = (epoch: number) => enabled && epoch === version && deps.foreground();
@@ -32,19 +32,26 @@ export function createDriverPresence(deps: Dependencies) {
         const position = await deps.capture();
         if (!active(epoch)) return;
         const payload = driverPresencePayload(listing, position);
-        await deps.publish(payload);
+        const receipt=await deps.publish(payload);
+        const acknowledged=receipt&&typeof receipt==='object'&&'acknowledgedAt' in receipt?Number(receipt.acknowledgedAt):Date.now();
+        lastAcknowledgedAt=Number.isFinite(acknowledged)?acknowledged:0;failures=0;
         if (active(epoch)) deps.state(true, 'Available nearby - location updated just now', 'online');
       } catch (error) {
         if (!active(epoch)) return;
-        enabled = false; version++; clear();
-        deps.state(false, `${error instanceof Error ? error.message : 'Availability could not update.'} You are offline on this device. Nearby visibility expires within two minutes if the connection is unavailable.`,'offline');
-        // PUT failures can be ambiguous. Clear the lease, without retrying PUT.
-        try {await deps.remove();} catch { /* Server TTL remains the fallback. */ }
+        const status=error&&typeof error==='object'&&'status' in error?Number(error.status):0;
+        const reason=error instanceof Error?error.message:'Location update could not complete.';
+        if([401,403,404].includes(status)){
+          enabled=false;version++;clear();deps.state(false,reason+' Nearby availability stopped.','offline');
+          try{await deps.remove();}catch{/* Existing server expiry is the fallback. */}
+        }else{
+          failures++;const fresh=lastAcknowledgedAt>0&&Date.now()-lastAcknowledgedAt<120000;
+          deps.state(fresh,reason+' Retrying automatically. Existing nearby visibility expires within two minutes without a confirmed update.',fresh?'online':'starting');
+        }
       }
     })();
     try {await flight;} finally {
       flight = null;
-      if (active(epoch)) timer = setTimeout(() => void tick(), 30000);
+      if (active(epoch)) timer = setTimeout(() => void tick(), failures?Math.min(30000,10000*failures):30000);
       else if (enabled && epoch === version) {enabled = false; version++; clear(); deps.state(false, 'Nearby visibility paused while the app is not active.', 'offline');}
     }
   }
@@ -67,7 +74,7 @@ export function createDriverPresence(deps: Dependencies) {
   return {
     start(id: string) {
       if (enabled || flight || stopping || cleanupByProvider.has(deps.sessionKey) || !deps.foreground()) return false;
-      listing = id; enabled = true; version++;
+      listing = id; enabled = true; failures=0;version++;
       deps.state(false, 'Finding your current location...', 'starting'); void tick(); return true;
     },
     stop,
