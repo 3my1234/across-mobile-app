@@ -9,7 +9,8 @@ type Entry={token:string;provider:string;online:boolean;pending:boolean;closed:b
 const entries=new Map<string,Entry>(),listeners=new Set<()=>void>();
 const changed=()=>listeners.forEach(listener=>listener());
 export function subscribeDriverPresence(listener:()=>void){listeners.add(listener);return()=>{listeners.delete(listener);};}
-export function driverPresenceSummary(token:string|null){return [...entries.values()].filter(entry=>entry.token===token).map(entry=>({...entry,online:entry.online&&entry.lastAcknowledgedAt>0&&Date.now()-entry.lastAcknowledgedAt<120000})).filter(entry=>entry.online||entry.pending);}
+export function driverPresenceStates(token:string|null){return [...entries.values()].filter(entry=>entry.token===token).map(entry=>({...entry,online:entry.online&&entry.lastAcknowledgedAt>0&&Date.now()-entry.lastAcknowledgedAt<120000}));}
+export function driverPresenceSummary(token:string|null){return driverPresenceStates(token).filter(entry=>entry.online||entry.pending);}
 export function providerAvailabilitySession(token:string,provider:string){
  const key=`${token}:${provider}`;let entry=entries.get(key);
  if(!entry||entry.closed){
