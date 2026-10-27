@@ -1,7 +1,8 @@
+import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {NativeServiceCategory} from './NativeServiceCategory';
 import {ProviderPanel} from './ProviderPanel';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, View} from 'react-native';
+import {ActivityIndicator, Alert, Linking, Pressable,  StyleSheet, Switch, View} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';

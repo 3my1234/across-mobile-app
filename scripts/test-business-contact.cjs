@@ -3,7 +3,7 @@ const compile=s=>ts.transpileModule(s,{compilerOptions:{module:ts.ModuleKind.Com
 async function main(){
  let cells=[],index=0,previous=[],cleanups=[],effects=[],requests=[];
  const React={useState:initial=>{const i=index++;if(!(i in cells))cells[i]=initial;return [cells[i],value=>{cells[i]=typeof value==='function'?value(cells[i]):value;}];},useRef:initial=>{const i=index++;return cells[i]||(cells[i]={current:initial});},useEffect:(fn,deps)=>{const i=index++;if(!previous[i]||deps.some((x,j)=>x!==previous[i][j])){cleanups[i]?.();previous[i]=deps;effects.push(()=>{cleanups[i]=fn();});}}};
- const context={exports:{},encodeURIComponent,require:name=>name==='react'?React:{providerRequest:(token,path)=>new Promise((resolve,reject)=>requests.push({token,path,resolve,reject}))}};
+ const context={exports:{},encodeURIComponent,require:name=>name==='./KeyboardScroll'?{KeyboardScrollView:'Scroll',KeyboardFlatList:'List'}:name==='react'?React:{providerRequest:(token,path)=>new Promise((resolve,reject)=>requests.push({token,path,resolve,reject}))}};
  vm.runInNewContext(compile(fs.readFileSync('components/useBusinessContact.ts','utf8')),context);
  const render=(token,id)=>{index=0;const out=context.exports.useBusinessContact(token,id);effects.splice(0).forEach(fn=>fn());return out;};
  const settle=()=>new Promise(resolve=>setImmediate(resolve));
@@ -17,9 +17,9 @@ async function main(){
  // Use the real guarded transport as well as the hook: the original regression
  // threw Unsupported provider operation before any HTTP request was sent.
  const businessID='11111111-1111-4111-8111-111111111111',wire=[];
- const transport={exports:{},require:name=>name==='./config'?{API_URL:'https://api.example.test'}:{fetchJSONWithTimeout:async(url,options)=>{wire.push({url,options});const actor=options.headers.Authorization;return {response:{ok:true,status:200},body:{own_business:actor==='Bearer real-owner',can_manage:actor==='Bearer real-owner'}};}}};
+ const transport={exports:{},require:name=>name==='./KeyboardScroll'?{KeyboardScrollView:'Scroll',KeyboardFlatList:'List'}:name==='./config'?{API_URL:'https://api.example.test'}:{fetchJSONWithTimeout:async(url,options)=>{wire.push({url,options});const actor=options.headers.Authorization;return {response:{ok:true,status:200},body:{own_business:actor==='Bearer real-owner',can_manage:actor==='Bearer real-owner'}};}}};
  vm.runInNewContext(compile(fs.readFileSync('components/nativeProviderApi.ts','utf8')),transport);
- const actual={exports:{},encodeURIComponent,require:name=>name==='react'?React:transport.exports};vm.runInNewContext(compile(fs.readFileSync('components/useBusinessContact.ts','utf8')),actual);
+ const actual={exports:{},encodeURIComponent,require:name=>name==='./KeyboardScroll'?{KeyboardScrollView:'Scroll',KeyboardFlatList:'List'}:name==='react'?React:transport.exports};vm.runInNewContext(compile(fs.readFileSync('components/useBusinessContact.ts','utf8')),actual);
  cleanups.forEach(fn=>fn?.());cells=[];previous=[];cleanups=[];effects=[];
  const actualRender=actor=>{index=0;const out=actual.exports.useBusinessContact(actor,businessID);effects.splice(0).forEach(fn=>fn());return out;};
  actualRender('real-customer');await settle();assert.equal(actualRender('real-customer').error,'');assert.equal(actualRender('real-customer').own,false);assert.equal(wire.length,1);assert.equal(wire[0].url,`https://api.example.test/api/v1/marketplace/providers/${businessID}/contact-access`);assert.equal(wire[0].options.headers.Authorization,'Bearer real-customer');assert.equal(wire[0].options.cache,'no-store');

@@ -1,7 +1,8 @@
+import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {ProviderPanel} from './ProviderPanel';
 import {ProviderPostImages} from './ProviderPostImages';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, ScrollView, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable,  View} from 'react-native';
 import * as Crypto from 'expo-crypto';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';

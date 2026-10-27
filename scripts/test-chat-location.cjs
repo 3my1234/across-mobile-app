@@ -2,7 +2,7 @@ const assert=require('node:assert/strict'),fs=require('fs'),ts=require('typescri
 const context={exports:{},Number};vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/chatLocation.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,context);
 const {validLocation,locationMapURL,locationDirectionsURL}=context.exports;
 for(const pin of [{latitude:91,longitude:0},{latitude:9,longitude:Infinity},{latitude:'9',longitude:7},null])assert.equal(validLocation(pin),false);
-assert.equal(locationMapURL({latitude:9.08,longitude:7.45}),'https://www.google.com/maps/search/?api=1&query=9.08,7.45');
+assert.equal(locationMapURL({latitude:9.08,longitude:7.45}),'https://www.google.com/maps/search/?api=1&query=9.08%2C7.45');
 assert.equal(locationMapURL({latitude:NaN,longitude:7}), '');
 assert.equal(locationDirectionsURL({latitude:9.08,longitude:7.45}),'https://www.google.com/maps/dir/?api=1&destination=9.08%2C7.45');
 assert.equal(locationDirectionsURL({latitude:91,longitude:7}), '');
@@ -10,8 +10,17 @@ const opened=[];const ui={exports:{},require:name=>name==='react'?{createElement
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/LocationPin.tsx','utf8'),{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,esModuleInterop:true}}).outputText,ui);
 const find=(tree,test)=>tree&&typeof tree==='object'&&(test(tree)?tree:tree.children?.map(n=>find(n,test)).find(Boolean));
 const text=tree=>typeof tree==='string'?tree:tree?.children?.map(text).join('')||'';
-const pin={latitude:9.08,longitude:7.45};const draft=ui.exports.LocationPin({pin,draft:true}),received=ui.exports.LocationPin({pin});
+const pin={latitude:9.08,longitude:7.45};const draft=ui.exports.LocationPin({pin,draft:true,capturedAt:Date.now(),source:'gps'}),received=ui.exports.LocationPin({pin});
 assert.match(text(draft),/Not sent yet. Tap Send/);assert.doesNotMatch(text(draft),/Shared location/);assert.equal(find(draft,n=>n.props.accessibilityLabel==='Get directions to shared location'),undefined);
 find(received,n=>n.props.accessibilityLabel==='Get directions to shared location').props.onPress();assert.equal(opened[0],locationDirectionsURL(pin));
 assert.match(text(received),/Shared location/);assert.equal(ui.exports.LocationPin({pin:null}),null);
 console.log('Chat location checks passed: bounded numeric coordinates and generated static map links.');
+
+const saved=JSON.parse(JSON.stringify(pin));
+for(const _movedPhone of [{latitude:9.2,longitude:7.6},{latitude:9.5,longitude:7.9}]){
+ const card=ui.exports.LocationPin({pin:JSON.parse(JSON.stringify(saved))});
+ find(card,n=>n.props.accessibilityLabel==='Open shared location in maps').props.onPress();assert.equal(new URL(opened.at(-1)).searchParams.get('query'),'9.08,7.45');
+ find(card,n=>n.props.accessibilityLabel==='Get directions to shared location').props.onPress();assert.equal(new URL(opened.at(-1)).searchParams.get('destination'),'9.08,7.45');
+ assert.deepEqual(pin,saved);
+}
+assert.match(text(received),/stays fixed/);

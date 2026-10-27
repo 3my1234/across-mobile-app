@@ -1,3 +1,4 @@
+import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {refreshAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {DriverPresenceNotice} from './DriverPresenceNotice';
 import {NativeProviderPromotions} from './NativeProviderPromotions';
@@ -7,7 +8,7 @@ import {LOGO} from './config';
 import {NativeReferrals} from './NativeReferrals';
 import {NativeProviderNotifications} from './NativeProviderNotifications';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, View} from 'react-native';
+import {ActivityIndicator, Image, Modal, Pressable, RefreshControl,  StyleSheet, View} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';

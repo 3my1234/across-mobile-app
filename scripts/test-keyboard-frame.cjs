@@ -22,6 +22,8 @@ listeners.keyboardDidHide({});assert.equal(padding(),0);
 assert.equal(render({bottomInset:24}).children[0].props.style[0].paddingBottom,24,"product chat reserves native navigation area");
 listeners.keyboardDidShow({endCoordinates:keyboard});render();assert.equal(padding(),80);
 assert.equal(render({bottomInset:24}).children[0].props.style[0].paddingBottom,80,"keyboard overlap replaces rather than doubles safe-area spacing");
+listeners.keyboardDidChangeFrame({endCoordinates:{...keyboard,screenY:450,height:350}});assert.equal(padding(),130,'keyboard height changes remeasure without another focus');
+listeners.keyboardDidChangeFrame({endCoordinates:{...keyboard,height:0}});render({bottomInset:24});assert.equal(render({bottomInset:24}).children[0].props.style[0].paddingBottom,24,'hardware keyboard/frame hide restores safe area');
 render({enabled:false});assert.equal(render({enabled:false}).children[0].props.style[0].paddingBottom,0);
 for(const slot of slots)slot?.cleanup?.();assert.equal(Object.keys(listeners).length,0);
 slots=[];effects=[];RN.Platform.OS='ios';RN.Keyboard.scheduleLayoutAnimation=()=>{};

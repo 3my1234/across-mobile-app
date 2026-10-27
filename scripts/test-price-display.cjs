@@ -2,7 +2,7 @@ const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript
 const compile = code => ts.transpileModule(code, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React, esModuleInterop: true}}).outputText;
 const utils = {exports: {}, Intl, URL, require: () => ({API_URL: 'https://api.example.test'})}; vm.runInNewContext(compile(fs.readFileSync('components/utils.ts', 'utf8')), utils);
 const react = {createElement: (type, props, ...children) => ({type, props: props || {}, children: children.flat(Infinity)})};
-const context = {exports: {}, require: name => {
+const context = {exports: {}, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};
   if (name === 'react') return react;
   if (name === 'react-native') return {View: 'View', Pressable: 'Button', StyleSheet: {create: value => value}};
   if (name === './ThemeProvider') return {ThemedText: 'Text', useTheme: () => ({color: value => value}), useThemedStyles: value => value};

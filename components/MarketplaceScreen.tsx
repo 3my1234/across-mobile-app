@@ -1,3 +1,4 @@
+import {KeyboardScrollView as ScrollView,KeyboardFlatList as FlatList} from './KeyboardScroll';
 import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
 import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
@@ -17,12 +18,12 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {ActivityIndicator,
   AppState,
   Alert,
-  FlatList,
+
   Linking,
   Platform,
   Pressable,
   RefreshControl,
-  ScrollView,
+
   StyleSheet,
 
 

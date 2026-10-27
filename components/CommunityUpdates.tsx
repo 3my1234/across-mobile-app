@@ -1,5 +1,6 @@
+import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { Alert, Image, Pressable,  StyleSheet, Switch, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as Crypto from "expo-crypto";
 import { ThemedText as Text, ThemedTextInput as TextInput, useThemedStyles } from "./ThemeProvider";

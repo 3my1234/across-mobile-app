@@ -1,3 +1,4 @@
+import {KeyboardScrollView as ScrollView} from './components/KeyboardScroll';
 import {DriverPresenceNotice,useDriverPresenceLifecycle} from './components/DriverPresenceNotice';
 import {DiscoverySections} from './components/DiscoverySections';
 import {AccountDeletionRequest} from './components/AccountDeletionRequest';
@@ -33,7 +34,7 @@ import * as Location from "expo-location";
 import Constants from "expo-constants";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import {ActivityIndicator, Alert, Animated, AppState, Dimensions, Image,
-  findNodeHandle, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView,
+  findNodeHandle, Keyboard, Modal, Platform, Pressable, RefreshControl,
    type TextInput as NativeTextInput, Switch, View} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";

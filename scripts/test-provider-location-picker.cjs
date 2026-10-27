@@ -5,7 +5,7 @@ const react={createElement:(type,props,...children)=>({type,props:props||{},chil
  useState:value=>{const i=index++;if(!(i in hooks))hooks[i]=typeof value==='function'?value():value;return [hooks[i],next=>{hooks[i]=typeof next==='function'?next(hooks[i]):next;changed=true;}];},
  useRef:value=>{const i=index++;return hooks[i]||(hooks[i]={current:value});},
  useEffect:(fn,deps)=>{const i=index++;if(!hooks[i]||!same(hooks[i].deps,deps)){const previous=hooks[i];hooks[i]={deps};effects.push(()=>{previous?.cleanup?.();hooks[i].cleanup=fn();});}}};
-const context={exports:{},Number,setTimeout:()=>1,clearTimeout:()=>{},require:name=>{
+const context={exports:{},Number,setTimeout:()=>1,clearTimeout:()=>{},require:name=>{if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};if(name==='./KeyboardFrame')return {KeyboardFrame:'Frame'};
  if(name==='react')return react;
  if(name==='react-native')return {ActivityIndicator:'Spinner',Keyboard:{dismiss(){}},Modal:'Modal',Pressable:'Button',ScrollView:'Scroll',View:'View',StyleSheet:{create:x=>x}};
  if(name==='@maplibre/maplibre-react-native')return {MapView:'Map',Camera:'Camera',PointAnnotation:'Pin'};

@@ -16,7 +16,7 @@ const request = async (token, path, options = {}) => {
   if (options.method === 'PATCH') {if (held) await held.promise; if (fail) throw Error('Request status changed'); status = JSON.parse(options.body).status; return {};}
   return {items: [{id: '33333333-3333-4333-8333-333333333333', status, listing_title: 'Synthetic repair', request_type: 'appointment', party_size: 1, buyer: {full_name: 'Test buyer'}}], next_cursor: ''};
 };
-const context = {exports: {}, URLSearchParams, require: name => {
+const context = {exports: {}, URLSearchParams, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};
  if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
   if (name === 'react') return react;
   if (name === 'react-native') return {ActivityIndicator: 'Spinner', Alert: {alert: (...args) => {alert = args;}}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'ScrollView', View: 'View'};
