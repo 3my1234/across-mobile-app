@@ -10,7 +10,7 @@ const attempts=compile(fs.readFileSync('components/authAttempts.ts','utf8')).exp
 const retry=compile(fs.readFileSync('components/loginOverload.ts','utf8')).exports;
 const app=ts.createSourceFile('App.tsx',fs.readFileSync('App.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
 function find(file,name){let found;function walk(node){if(ts.isFunctionDeclaration(node)&&node.name?.text===name)found=node;ts.forEachChild(node,walk);}walk(file);assert.ok(found,name);return found.getText(file);}
-const names=['authenticate','cancelPasswordLogin','saveSession','readResponseBody','formatHttpError','authenticateWithGoogle'];
+const names=['authenticate','cancelPasswordLogin','saveSession','readResponseBody','formatHttpError','authenticateWithGoogle','finishPrivyLogin'];
 const handlers=names.map(name=>find(app,name)).join('\n')+'\nexports.handlers={'+names.join(',')+'};';
 const future=()=>Math.floor(Date.now()/1000)+3600;
 const response=(status,body={},headers={})=>({status,ok:status>=200&&status<300,headers:{get:name=>headers[name]??null},text:async()=>JSON.stringify(body)});
@@ -24,7 +24,7 @@ function fixture(fetch){
  const context=compile(handlers,{
   ...retry,loginWithOverloadRetry:(send,signal,notice)=>retry.loginWithOverloadRetry(send,signal,wait=>{waits.push(wait);notice(wait);},clock),
   authAttempts:{current:attempts.createAuthAttempts()},sessionPersistence:{current:persistence},passwordAttempt:{current:false},
-  googleAttempt:{current:null},logoutInProgress:{current:false},busy:false,oauthBusy:false,googleSessionClearing:false,
+  googleAttempt:{current:null},googleVerificationInFlight:{current:null},getPrivyAccessTokenWithRetry:async()=> 'synthetic-oauth',referralCode:'',privyLogout:async()=>{},logoutInProgress:{current:false},busy:false,oauthBusy:false,googleSessionClearing:false,
   workspaceIntent:'customer',catalogCountry:'NG',API_URL:'https://synthetic.invalid',PRIVY_APP_ID:'synthetic',privyReady:true,privyUser:null,
   googleWorkspaceIntent:{current:'auto'},authMode:'signin',loginWithOAuth:async()=>{oauthCalls++;},
   setBusy:()=>{},setOauthBusy:()=>{},setWorkspaceIntent:()=>{},setAuthMode:()=>{},setLoginNotice:value=>notices.push(value),
@@ -68,6 +68,12 @@ async function screenChecks(){
   if(event==='background'){change('inactive');assert.equal(lifecycle.context.authAttempts.current.pending,true);change('background');}else cleanup();
   await request;assert.deepEqual(lifecycle.opened,[]);assert.deepEqual(lifecycle.stores,{});
  }
+ let oldGoogleResponse;const staleGoogle=fixture(async()=>response(200,{access_token:'new-password-account',expires_at:future()}));
+ staleGoogle.context.fetchWithTimeout=()=>new Promise(resolve=>oldGoogleResponse=resolve);
+ staleGoogle.context.googleAttempt.current=staleGoogle.context.authAttempts.current.begin();
+ const oldGoogle=staleGoogle.handlers.finishPrivyLogin();await flush();staleGoogle.context.authAttempts.current.cancel();
+ await staleGoogle.handlers.authenticate('/api/v1/auth/login',credentials);oldGoogleResponse(response(200,{access_token:'old-google-account',expires_at:future()}));await oldGoogle;
+ assert.deepEqual(staleGoogle.opened,['new-password-account']);assert.equal(staleGoogle.stores.token,'new-password-account');
  const invalid=fixture(async()=>response(200,{access_token:'',expires_at:future()}));await invalid.handlers.authenticate('/api/v1/auth/login',credentials);assert.deepEqual(invalid.opened,[]);assert.deepEqual(invalid.stores,{});
  await screenChecks();
  console.log('Actual login handler/screen integration passed: rapid taps, competing signup/OAuth, stable credentials across503retry, signup/401single-shot behavior, stale replies, cancellation during storage, invalid sessions, accessible busy feedback and usable cancel/back controls.');
