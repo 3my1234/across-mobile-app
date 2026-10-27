@@ -1,9 +1,9 @@
+import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {NativeServiceCategory} from './NativeServiceCategory';
 import {ProviderPanel} from './ProviderPanel';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Linking, Pressable,  StyleSheet, Switch, View} from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
@@ -81,8 +81,7 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
   const addMedia = (video = false) => void run(async () => {
     const limits: PostPolicy = await providerRequest(token, '/providers/me/post-policy');
     if (video ? videos.length >= limits.max_videos : images.length >= limits.max_images) throw new Error(video ? 'Your plan does not allow more videos. Remove a video or upgrade.' : 'Your image limit is reached. Remove an image or upgrade.');
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted) throw new Error('Allow photo/video access in your phone settings to choose media.');
-    const result = await ImagePicker.launchImageLibraryAsync({mediaTypes: video ? ['videos'] : ['images'], quality: 1, allowsEditing: false}); if (result.canceled) return;
+    const result = await chooseLibraryMedia({mediaTypes: video ? ['videos'] : ['images'], quality: 1, allowsEditing: false}); if (result.canceled) return;
     const asset = result.assets[0], mime = asset.mimeType || '';
     if (video) {
       if (mime !== 'video/mp4' || !asset.duration || asset.duration > limits.max_video_seconds * 1000 || !asset.fileSize || asset.fileSize > 50 * 1024 * 1024) throw new Error('Choose an MP4 up to 50 MB, with each video no longer than 60 seconds.');

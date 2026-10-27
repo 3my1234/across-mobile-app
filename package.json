@@ -22,7 +22,9 @@
     "ios": "expo run:ios",
     "test:theme": "node scripts/test-theme.cjs",
     "check:provider-staging": "node scripts/check-provider-staging.cjs",
-    "eas-build-pre-install": "node scripts/check-release-distribution.cjs"
+    "eas-build-pre-install": "node scripts/check-release-distribution.cjs",
+    "test:media-promotions": "node scripts/test-media-library-picker.cjs && node scripts/test-promoted-carousel.cjs",
+    "test:google-auth": "node scripts/test-google-session-request.cjs && node scripts/test-login-screen-integration.cjs && node scripts/test-auth-workspace.cjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",

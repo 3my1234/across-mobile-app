@@ -1,3 +1,5 @@
+import {googleSessionRequest} from './components/googleSessionRequest';
+import {chooseLibraryMedia} from './components/mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './components/KeyboardScroll';
 import {DriverPresenceNotice,useDriverPresenceLifecycle} from './components/DriverPresenceNotice';
 import {DiscoverySections} from './components/DiscoverySections';
@@ -30,7 +32,6 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 import Constants from "expo-constants";
@@ -148,7 +149,7 @@ function AcrossApp() {
   const winWidth = Dimensions.get("window").width;
   const homeColumns = winWidth < 390 ? 2 : 3;
   const { user: privyUser, isReady: privyReady, getAccessToken, logout: privyLogout } = usePrivy();
-  const { login: loginWithOAuth, state: oauthState } = useLoginWithOAuth();
+  const { login: loginWithOAuth } = useLoginWithOAuth();
   const [stage, setStage] = useState<AppStage>("booting");
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
   const [referralCode,setReferralCode] = useState("");
@@ -568,13 +569,7 @@ function AcrossApp() {
     return () => clearTimeout(timer);
   }, [stage, token, workspaceEntryToken, providerWorkspaceVisible, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
 
-  useEffect(() => {
-    if (!oauthState) return;
-    if (oauthState.status === "error") {
-      setOauthBusy(false); setBusy(false);
-      Alert.alert("Sign-in failed", (oauthState as any)?.error?.message || (oauthState as any)?.error || "Google sign-in failed");
-    }
-  }, [oauthState]);
+
 
   useEffect(() => {
     if (stage !== "app" || !token || locationBootstrapTokenRef.current === token) return;
@@ -1276,7 +1271,9 @@ function AcrossApp() {
       if (!attempt.current()) return;
       const msg = e?.message || "";
       if (msg.toLowerCase().includes("already logged in") && privyUser) { await finishPrivyLogin(); return; }
-      setOauthBusy(false); attempt.finish(); googleAttempt.current = null; Alert.alert("Sign-in failed", msg || "Please try again");
+      setOauthBusy(false); attempt.finish(); googleAttempt.current = null;
+      if (e?.code === 'login_with_oauth_was_cancelled_by_user') return;
+      Alert.alert("Google sign-in failed", msg || "Check your connection, then try again.");
     }
   }
 
@@ -1285,6 +1282,7 @@ function AcrossApp() {
     if (!attempt?.current() || googleVerificationInFlight.current === attempt) return;
     googleVerificationInFlight.current = attempt;
     const intent = googleWorkspaceIntent.current;
+    let invalidGoogleSession = false;
     setBusy(true);
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
@@ -1292,17 +1290,23 @@ function AcrossApp() {
       if (!privyToken) throw new Error("Could not get access token");
       await validateSignupReferral(referralCode);
       if (!attempt.current()) return;
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) });
-      const d = await readResponseBody(r);
+      const {response:r,body:d} = await googleSessionRequest(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) }, attempt.signal);
+      invalidGoogleSession = r.status === 401 || r.status === 403;
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
       if (!attempt.current()) return;
       const saved = await saveSession(d, attempt.current); if (saved && attempt.current()) { setWorkspaceIntent(intent); setOauthBusy(false); }
     } catch (e) {
       if (!attempt.current()) return;
       setOauthBusy(false);
-      await privyLogout().catch(() => undefined);
+      // Preserve a completed Google login after temporary exchange/network
+      // failures. A manual retry can finish the handoff without another browser
+      // flow. Only rejected credentials require clearing the Google session.
+      if (invalidGoogleSession) {
+        setGoogleSessionClearing(true);
+        try {await privyLogout();} catch {if (attempt.current()) setGoogleSessionClearing(false);}
+      }
       if (!attempt.current()) return;
-      Alert.alert("Sign-in failed", e instanceof Error ? e.message : "");
+      Alert.alert("Google sign-in could not finish", e instanceof Error ? e.message : "Check your connection, then try again.");
     } finally { if (googleVerificationInFlight.current === attempt) googleVerificationInFlight.current = null; if (attempt.current()) { googleWorkspaceIntent.current = 'auto'; setBusy(false); googleAttempt.current = null; } attempt.finish(); }
   }
 
@@ -1935,9 +1939,7 @@ function AcrossApp() {
 
   async function pickAvatar() {
     if (!token) { Alert.alert("Session expired", "Please sign in again."); return; }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert("Permission needed", "Allow access to your photo library."); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    const result = await chooseLibraryMedia({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (result.canceled || !result.assets[0]) return;
 
     const asset = result.assets[0];

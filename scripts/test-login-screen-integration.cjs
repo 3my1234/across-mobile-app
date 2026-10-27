@@ -24,7 +24,7 @@ function fixture(fetch){
  const context=compile(handlers,{
   ...retry,loginWithOverloadRetry:(send,signal,notice)=>retry.loginWithOverloadRetry(send,signal,wait=>{waits.push(wait);notice(wait);},clock),
   authAttempts:{current:attempts.createAuthAttempts()},sessionPersistence:{current:persistence},passwordAttempt:{current:false},
-  googleAttempt:{current:null},googleVerificationInFlight:{current:null},getPrivyAccessTokenWithRetry:async()=> 'synthetic-oauth',referralCode:'',privyLogout:async()=>{},logoutInProgress:{current:false},busy:false,oauthBusy:false,googleSessionClearing:false,
+  googleAttempt:{current:null},googleVerificationInFlight:{current:null},getPrivyAccessTokenWithRetry:async()=> 'synthetic-oauth',referralCode:'',privyLogout:async()=>{},setGoogleSessionClearing:()=>{},logoutInProgress:{current:false},busy:false,oauthBusy:false,googleSessionClearing:false,
   workspaceIntent:'customer',catalogCountry:'NG',API_URL:'https://synthetic.invalid',PRIVY_APP_ID:'synthetic',privyReady:true,privyUser:null,
   googleWorkspaceIntent:{current:'auto'},authMode:'signin',loginWithOAuth:async()=>{oauthCalls++;},
   setBusy:()=>{},setOauthBusy:()=>{},setWorkspaceIntent:()=>{},setAuthMode:()=>{},setLoginNotice:value=>notices.push(value),
@@ -69,12 +69,27 @@ async function screenChecks(){
   await request;assert.deepEqual(lifecycle.opened,[]);assert.deepEqual(lifecycle.stores,{});
  }
  let oldGoogleResponse;const staleGoogle=fixture(async()=>response(200,{access_token:'new-password-account',expires_at:future()}));
- staleGoogle.context.fetchWithTimeout=()=>new Promise(resolve=>oldGoogleResponse=resolve);
+ staleGoogle.context.googleSessionRequest=()=>new Promise(resolve=>oldGoogleResponse=resolve);
  staleGoogle.context.googleAttempt.current=staleGoogle.context.authAttempts.current.begin();
  const oldGoogle=staleGoogle.handlers.finishPrivyLogin();await flush();staleGoogle.context.authAttempts.current.cancel();
- await staleGoogle.handlers.authenticate('/api/v1/auth/login',credentials);oldGoogleResponse(response(200,{access_token:'old-google-account',expires_at:future()}));await oldGoogle;
+ await staleGoogle.handlers.authenticate('/api/v1/auth/login',credentials);oldGoogleResponse({response:response(200),body:{access_token:'old-google-account',expires_at:future()}});await oldGoogle;
  assert.deepEqual(staleGoogle.opened,['new-password-account']);assert.equal(staleGoogle.stores.token,'new-password-account');
  const invalid=fixture(async()=>response(200,{access_token:'',expires_at:future()}));await invalid.handlers.authenticate('/api/v1/auth/login',credentials);assert.deepEqual(invalid.opened,[]);assert.deepEqual(invalid.stores,{});
+ // An already completed Google login survives a temporary backend failure.
+ const googleRetry=fixture(async()=>response(200));let exchanges=0,logouts=0,clearing=0;
+ googleRetry.context.privyUser={id:'synthetic-identity'};
+ googleRetry.context.privyLogout=async()=>{logouts++;};googleRetry.context.setGoogleSessionClearing=()=>{clearing++;};
+ googleRetry.context.googleSessionRequest=async()=>{exchanges++;return exchanges===1?{response:response(503),body:{message:'Temporarily busy'}}:{response:response(200),body:{access_token:'google-recovered',expires_at:future()}};};
+ await googleRetry.handlers.authenticateWithGoogle();assert.equal(exchanges,1);assert.equal(logouts,0);assert.equal(googleRetry.context.authAttempts.current.pending,false);assert.deepEqual(googleRetry.opened,[]);
+ await googleRetry.handlers.authenticateWithGoogle();assert.equal(exchanges,2);assert.equal(googleRetry.oauthCalls(),0);assert.deepEqual(googleRetry.opened,['google-recovered']);assert.equal(logouts,0);
+ for(const status of [401,403]){
+  const rejected=fixture(async()=>response(200));let cleared=0;rejected.context.privyUser={id:'synthetic-identity'};rejected.context.setGoogleSessionClearing=()=>{cleared++;};rejected.context.privyLogout=async()=>{logouts++;};
+  rejected.context.googleSessionRequest=async()=>({response:response(status),body:{message:'Rejected'}});
+  await rejected.handlers.authenticateWithGoogle();assert.equal(cleared,1);assert.deepEqual(rejected.opened,[]);assert.equal(rejected.context.authAttempts.current.pending,false);
+ }
+ const browserCancelled=fixture(async()=>response(200));browserCancelled.context.loginWithOAuth=async()=>{throw Object.assign(Error('Cancelled'),{code:'login_with_oauth_was_cancelled_by_user'});};
+ await browserCancelled.handlers.authenticateWithGoogle();assert.equal(browserCancelled.alerts.length,0);assert.equal(browserCancelled.context.authAttempts.current.pending,false);
+ assert.ok(!fs.readFileSync('App.tsx','utf8').includes('if (oauthState.status === "error")'),'one attempt-owned OAuth error path, no duplicate unowned SDK-state alert');
  await screenChecks();
  console.log('Actual login handler/screen integration passed: rapid taps, competing signup/OAuth, stable credentials across503retry, signup/401single-shot behavior, stale replies, cancellation during storage, invalid sessions, accessible busy feedback and usable cancel/back controls.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

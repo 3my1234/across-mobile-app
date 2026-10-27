@@ -1,3 +1,4 @@
+import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
@@ -13,7 +14,6 @@ import {ActivityIndicator, Alert, Image, ImageBackground,
   RefreshControl, SafeAreaView,  Share, StyleSheet,  type TextInput as NativeTextInput, View, useWindowDimensions} from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
-import * as ImagePicker from "expo-image-picker";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthMode, Product, Review, ReviewSummary } from "./types";
 import { API_URL, LOGO, FALLBACK_IMAGES } from "./config";
@@ -406,9 +406,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
 
   async function pickReviewImage() {
     if (!token || reviewImages.length >= 4) return;
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) { Alert.alert("Permission needed"); return; }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8 });
+    const res = await chooseLibraryMedia({ mediaTypes: ["images"], quality: 0.8 });
     if (res.canceled || !res.assets[0]) return;
     setReviewBusy(true);
     try {
