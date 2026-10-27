@@ -82,6 +82,8 @@ interface AuthProps {
   googleTimedOut: boolean;
   googleBusy: boolean;
   noticeText?: string;
+  loginNotice?: string;
+  onCancelLogin?: () => void;
   onModeChange: (m: AuthMode) => void;
   onSubmit: (p: string, b: Record<string, string>) => Promise<void>;
   onResend: (email: string) => Promise<void>;
@@ -89,7 +91,7 @@ interface AuthProps {
   onGoogle: () => Promise<void>;
 }
 
-export function AuthScreen({ referralCode = "", onReferralCode = () => {}, workspaceIntent, onWorkspaceIntent, mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
+export function AuthScreen({ referralCode = "", onReferralCode = () => {}, workspaceIntent, onWorkspaceIntent, mode, countryCode, buyerMarkets, onCountryChange, busy, googleReady, googleTimedOut, googleBusy, noticeText, loginNotice, onCancelLogin, onModeChange, onSubmit, onResend, onForgotPassword, onGoogle }: AuthProps) {
   const theme = useTheme();
   const s = useThemedStyles(sharedStyles);
   const authInsets = useSafeAreaInsets();
@@ -161,9 +163,9 @@ export function AuthScreen({ referralCode = "", onReferralCode = () => {}, works
                 <Pressable
                   style={[s.gmailButton, googleBusy && s.disabled]}
                   onPress={onGoogle}
-                  disabled={googleBusy}
+                  disabled={googleBusy || busy}
                   accessibilityLabel={googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Google sign-in is loading"}
-                  accessibilityState={{ disabled: googleBusy, busy: (!googleReady && !googleTimedOut) || googleBusy }}
+                  accessibilityState={{ disabled: googleBusy || busy, busy: (!googleReady && !googleTimedOut) || googleBusy }}
                 >
                   {(!googleReady && !googleTimedOut) || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name={googleReady ? "logo-google" : "refresh"} size={18} color={theme.color("#101817")} />}
                   <Text style={s.gmailButtonText}>{googleBusy ? "Opening Google…" : googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Connecting Google sign-in…"}</Text>
@@ -185,23 +187,25 @@ export function AuthScreen({ referralCode = "", onReferralCode = () => {}, works
               <View style={s.authPanel}>
                 <Text style={s.authTitle}>{title}</Text>
                 <Text style={s.authFormCopy}>{mode === "signin" ? "Sign in with your existing customer or provider account. Your workspace opens automatically." : "How would you like to use Atlantic Express? You can use both experiences with one account."}</Text>
-                {mode === 'signup' && <View style={{gap: 10, marginBottom: 16}}>{([['customer', 'Customer', 'Shop products, book services and create Town Hall requests.'], ['provider', 'Provider', 'Sell products, offer services and manage your business.']] as const).map(([value, label, copy]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{checked: workspaceIntent === value, disabled: busy}} disabled={busy} onPress={() => onWorkspaceIntent(value)} style={[s.secondaryButton, {alignItems: 'flex-start', borderColor: theme.color(workspaceIntent === value ? COLORS.primary : '#D0D5DD', 'borderColor'), borderWidth: workspaceIntent === value ? 2 : 1}]}><Text style={s.secondaryButtonText}>{label}{workspaceIntent === value ? ' - selected' : ''}</Text><Text style={s.authFormCopy}>{copy}</Text></Pressable>)}</View>}
+                {mode === 'signup' && <View style={{gap: 10, marginBottom: 16}}>{([['customer', 'Customer', 'Shop products, book services and create Town Hall requests.'], ['provider', 'Provider', 'Sell products, offer services and manage your business.']] as const).map(([value, label, copy]) => <Pressable key={value} accessibilityRole="radio" accessibilityState={{checked: workspaceIntent === value, disabled: busy}} disabled={busy || googleBusy} onPress={() => onWorkspaceIntent(value)} style={[s.secondaryButton, {alignItems: 'flex-start', borderColor: theme.color(workspaceIntent === value ? COLORS.primary : '#D0D5DD', 'borderColor'), borderWidth: workspaceIntent === value ? 2 : 1}]}><Text style={s.secondaryButtonText}>{label}{workspaceIntent === value ? ' - selected' : ''}</Text><Text style={s.authFormCopy}>{copy}</Text></Pressable>)}</View>}
                 {(mode !== 'signup' || workspaceIntent !== 'auto') && <>
                 {mode === 'signup' && <Text style={s.authFormCopy}>One account for shopping and business. Continue with Google or register below with email and password. Provider approval still requires your business details and documents.</Text>}
                 {mode === 'signup' && workspaceIntent !== 'auto' && <Pressable accessibilityRole="button" disabled={busy || googleBusy || !googleReady} onPress={onGoogle} style={s.gmailButton}><Text style={s.gmailButtonText}>{googleBusy ? 'Opening Google…' : 'Sign in with Google'}</Text></Pressable>}
                 {mode === "signup" && !!noticeText && <Text style={s.authFormCopy}>{noticeText}</Text>}
                 {mode === "signup" && <><Text style={s.authFormCopy}>{workspaceIntent === "provider" ? "Your country" : "Delivery country and checkout currency"}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>{buyerMarkets.map(market => <Pressable key={market.country_code} onPress={() => onCountryChange(market.country_code)} style={[s.secondaryButton, { marginRight: 8, borderColor: theme.color(countryCode === market.country_code ? COLORS.primary : "#D0D5DD", "borderColor") }]}><Text style={s.secondaryButtonText}>{market.country_code} · {market.currency_code}</Text></Pressable>)}</ScrollView></>}
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
-                <TextInput value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
+                <TextInput editable={!busy && !googleBusy} value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
                 {mode === "signup" && <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={12} style={s.input}/>}
-                <View style={s.passwordWrap}><TextInput value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" autoCapitalize="none" autoCorrect={false} secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable accessibilityRole="button" accessibilityLabel={showPassword?'Hide password':'Show password'} style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
+                <View style={s.passwordWrap}><TextInput editable={!busy && !googleBusy} value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" autoCapitalize="none" autoCorrect={false} secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable accessibilityRole="button" accessibilityLabel={showPassword?'Hide password':'Show password'} style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
                 {mode==='signup'&&<Text style={s.authFormCopy}>At least 8 characters, with uppercase, lowercase and a special character such as !@#$.</Text>}
-                <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
-                {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
-                {mode === "signin" && <Pressable style={s.textButton} disabled={busy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
+                {mode === 'signin' && !!loginNotice && <Text accessibilityLiveRegion="polite" style={s.authFormCopy}>{loginNotice}</Text>}
+                <Pressable style={[s.primaryButton, busy && s.disabled]} disabled={busy || googleBusy} onPress={submit}><Text style={s.primaryButtonText}>{busy ? "Please wait..." : mode === "signin" ? "Sign In" : "Continue"}</Text></Pressable>
+                {mode === 'signin' && busy && !!loginNotice && <Pressable accessibilityRole="button" accessibilityLabel="Cancel sign-in" onPress={onCancelLogin} style={s.textButton}><Text style={s.textButtonText}>Cancel sign-in</Text></Pressable>}
+                {mode === "signin" && <Pressable style={s.textButton} disabled={busy || googleBusy} onPress={() => onForgotPassword(email)}><Text style={s.textButtonText}>Forgot password?</Text></Pressable>}
+                {mode === "signin" && <Pressable style={s.textButton} disabled={busy || googleBusy} onPress={() => onResend(email)}><Text style={s.textButtonText}>Resend verification email</Text></Pressable>}
                 </>}
-                <Pressable style={s.textButton} onPress={() => onModeChange("welcome")}><Text style={s.textButtonText}>Back</Text></Pressable>
+                <Pressable disabled={(busy || googleBusy) && !loginNotice} style={s.textButton} onPress={() => onModeChange("welcome")}><Text style={s.textButtonText}>Back</Text></Pressable>
               </View>
             )}
           </ScrollView>

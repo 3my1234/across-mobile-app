@@ -1,5 +1,7 @@
 # Proposed mobile handling of temporary login overload
 
+Historical proposal at prototype commit `8d4f162`. The subsequent approved integration and its remaining device checks are documented in [the integration result](LOGIN_OVERLOAD_INTEGRATION_RESULTS_2026-10-27.md).
+
 Status: **review proposal and isolated transport prototype; not integrated, merged, built or released**. Branch `experiment/login-overload-proposal`, based on mobile `3fd8df706d79e5b479266423cb6d155299cc2edb`. No application entry point imports the prototype. Existing sign-in behavior is unchanged.
 
 ## Problem and evidence
