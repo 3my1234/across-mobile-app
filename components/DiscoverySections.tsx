@@ -17,8 +17,13 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
  const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
  const tileWidth=Math.round(Math.max(88,Math.min(112,(screen.width-48)/3))),bannerHeight=Math.round(tileWidth*.56),stride=tileWidth+12;
  const row=useRef<View|null>(null),scroll=useRef<ScrollView|null>(null),viewport=useRef({width:screen.width,content:0,x:0}),interaction=useRef({touching:false,until:0});
- const [paused,setPaused]=useState(false),[dot,setDot]=useState(0);
- const dotCount=Math.min(7,cards.length);
+ const [paused,setPaused]=useState(false),[position,setPosition]=useState({count:1,index:0});
+ const updatePosition=()=>{
+  const metrics=viewport.current,max=Math.max(0,metrics.content-metrics.width),page=Math.max(1,Math.floor((metrics.width-24)/stride))*stride;
+  const count=max>1?Math.ceil(max/page)+1:1,index=max<=1?0:metrics.x>=max-1?count-1:Math.max(0,Math.min(count-1,Math.round(metrics.x/page)));
+  setPosition(previous=>previous.count===count&&previous.index===index?previous:{count,index});
+ };
+ const dotCount=Math.min(7,position.count),dot=position.count>1?Math.round(position.index/(position.count-1)*(dotCount-1)):0;
  const touchEnd=()=>{interaction.current={touching:false,until:Date.now()+6000};};
  useEffect(()=>{
   if(!active){entered.current.clear();return;}
@@ -48,7 +53,7 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
  if(!cards.length)return null;
  return <View ref={row} collapsable={false} style={{paddingVertical:compact?8:12,gap:8}}>
   <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:12}}><Text style={{fontSize:compact?15:18,fontWeight:'700',flex:1}}>{title}</Text>{compact&&cards.length>1&&<Pressable accessibilityRole="button" accessibilityLabel={paused?'Resume promoted rotation':'Pause promoted rotation'} onPress={()=>setPaused(value=>!value)} style={{padding:8,minHeight:44}}><Text style={{fontSize:12,color:c.accent}}>{paused?'Play':'Pause'}</Text></Pressable>}</View>
-  <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}} snapToInterval={compact?stride:undefined} decelerationRate={compact?'fast':'normal'} scrollEventThrottle={100} onLayout={event=>{viewport.current.width=event.nativeEvent.layout.width;}} onContentSizeChange={width=>{viewport.current.content=width;}} onScroll={event=>{const x=event.nativeEvent.contentOffset.x;viewport.current.x=x;const max=viewport.current.content-viewport.current.width;setDot(max>0?Math.max(0,Math.min(dotCount-1,Math.round(x/max*(dotCount-1)))):0);}} onTouchStart={()=>{interaction.current.touching=true;}} onTouchEnd={touchEnd} onTouchCancel={touchEnd} onScrollBeginDrag={()=>{interaction.current.touching=true;}} onScrollEndDrag={touchEnd}>
+  <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}} snapToInterval={compact?stride:undefined} decelerationRate={compact?'fast':'normal'} scrollEventThrottle={100} onLayout={event=>{viewport.current.width=event.nativeEvent.layout.width;updatePosition();}} onContentSizeChange={width=>{viewport.current.content=width;updatePosition();}} onScroll={event=>{viewport.current.x=event.nativeEvent.contentOffset.x;updatePosition();}} onTouchStart={()=>{interaction.current.touching=true;}} onTouchEnd={touchEnd} onTouchCancel={touchEnd} onScrollBeginDrag={()=>{interaction.current.touching=true;}} onScrollEndDrag={touchEnd}>
    {cards.map(card=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:compact?0:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:compact?'transparent':c.surface}}>
     <Pressable accessibilityRole="button" accessibilityLabel={`${compact?'Promoted: ':''}${card.title}`} onPress={()=>onOpen(card)}>
      <View style={compact?{width:tileWidth,height:bannerHeight}:undefined}><ResilientImage uri={card.image_urls[0]||''} style={{height:compact?bannerHeight:140,width:compact?tileWidth:180,borderRadius:compact?10:0}} resizeMode="cover"/>{compact&&<Text style={{position:'absolute',right:4,bottom:4,fontSize:9,fontWeight:'700',color:c.text,backgroundColor:c.soft,paddingHorizontal:4,borderRadius:4}}>Ad</Text>}</View>
@@ -56,7 +61,7 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
     </Pressable>
    </View>)}
   </ScrollView>
-  {compact&&cards.length>1&&<View accessible accessibilityLabel="Promoted carousel position" style={{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:5,paddingVertical:2}}>{Array.from({length:dotCount},(_,i)=><View key={i} style={{width:i===dot?18:5,height:5,borderRadius:3,backgroundColor:i===dot?c.accent:c.line}}/>)}</View>}
+  {compact&&position.count>1&&<View accessible accessibilityLabel={`Promoted carousel, page ${position.index+1} of ${position.count}`} style={{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:5,paddingVertical:2}}>{Array.from({length:dotCount},(_,i)=><View key={i} style={{width:i===dot?18:5,height:5,borderRadius:3,backgroundColor:i===dot?c.accent:c.line}}/>)}</View>}
  </View>;
 
 }
