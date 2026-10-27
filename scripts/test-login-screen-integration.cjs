@@ -47,6 +47,9 @@ async function screenChecks(){
  const back=nodes.find(n=>n.type==='Pressable'&&n.children.some(c=>c?.type==='Text'&&c.children.includes('Back')));assert.equal(back.props.disabled,false,'Back remains usable to cancel password login');
  const googleNodes=flatten(context.exports.AuthScreen({mode:'signin',busy:true,googleBusy:true,loginNotice:'',buyerMarkets:[]}));
  const googleBack=googleNodes.find(n=>n.type==='Pressable'&&n.children.some(c=>c?.type==='Text'&&c.children.includes('Back')));assert.equal(googleBack.props.disabled,true);
+ const loadingNodes=flatten(context.exports.AuthScreen({mode:'welcome',busy:false,googleBusy:false,googleReady:false,googleTimedOut:false,loginNotice:'',buyerMarkets:[]}));
+ const preparing=loadingNodes.find(n=>n.props.accessibilityLabel==='Google sign-in is loading');assert.equal(preparing.props.disabled,true);assert.equal(preparing.props.accessibilityState.disabled,true,'initial SDK loading must not look like a failed sign-in attempt');
+ const readyNodes=flatten(context.exports.AuthScreen({mode:'welcome',busy:false,googleBusy:false,googleReady:true,googleTimedOut:false,loginNotice:'',buyerMarkets:[]}));assert.equal(readyNodes.find(n=>n.props.accessibilityLabel==='Sign in with Google').props.disabled,false);
 }
 (async()=>{
  let complete;const rapid=fixture(()=>new Promise(r=>complete=r));const first=rapid.handlers.authenticate('/api/v1/auth/login',credentials);await flush();await rapid.handlers.authenticate('/api/v1/auth/login',credentials);await rapid.handlers.authenticate('/api/v1/auth/signup',credentials);await rapid.handlers.authenticateWithGoogle();assert.equal(rapid.requests.length,1);assert.equal(rapid.oauthCalls(),0);complete(response(200,{access_token:'one',expires_at:future()}));await first;assert.deepEqual(rapid.opened,['one']);

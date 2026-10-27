@@ -1,13 +1,15 @@
 // One exchange per user action. OAuth may resolve/create an identity, so a
 // timeout or network failure must never replay this POST automatically.
-export async function googleSessionRequest(url: string, init: RequestInit, signal: AbortSignal, timeoutMs = 12000) {
+const configuredTimeout = Number.parseInt(process.env.EXPO_PUBLIC_AUTH_TIMEOUT_MS || '12000', 10);
+export async function googleSessionRequest(url: string, init: RequestInit, signal: AbortSignal, timeoutMs = configuredTimeout) {
+  const budget = Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 2147483647 ? timeoutMs : 12000;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let abort: () => void = () => {};
   const stopped = new Promise<never>((_, reject) => {
     abort = () => {controller.abort(); reject(new Error('Google sign-in was interrupted. Please try again.'));};
     signal.addEventListener('abort', abort, {once: true});
-    timer = setTimeout(() => {controller.abort(); reject(new Error('The server took too long to complete Google sign-in. Please try again.'));}, timeoutMs);
+    timer = setTimeout(() => {controller.abort(); reject(new Error('The server took too long to complete Google sign-in. Please try again.'));}, budget);
   });
   if (signal.aborted) abort();
   try {

@@ -163,9 +163,9 @@ export function AuthScreen({ referralCode = "", onReferralCode = () => {}, works
                 <Pressable
                   style={[s.gmailButton, googleBusy && s.disabled]}
                   onPress={onGoogle}
-                  disabled={googleBusy || busy}
+                  disabled={googleBusy || busy || (!googleReady && !googleTimedOut)}
                   accessibilityLabel={googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Google sign-in is loading"}
-                  accessibilityState={{ disabled: googleBusy || busy, busy: (!googleReady && !googleTimedOut) || googleBusy }}
+                  accessibilityState={{ disabled: googleBusy || busy || (!googleReady && !googleTimedOut), busy: (!googleReady && !googleTimedOut) || googleBusy }}
                 >
                   {(!googleReady && !googleTimedOut) || googleBusy ? <ActivityIndicator size="small" color={COLORS.primary} /> : <Ionicons name={googleReady ? "logo-google" : "refresh"} size={18} color={theme.color("#101817")} />}
                   <Text style={s.gmailButtonText}>{googleBusy ? (busy ? "Completing sign-in..." : "Opening Google…") : googleReady ? "Sign in with Google" : googleTimedOut ? "Retry Google sign-in" : "Connecting Google sign-in…"}</Text>

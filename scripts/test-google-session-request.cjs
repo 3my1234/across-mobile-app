@@ -1,6 +1,6 @@
 const fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm'),assert=require('node:assert/strict');
 let send,calls=0;
-const context={exports:{},AbortController,Promise,Error,JSON,setTimeout,clearTimeout,fetch:(...args)=>{calls++;return send(...args);}};
+const context={exports:{},AbortController,Promise,Error,JSON,Number,process:{env:{}},setTimeout,clearTimeout,fetch:(...args)=>{calls++;return send(...args);}};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/googleSessionRequest.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText,context);
 const exchange=context.exports.googleSessionRequest;
 (async()=>{
@@ -12,5 +12,8 @@ const exchange=context.exports.googleSessionRequest;
  await assert.rejects(exchange('https://synthetic.invalid',{},signal.signal,10),/too long/);assert.equal(nativeSignal.aborted,true,'deadline includes response body');assert.equal(calls,1);
  calls=0;const cancelled=new AbortController();cancelled.abort();await assert.rejects(exchange('https://synthetic.invalid',{},cancelled.signal,100),/interrupted/);assert.equal(calls,0);
  const during=new AbortController();send=()=>new Promise(()=>{});const pending=exchange('https://synthetic.invalid',{},during.signal,100);during.abort();await assert.rejects(pending,/interrupted/);
+ let configuredBudget;const configured={...context,exports:{},process:{env:{EXPO_PUBLIC_AUTH_TIMEOUT_MS:'25000'}},setTimeout:(fn,ms)=>{configuredBudget=ms;return setTimeout(fn,1);}};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/googleSessionRequest.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.CommonJS}}).outputText,configured);
+ await assert.rejects(configured.exports.googleSessionRequest('https://synthetic.invalid',{},signal.signal),/too long/);assert.equal(configuredBudget,25000,'retain the existing configured auth timeout');
  console.log('Google exchange passed: single-shot POST, HTTP rejection, network/body deadline and cancellation without replay.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
