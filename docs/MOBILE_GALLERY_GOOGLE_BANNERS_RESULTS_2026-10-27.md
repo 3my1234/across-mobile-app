@@ -1,4 +1,4 @@
-# Gallery, Google sign-in and promoted banners ? experimental changes
+# Gallery, Google sign-in and promoted banners - experimental changes
 
 Status: implemented on an isolated mobile branch; no merge, APK build, installation or production change. This branch includes the previously reviewed, unreleased login-overload integration (base commit `8f40420719c8a052650e20f0b52a036f282c6f1b`).
 
@@ -20,7 +20,7 @@ The exchange is still one POST per user action, with a 12-second deadline that i
 
 ## Promoted row
 
-Circular thumbnails become rounded rectangular image banners, preserving real listing images, title/price, the Ad label and existing product/service context. Banner width is88?112 logical pixels, height approximately56% of width (112?63 on a400-wide screen); its image area is below one third of the ordinary180?140 listing image. Position dots show progress across the row. Six-second paging, manual swiping, Pause/Play, reduced-motion preference, touch pause, offscreen/background pause and impression rules remain intact. Normal listings and detail recommendations retain their layout.
+Circular thumbnails become rounded rectangular image banners, preserving real listing images, title/price, the Ad label and existing product/service context. Banner width is88-112 logical pixels, height approximately56% of width (112 x 63 on a400-wide screen); its image area is below one third of the ordinary180 x 140 listing image. Position dots show progress across the row. Six-second paging, manual swiping, Pause/Play, reduced-motion preference, touch pause, offscreen/background pause and impression rules remain intact. Normal listings and detail recommendations retain their layout.
 
 ## Validation
 
