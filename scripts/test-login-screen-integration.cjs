@@ -87,6 +87,10 @@ async function screenChecks(){
   rejected.context.googleSessionRequest=async()=>({response:response(status),body:{message:'Rejected'}});
   await rejected.handlers.authenticateWithGoogle();assert.equal(cleared,1);assert.deepEqual(rejected.opened,[]);assert.equal(rejected.context.authAttempts.current.pending,false);
  }
+ const sdkAhead=fixture(async()=>response(200));sdkAhead.context.privyUser=null;
+ sdkAhead.context.loginWithOAuth=async()=>{throw Object.assign(Error('Already logged in'),{code:'attempted_login_with_oauth_while_already_logged_in'});};
+ sdkAhead.context.googleSessionRequest=async()=>({response:response(200),body:{access_token:'sdk-session-ahead-of-render',expires_at:future()}});
+ await sdkAhead.handlers.authenticateWithGoogle();assert.deepEqual(sdkAhead.opened,['sdk-session-ahead-of-render']);assert.equal(sdkAhead.alerts.length,0,'SDK session ahead of React render still completes signed-token verification');
  const browserCancelled=fixture(async()=>response(200));browserCancelled.context.loginWithOAuth=async()=>{throw Object.assign(Error('Cancelled'),{code:'login_with_oauth_was_cancelled_by_user'});};
  await browserCancelled.handlers.authenticateWithGoogle();assert.equal(browserCancelled.alerts.length,0);assert.equal(browserCancelled.context.authAttempts.current.pending,false);
  assert.ok(!fs.readFileSync('App.tsx','utf8').includes('if (oauthState.status === "error")'),'one attempt-owned OAuth error path, no duplicate unowned SDK-state alert');

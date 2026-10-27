@@ -1270,7 +1270,9 @@ function AcrossApp() {
     } catch (e: any) {
       if (!attempt.current()) return;
       const msg = e?.message || "";
-      if (msg.toLowerCase().includes("already logged in") && privyUser) { await finishPrivyLogin(); return; }
+      // The SDK can know its session before this render receives privyUser.
+      // Verify its signed token instead of failing on that stale render value.
+      if (e?.code === 'attempted_login_with_oauth_while_already_logged_in' || msg.toLowerCase().includes("already logged in")) { await finishPrivyLogin(); return; }
       setOauthBusy(false); attempt.finish(); googleAttempt.current = null;
       if (e?.code === 'login_with_oauth_was_cancelled_by_user') return;
       Alert.alert("Google sign-in failed", msg || "Check your connection, then try again.");
