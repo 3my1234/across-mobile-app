@@ -39,7 +39,7 @@ function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatM
   }
  }
  index=0;hooks=[];effects=[];const adTree=context.exports.Rail({title:'Promoted Products',cards:[card],compact:true,active:true,onOpen(){}});
- const adCard=nodes(adTree).find(n=>n.props.style?.width===112),adImage=nodes(adTree).find(n=>n.type==='Image');assert.ok(adCard);assert.equal(adImage.props.style.height,63);assert.equal(adImage.props.style.borderRadius,10);assert.ok(nodes(adTree).some(n=>n.children?.includes('Ad')),'ad label remains visible');
- index=0;hooks=[];effects=[];const detailTree=context.exports.Rail({title:'Recommended Products',cards:[{...card,placement:'similar'}],active:true,onOpen(){}});assert.ok(adCard.props.style.width<nodes(detailTree).find(n=>n.props.style?.width===180).props.style.width,'promotions remain smaller than normal recommendation cards');
+ const adCard=nodes(adTree).find(n=>n.props.style?.width===204),adImage=nodes(adTree).find(n=>n.type==='Image');assert.ok(adCard);assert.equal(adImage.props.style.height,163);assert.equal(adImage.props.resizeMode,'cover');assert.ok(nodes(adTree).some(n=>n.children?.includes('Ad')),'ad label remains visible');
+ index=0;hooks=[];effects=[];const detailTree=context.exports.Rail({title:'Recommended Products',cards:[{...card,placement:'similar'}],active:true,onOpen(){}});assert.equal(nodes(detailTree).find(n=>n.type==='Image').props.style.width,180,'detail recommendations retain their normal layout');assert.ok(adCard.props.style.width<400-24,'promoted frame leaves the next ad visible');
  console.log('Discovery passed: actual UI half-visible/one-second/background gates, no serve-counting, batched dedup, same detail routes, contact intent, stale navigation and account-isolated topics.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

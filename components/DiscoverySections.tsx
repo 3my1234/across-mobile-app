@@ -15,10 +15,10 @@ export function discoveryViewable(x:number,y:number,width:number,height:number,s
 }
 function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:DiscoveryCard[];active:boolean;onOpen:(card:DiscoveryCard)=>void;compact?:boolean}) {
  const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
- // Reclaim the separate caption space for a taller, uncropped image and inset caption.
- const tileWidth=Math.max(1,Math.round(screen.width-48)),stride=tileWidth+12;
+ // Use listing-like photo proportions instead of letterboxing portraits in a wide banner.
+ const tileWidth=Math.round(Math.max(160,Math.min(230,(screen.width-36)*.56))),stride=tileWidth+12;
  const captionHeight=Math.ceil(15+45*Math.max(1,screen.fontScale||1));
- const imageHeight=Math.round(Math.max(100,Math.min(140,tileWidth*.33))),bannerHeight=imageHeight+captionHeight;
+ const imageHeight=Math.round(tileWidth*.8),bannerHeight=imageHeight+captionHeight;
  const row=useRef<View|null>(null),scroll=useRef<ScrollView|null>(null),viewport=useRef({width:screen.width,content:0,x:0}),interaction=useRef({touching:false,until:0});
  const [paused,setPaused]=useState(false),[position,setPosition]=useState({count:1,index:0});
  const updatePosition=()=>{
@@ -57,10 +57,10 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
  return <View ref={row} collapsable={false} style={{paddingVertical:compact?8:12,gap:8}}>
   <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:12}}><Text style={{fontSize:compact?15:18,fontWeight:'700',flex:1}}>{title}</Text>{compact&&cards.length>1&&<Pressable accessibilityRole="button" accessibilityLabel={paused?'Resume promoted rotation':'Pause promoted rotation'} onPress={()=>setPaused(value=>!value)} style={{padding:8,minHeight:44}}><Text style={{fontSize:12,color:c.accent}}>{paused?'Play':'Pause'}</Text></Pressable>}</View>
   <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}} snapToInterval={compact?stride:undefined} decelerationRate={compact?'fast':'normal'} scrollEventThrottle={100} onLayout={event=>{viewport.current.width=event.nativeEvent.layout.width;updatePosition();}} onContentSizeChange={width=>{viewport.current.content=width;updatePosition();}} onScroll={event=>{viewport.current.x=event.nativeEvent.contentOffset.x;updatePosition();}} onTouchStart={()=>{interaction.current.touching=true;}} onTouchEnd={touchEnd} onTouchCancel={touchEnd} onScrollBeginDrag={()=>{interaction.current.touching=true;}} onScrollEndDrag={touchEnd}>
-   {cards.map(card=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:compact?0:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:compact?'transparent':c.surface}}>
+   {cards.map((card,cardIndex)=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:compact?0:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:compact?'transparent':c.surface}}>
     <Pressable accessibilityRole="button" accessibilityLabel={`${compact?'Promoted: ':''}${card.title}`} onPress={()=>onOpen(card)}>
      {compact?<View style={{width:tileWidth,height:bannerHeight,borderRadius:14,overflow:'hidden',backgroundColor:'#17231F'}}>
-      <ResilientImage uri={card.image_urls[0]||''} style={{height:imageHeight,width:tileWidth}} resizeMode="contain"/>
+      <ResilientImage uri={card.image_urls[0]||''} style={{height:imageHeight,width:tileWidth}} priority={cardIndex===position.index?"high":"low"} resizeMode="cover"/>
       <Text style={{position:'absolute',right:8,top:8,fontSize:10,fontWeight:'700',color:'#FFFFFF',backgroundColor:'rgba(0,0,0,0.78)',paddingHorizontal:6,paddingVertical:3,borderRadius:5}}>Ad</Text>
       <View style={{position:'absolute',left:0,right:0,bottom:0,height:captionHeight,paddingHorizontal:12,paddingVertical:6,gap:3,backgroundColor:'rgba(0,0,0,0.88)'}}>
        <Text numberOfLines={2} style={{fontSize:12,lineHeight:15,fontWeight:'700',color:'#FFFFFF'}}>{card.title}</Text>

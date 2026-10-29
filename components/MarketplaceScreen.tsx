@@ -761,15 +761,18 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               keyExtractor={item => item.id}
               ListHeaderComponent={<DiscoverySections kind="service" owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
               numColumns={2}
+              initialNumToRender={2}
+              maxToRenderPerBatch={2}
+              windowSize={5}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadListings(true)} tintColor="#FF4747" />}
               onEndReached={() => { if (listingCursor && !loadingMore) void loadListings(false, listingCursor); }}
               onEndReachedThreshold={0.35}
               contentContainerStyle={{ padding: 8, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 24 }}
               columnWrapperStyle={styles.columns}
-              renderItem={({ item }) => (
+              renderItem={({ item, index: listingIndex }) => (
                 <Pressable style={styles.card} onPress={() => void openListing(item)}>
                   <View style={styles.cardGallery}>
-                    {(item.media_urls?.length ? item.media_urls.slice(0,4) : [""]).map((uri,index)=><ResilientImage key={`${item.id}:photo:${index}`} uri={uri} style={item.media_urls?.length>1 ? [styles.cardGalleryTile,item.media_urls.length===2 && {height:160},item.media_urls.length===3 && index===2 && {width:"100%"}] : styles.cardGallerySingle} resizeMode="cover"/>)}
+                    {(item.media_urls?.length ? item.media_urls.slice(0,4) : [""]).map((uri,index)=><ResilientImage key={`${item.id}:photo:${index}`} uri={uri} priority={index===0&&listingIndex<4?"high":index===0?"normal":"low"} style={item.media_urls?.length>1 ? [styles.cardGalleryTile,item.media_urls.length===2 && {height:160},item.media_urls.length===3 && index===2 && {width:"100%"}] : styles.cardGallerySingle} resizeMode="cover"/>)}
                     {item.media_urls?.length>4 && <Text style={styles.morePhotos}>+{item.media_urls.length-4} photos</Text>}
                   </View>
                   <View style={styles.cardBody}>
