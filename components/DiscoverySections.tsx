@@ -15,7 +15,9 @@ export function discoveryViewable(x:number,y:number,width:number,height:number,s
 }
 function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:DiscoveryCard[];active:boolean;onOpen:(card:DiscoveryCard)=>void;compact?:boolean}) {
  const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
- const tileWidth=Math.round(Math.max(88,Math.min(112,(screen.width-48)/3))),bannerHeight=Math.round(tileWidth*.56),stride=tileWidth+12;
+ // Preserve the approved shallow height; widen banners to leave the next ad peeking in.
+ const bannerHeight=Math.round(Math.max(88,Math.min(112,(screen.width-48)/3))*.56);
+ const tileWidth=Math.max(1,Math.round(screen.width-48)),stride=tileWidth+12;
  const row=useRef<View|null>(null),scroll=useRef<ScrollView|null>(null),viewport=useRef({width:screen.width,content:0,x:0}),interaction=useRef({touching:false,until:0});
  const [paused,setPaused]=useState(false),[position,setPosition]=useState({count:1,index:0});
  const updatePosition=()=>{
