@@ -22,7 +22,7 @@ function checkPhotoSlots(file,startMarker,multiline){
  const source=fs.readFileSync(file,'utf8'),start=source.indexOf(startMarker);assert.ok(start>=0);
  const end=multiline?source.indexOf('))}',start)+3:source.indexOf('\n',start);
  const expression=source.slice(start,end).trim().slice(1,-1);
- const scope={exports:{},React:{createElement:(type,props,...children)=>({type,props,children})},ResilientImage:'Image',Pressable:'Button',ProductPhoto:'Photo',styles:{},windowWidth:400,viewportWidth:400,showAllPhotos:true};
+ const scope={exports:{},React:{createElement:(type,props,...children)=>({type,props,children})},ResilientImage:'Image',Pressable:'Button',ProductPhoto:'Photo',styles:{},windowWidth:400,viewportWidth:400,showAllPhotos:true,listingIndex:0};
  const code=ts.transpileModule('exports.render=()=>('+expression+');',{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
  vm.runInNewContext(code,scope);
  const draw=(id,url)=>{scope.item=scope.selected=scope.product={id,media_urls:[url]};scope.images=[url];return scope.exports.render()[0].props.key;};

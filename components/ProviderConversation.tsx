@@ -1,3 +1,4 @@
+import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {ChatMessageText} from './ChatMessageText';
 import {TownHallIcon} from "./TownHallIcon";
 import {useMessageReceipts,ReceiptContext} from './messageReceipts';
@@ -13,7 +14,6 @@ import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
 import React, { useEffect, useRef, useState } from "react";
 import {ActivityIndicator, Alert, AppState, BackHandler, Image, ScrollView, FlatList, Platform, Pressable, StyleSheet,   View} from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import * as Crypto from "expo-crypto";
 import { uploadChatImage } from "./chatImages";
 import { Ionicons } from "@expo/vector-icons";
@@ -68,9 +68,7 @@ export function ProviderConversation(props: Props) {
     if(uploadFlight.current || locationFlight.current || locating || props.busy || props.paused || photos.length>=4)return;
     uploadFlight.current=true;setUploading(true);
     try {
-      const permission=await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if(!permission.granted)throw new Error("Allow photo access in your phone settings.");
-      const result=await ImagePicker.launchImageLibraryAsync({mediaTypes:["images"],allowsMultipleSelection:true,selectionLimit:4-photos.length,quality:0.8});
+      const result=await chooseLibraryMedia({mediaTypes:["images"],allowsMultipleSelection:true,selectionLimit:4-photos.length,quality:0.8});
       if(result.canceled)return;
       for(const asset of result.assets.slice(0,4-photos.length)) {
         const photo=await uploadChatImage(props.token,asset);

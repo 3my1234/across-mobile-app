@@ -13,6 +13,7 @@
     "test:provider-native": "node scripts/test-native-provider-all.cjs",
     "test:catalog": "node scripts/test-catalog.cjs",
     "test:pages": "node scripts/test-page-refresh.cjs && node scripts/test-history-retry.cjs",
+    "test:auth-overload": "node scripts/test-login-overload.cjs && node scripts/test-auth-attempts.cjs && node scripts/test-login-screen-integration.cjs && node scripts/test-session-startup.cjs",
     "test:payments": "node scripts/test-payment-history.cjs",
     "test:marketplace": "node scripts/test-provider-chat.cjs && node scripts/test-product-loading.cjs && node scripts/test-product-chat-options.cjs",
     "test:checkout": "node scripts/test-cart-review.cjs",
@@ -21,7 +22,9 @@
     "ios": "expo run:ios",
     "test:theme": "node scripts/test-theme.cjs",
     "check:provider-staging": "node scripts/check-provider-staging.cjs",
-    "eas-build-pre-install": "node scripts/check-release-distribution.cjs"
+    "eas-build-pre-install": "node scripts/check-release-distribution.cjs",
+    "test:media-promotions": "node scripts/test-media-library-picker.cjs && node scripts/test-promoted-carousel.cjs",
+    "test:google-auth": "node scripts/test-google-session-request.cjs && node scripts/test-login-screen-integration.cjs && node scripts/test-auth-workspace.cjs"
   },
   "dependencies": {
     "@ethersproject/shims": "^5.8.0",

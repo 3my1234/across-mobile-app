@@ -1,3 +1,4 @@
+import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {refreshAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {DriverPresenceNotice} from './DriverPresenceNotice';
@@ -113,10 +114,10 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
       if (result.canceled) return;
       const asset = result.assets[0]; file = {uri: asset.uri, mime: asset.mimeType || '', bytes: asset.size || 0, name: asset.name};
     } else {
-      const permission = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission = source === 'camera' ? await ImagePicker.requestCameraPermissionsAsync() : {granted: true};
       if (!permission.granted) throw new Error(source === 'camera' ? 'Allow camera access to take a clear verification photo. You can change this in phone settings.' : 'Allow photo access to choose a verification image. You can change this in phone settings.');
       const options: ImagePicker.ImagePickerOptions = {mediaTypes: ['images'], quality: 1, allowsEditing: false};
-      const result = source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+      const result = source === 'camera' ? await ImagePicker.launchCameraAsync(options) : await chooseLibraryMedia(options);
       if (result.canceled) return;
       const asset = result.assets[0]; file = {uri: asset.uri, mime: asset.mimeType || '', bytes: asset.fileSize || 0, name: asset.fileName || 'verification.jpg'};
     }

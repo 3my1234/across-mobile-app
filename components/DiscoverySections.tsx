@@ -15,9 +15,18 @@ export function discoveryViewable(x:number,y:number,width:number,height:number,s
 }
 function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:DiscoveryCard[];active:boolean;onOpen:(card:DiscoveryCard)=>void;compact?:boolean}) {
  const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
- const diameter=Math.round(Math.max(40,Math.min(60,(screen.width-28)/6))),tileWidth=diameter+24,stride=tileWidth+12;
+ // Use listing-like photo proportions instead of letterboxing portraits in a wide banner.
+ const tileWidth=Math.round(Math.max(160,Math.min(230,(screen.width-36)*.56))),stride=tileWidth+12;
+ const captionHeight=Math.ceil(15+45*Math.max(1,screen.fontScale||1));
+ const imageHeight=Math.round(tileWidth*.8),bannerHeight=imageHeight+captionHeight;
  const row=useRef<View|null>(null),scroll=useRef<ScrollView|null>(null),viewport=useRef({width:screen.width,content:0,x:0}),interaction=useRef({touching:false,until:0});
- const [paused,setPaused]=useState(false);
+ const [paused,setPaused]=useState(false),[position,setPosition]=useState({count:1,index:0});
+ const updatePosition=()=>{
+  const metrics=viewport.current,max=Math.max(0,metrics.content-metrics.width),page=Math.max(1,Math.floor((metrics.width-24)/stride))*stride;
+  const count=max>1?Math.ceil(max/page)+1:1,index=max<=1?0:metrics.x>=max-1?count-1:Math.max(0,Math.min(count-1,Math.round(metrics.x/page)));
+  setPosition(previous=>previous.count===count&&previous.index===index?previous:{count,index});
+ };
+ const dotCount=Math.min(7,position.count),dot=position.count>1?Math.round(position.index/(position.count-1)*(dotCount-1)):0;
  const touchEnd=()=>{interaction.current={touching:false,until:Date.now()+6000};};
  useEffect(()=>{
   if(!active){entered.current.clear();return;}
@@ -47,14 +56,24 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
  if(!cards.length)return null;
  return <View ref={row} collapsable={false} style={{paddingVertical:compact?8:12,gap:8}}>
   <View style={{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:12}}><Text style={{fontSize:compact?15:18,fontWeight:'700',flex:1}}>{title}</Text>{compact&&cards.length>1&&<Pressable accessibilityRole="button" accessibilityLabel={paused?'Resume promoted rotation':'Pause promoted rotation'} onPress={()=>setPaused(value=>!value)} style={{padding:8,minHeight:44}}><Text style={{fontSize:12,color:c.accent}}>{paused?'Play':'Pause'}</Text></Pressable>}</View>
-  <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}} snapToInterval={compact?stride:undefined} decelerationRate={compact?'fast':'normal'} scrollEventThrottle={100} onLayout={event=>{viewport.current.width=event.nativeEvent.layout.width;}} onContentSizeChange={width=>{viewport.current.content=width;}} onScroll={event=>{viewport.current.x=event.nativeEvent.contentOffset.x;}} onTouchStart={()=>{interaction.current.touching=true;}} onTouchEnd={touchEnd} onTouchCancel={touchEnd} onScrollBeginDrag={()=>{interaction.current.touching=true;}} onScrollEndDrag={touchEnd}>
-   {cards.map(card=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:compact?0:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:compact?'transparent':c.surface}}>
+  <ScrollView ref={scroll} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{paddingHorizontal:12,gap:12}} snapToInterval={compact?stride:undefined} decelerationRate={compact?'fast':'normal'} scrollEventThrottle={100} onLayout={event=>{viewport.current.width=event.nativeEvent.layout.width;updatePosition();}} onContentSizeChange={width=>{viewport.current.content=width;updatePosition();}} onScroll={event=>{viewport.current.x=event.nativeEvent.contentOffset.x;updatePosition();}} onTouchStart={()=>{interaction.current.touching=true;}} onTouchEnd={touchEnd} onTouchCancel={touchEnd} onScrollBeginDrag={()=>{interaction.current.touching=true;}} onScrollEndDrag={touchEnd}>
+   {cards.map((card,cardIndex)=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:compact?0:1,borderColor:c.line,borderRadius:14,overflow:'hidden',backgroundColor:compact?'transparent':c.surface}}>
     <Pressable accessibilityRole="button" accessibilityLabel={`${compact?'Promoted: ':''}${card.title}`} onPress={()=>onOpen(card)}>
-     <View style={compact?{alignSelf:'center',width:diameter,height:diameter}:undefined}><ResilientImage uri={card.image_urls[0]||''} style={{height:compact?diameter:140,width:compact?diameter:180,borderRadius:compact?diameter/2:0}} resizeMode="cover"/>{compact&&<Text style={{position:'absolute',right:-4,bottom:0,fontSize:9,fontWeight:'700',color:c.text,backgroundColor:c.soft,paddingHorizontal:4,borderRadius:4}}>Ad</Text>}</View>
-     <View style={{padding:compact?2:10,gap:4}}><Text numberOfLines={2} style={{fontWeight:'600',fontSize:compact?11:14,minHeight:compact?30:36,textAlign:compact?'center':'left'}}>{card.title}</Text>{!compact&&<Text numberOfLines={1} style={{fontSize:12,color:c.muted}}>{card.kind==='product'?'Product':'Service'}{card.city?' - '+card.city:''}</Text>}<Text numberOfLines={1} adjustsFontSizeToFit style={{fontWeight:'700',fontSize:compact?11:14,color:c.accent,textAlign:compact?'center':'left'}}>{card.price===null?'Ask for a price':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}</Text>{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text numberOfLines={1} adjustsFontSizeToFit style={{fontSize:11,color:'#C62828',textDecorationLine:'line-through',textAlign:compact?'center':'left'}}>{card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}</View>
+     {compact?<View style={{width:tileWidth,height:bannerHeight,borderRadius:14,overflow:'hidden',backgroundColor:'#17231F'}}>
+      <ResilientImage uri={card.image_urls[0]||''} style={{height:imageHeight,width:tileWidth}} priority={cardIndex===position.index?"high":"low"} resizeMode="cover"/>
+      <Text style={{position:'absolute',right:8,top:8,fontSize:10,fontWeight:'700',color:'#FFFFFF',backgroundColor:'rgba(0,0,0,0.78)',paddingHorizontal:6,paddingVertical:3,borderRadius:5}}>Ad</Text>
+      <View style={{position:'absolute',left:0,right:0,bottom:0,height:captionHeight,paddingHorizontal:12,paddingVertical:6,gap:3,backgroundColor:'rgba(0,0,0,0.88)'}}>
+       <Text numberOfLines={2} style={{fontSize:12,lineHeight:15,fontWeight:'700',color:'#FFFFFF'}}>{card.title}</Text>
+       <View style={{flexDirection:'row',alignItems:'center',gap:8}}><Text numberOfLines={1} style={{fontSize:12,lineHeight:15,fontWeight:'700',color:'#FFE082',flexShrink:1}}>{card.price===null?'Ask for a price':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}</Text>{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text numberOfLines={1} style={{fontSize:10,color:'#EEEEEE',textDecorationLine:'line-through',flexShrink:1}}>{card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}</View>
+      </View>
+     </View>:<>
+      <ResilientImage uri={card.image_urls[0]||''} style={{height:140,width:180}} resizeMode="cover"/>
+      <View style={{padding:10,gap:4}}><Text numberOfLines={2} style={{fontWeight:'600',fontSize:14,minHeight:36}}>{card.title}</Text><Text numberOfLines={1} style={{fontSize:12,color:c.muted}}>{card.kind==='product'?'Product':'Service'}{card.city?' - '+card.city:''}</Text><Text numberOfLines={1} adjustsFontSizeToFit style={{fontWeight:'700',fontSize:14,color:c.accent}}>{card.price===null?'Ask for a price':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}</Text>{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text numberOfLines={1} adjustsFontSizeToFit style={{fontSize:11,color:'#C62828',textDecorationLine:'line-through'}}>{card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}</View>
+     </>}
     </Pressable>
    </View>)}
   </ScrollView>
+  {compact&&position.count>1&&<View accessible accessibilityLabel={`Promoted carousel, page ${position.index+1} of ${position.count}`} style={{flexDirection:'row',justifyContent:'center',alignItems:'center',gap:5,paddingVertical:2}}>{Array.from({length:dotCount},(_,i)=><View key={i} style={{width:i===dot?18:5,height:5,borderRadius:3,backgroundColor:i===dot?c.accent:c.line}}/>)}</View>}
  </View>;
 
 }
