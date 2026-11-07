@@ -1,7 +1,7 @@
+import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Image, Pressable,  StyleSheet, Switch, View } from "react-native";
-import * as ImagePicker from "expo-image-picker";
 import * as Crypto from "expo-crypto";
 import { ThemedText as Text, ThemedTextInput as TextInput, useThemedStyles } from "./ThemeProvider";
 import { communityRequest } from "./communityApi";
@@ -71,8 +71,7 @@ export function CommunityUpdates({ token, bottomInset, openChat }: {
         next = data.next_cursor || "";
     } while (next && all.length < 100 && alive.current); if (alive.current)
         setFriends(all.slice(0, 100)); }
-    async function attach() { const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted)
-        throw Error("Allow photo access to attach images."); const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 4 - photos.length, quality: .8 }); if (result.canceled)
+    async function attach() { const result = await chooseLibraryMedia({ mediaTypes: ["images"], allowsMultipleSelection: true, selectionLimit: 4 - photos.length, quality: .8 }); if (result.canceled)
         return; for (const asset of result.assets.slice(0, 4 - photos.length)) {
         const uploaded = await uploadChatImage(token, asset);
         if (!alive.current)

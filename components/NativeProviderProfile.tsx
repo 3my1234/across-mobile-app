@@ -1,6 +1,6 @@
+import {chooseLibraryMedia} from './mediaLibraryPicker';
 import React, {useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, View} from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {ProviderAccount, verificationImageError} from './nativeProviderPolicy';
@@ -20,8 +20,7 @@ export function NativeProviderProfile({token, provider, onSaved}: {token: string
   };
   const button = (label: string, action: () => void) => <Pressable accessibilityRole="button" disabled={busy} onPress={action} style={{borderRadius: 12, padding: 12, minHeight: 44, backgroundColor: c.soft, opacity: 1}}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></Pressable>;
   const media = (banner: boolean) => void run(async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync(); if (!permission.granted) throw new Error('Allow photo access in phone settings to choose your business images.');
-    const result = await ImagePicker.launchImageLibraryAsync({mediaTypes: ['images'], quality: .8, allowsEditing: true, aspect: banner ? [16, 6] : [1, 1]}); if (result.canceled) return;
+    const result = await chooseLibraryMedia({mediaTypes: ['images'], quality: .8, allowsEditing: true, aspect: banner ? [16, 6] : [1, 1]}); if (result.canceled) return;
     const asset = result.assets[0], mime = asset.mimeType || '';
     const validation = verificationImageError(mime, asset.fileSize || 0); if (validation) throw new Error(validation);
     if ((asset.fileSize || 0) > 5 * 1024 * 1024) throw new Error('Choose a profile or banner image no larger than 5 MB.');

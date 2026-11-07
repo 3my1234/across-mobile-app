@@ -1,3 +1,5 @@
+import {googleSessionRequest} from './components/googleSessionRequest';
+import {chooseLibraryMedia} from './components/mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './components/KeyboardScroll';
 import {DriverPresenceNotice,useDriverPresenceLifecycle} from './components/DriverPresenceNotice';
 import {DiscoverySections} from './components/DiscoverySections';
@@ -12,6 +14,8 @@ import {AccountIcon,AccountSectionHeading,XPRewardSummary,accountDesign,useAccou
 import {acknowledgeNotificationDelivery} from './components/messageReceipts';
 import {ReadReceiptSetting} from './components/ReadReceiptSetting';
 import {createSessionStartup} from './components/sessionStartup';
+import {createAuthAttempts, createSessionPersistence, type AuthAttempt} from './components/authAttempts';
+import {LoginCancelled, LoginTemporarilyBusy, loginWithOverloadRetry} from './components/loginOverload';
 import {privateChatStore} from './components/privateChatStore';
 import {supportChatHistory,providerChatHistory} from "./components/chatHistoryCache";
 import {notificationDestination} from "./components/notificationDestination";
@@ -28,7 +32,6 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import * as ImagePicker from "expo-image-picker";
 import * as Notifications from "expo-notifications";
 import * as Location from "expo-location";
 import Constants from "expo-constants";
@@ -146,14 +149,14 @@ function AcrossApp() {
   const winWidth = Dimensions.get("window").width;
   const homeColumns = winWidth < 390 ? 2 : 3;
   const { user: privyUser, isReady: privyReady, getAccessToken, logout: privyLogout } = usePrivy();
-  const { login: loginWithOAuth, state: oauthState } = useLoginWithOAuth();
+  const { login: loginWithOAuth } = useLoginWithOAuth();
   const [stage, setStage] = useState<AppStage>("booting");
   const [authMode, setAuthMode] = useState<AuthMode>("welcome");
   const [referralCode,setReferralCode] = useState("");
   const [showReferrals,setShowReferrals] = useState(false);
   const [workspaceIntent, setWorkspaceIntent] = useState<WorkspaceIntent>("auto");
   const googleWorkspaceIntent = useRef<WorkspaceIntent>('auto');
-  const googleVerificationInFlight = useRef(false);
+  const googleVerificationInFlight = useRef<AuthAttempt | null>(null);
   const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   useDriverPresenceLifecycle(token);
@@ -182,6 +185,21 @@ function AcrossApp() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [busy, setBusy] = useState(false);
+  const authAttempts = useRef(createAuthAttempts());
+  const sessionPersistence = useRef<ReturnType<typeof createSessionPersistence> | null>(null);
+  const googleAttempt = useRef<ReturnType<typeof authAttempts.current.begin>>(null);
+  const passwordAttempt = useRef(false);
+  const [loginNotice, setLoginNotice] = useState('');
+  function cancelPasswordLogin() {
+    if (!passwordAttempt.current) return;
+    authAttempts.current.cancel(); passwordAttempt.current = false;
+    setBusy(false); setLoginNotice('');
+  }
+  useEffect(() => {
+    const attempts = authAttempts.current;
+    const listener = AppState.addEventListener('change', state => { if (state === 'background') cancelPasswordLogin(); });
+    return () => { listener.remove(); attempts.cancel(); };
+  }, []);
   const [oauthBusy, setOauthBusy] = useState(false);
 	const [googleSessionClearing, setGoogleSessionClearing] = useState(false);
   const [googleInitTimedOut, setGoogleInitTimedOut] = useState(false);
@@ -259,7 +277,7 @@ function AcrossApp() {
   sessionTokenRef.current = token;
   const sessionStartup=useRef<ReturnType<typeof createSessionStartup>|null>(null);
   if(!sessionStartup.current)sessionStartup.current=createSessionStartup({
-    read:()=>Promise.all([SecureStore.getItemAsync(TOKEN_KEY),SecureStore.getItemAsync(EXPIRY_KEY)]),
+    read:()=>sessionPersistence.current!.read(()=>Promise.all([SecureStore.getItemAsync(TOKEN_KEY),SecureStore.getItemAsync(EXPIRY_KEY)])),
     currentToken:()=>sessionTokenRef.current,
     open:storedToken=>{if(bootTimer.current)clearTimeout(bootTimer.current);sessionTokenRef.current=storedToken;setToken(storedToken);setStage('app');},
     missing:async()=>{if(bootTimer.current)clearTimeout(bootTimer.current);setStage('auth');await clearSession();},
@@ -551,13 +569,7 @@ function AcrossApp() {
     return () => clearTimeout(timer);
   }, [stage, token, workspaceEntryToken, providerWorkspaceVisible, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
 
-  useEffect(() => {
-    if (!oauthState) return;
-    if (oauthState.status === "error") {
-      setOauthBusy(false); setBusy(false);
-      Alert.alert("Sign-in failed", (oauthState as any)?.error?.message || (oauthState as any)?.error || "Google sign-in failed");
-    }
-  }, [oauthState]);
+
 
   useEffect(() => {
     if (stage !== "app" || !token || locationBootstrapTokenRef.current === token) return;
@@ -858,18 +870,19 @@ function AcrossApp() {
     }
   }
 
-  async function saveSession(s: any) {
-    sessionStartup.current?.cancel();
-    if(bootTimer.current)clearTimeout(bootTimer.current);
-    await SecureStore.setItemAsync(TOKEN_KEY, s.access_token);
-    await SecureStore.setItemAsync(EXPIRY_KEY, String(s.expires_at));
-    sessionTokenRef.current=s.access_token;
-    setToken(s.access_token);
-    setStage("app");
-    setReferralCode("");
-    // Retain the email-bound provider journey across sign-in and restarts;
-    // the entry gate verifies the signed-in identity before restoring it.
-    // The app-stage effects own catalogue/profile loading once.
+  if (!sessionPersistence.current) sessionPersistence.current = createSessionPersistence({
+    token: value => SecureStore.setItemAsync(TOKEN_KEY, value),
+    expiry: value => SecureStore.setItemAsync(EXPIRY_KEY, value),
+    clear: async () => { await Promise.all([SecureStore.deleteItemAsync(TOKEN_KEY), SecureStore.deleteItemAsync(EXPIRY_KEY)]); },
+    open: session => {
+      sessionStartup.current?.cancel();
+      if (bootTimer.current) clearTimeout(bootTimer.current);
+      sessionTokenRef.current = session.access_token;
+      setToken(session.access_token); setStage('app'); setReferralCode('');
+    },
+  });
+  async function saveSession(s: any, current: () => boolean = () => true) {
+    return sessionPersistence.current!.commit(s, current);
   }
 
   async function clearSession() {
@@ -878,8 +891,7 @@ function AcrossApp() {
     activityTokenRef.current="";
     notificationNavigationRequest.current++;setServiceConversationId("");setNotificationNavigationKey(0);
     const storageCleanup=Promise.all([
-      SecureStore.deleteItemAsync(TOKEN_KEY),
-      SecureStore.deleteItemAsync(EXPIRY_KEY),
+      sessionPersistence.current!.clear(),
       cartStorageWrites.current.catch(() => {}).then(() => AsyncStorage.removeItem(CART_KEY)),
       SecureStore.deleteItemAsync(CART_KEY),
       SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY)
@@ -927,6 +939,7 @@ function AcrossApp() {
   }
 
   async function logout() {
+    authAttempts.current.cancel(); passwordAttempt.current = false; setLoginNotice('');
     setProviderWorkspaceVisible(false);setShowSettings(false);
     if (logoutInProgress.current) return;
     logoutInProgress.current = true;
@@ -1155,39 +1168,64 @@ function AcrossApp() {
   }
 
   async function authenticate(path: string, payload: Record<string, string>) {
-    setBusy(true);
+    if (logoutInProgress.current || oauthBusy || googleSessionClearing || busy) return;
+    if (path !== '/api/v1/auth/login' && path !== '/api/v1/auth/signup') return;
+    const attempt = authAttempts.current.begin();
+    if (!attempt) return;
+    const login = path === '/api/v1/auth/login';
+    passwordAttempt.current = login;
+    const snapshot = { ...payload }, country = catalogCountry;
+    setBusy(true); setLoginNotice(login ? 'Signing in...' : '');
     try {
-      if (path.endsWith("/signup")) {
-        if (workspaceIntent === "auto") throw Error("Choose Customer or Provider before registering.");
-        await validateSignupReferral(payload.referral_code || "");
-        await rememberSignupWorkspace(payload.email || "", workspaceIntent);
-      } else if (path.endsWith("/login")) setWorkspaceIntent(await signupWorkspaceFor(payload.email || ""));
-      const r = await fetch(`${API_URL}${path}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Client-Country-Code": catalogCountry }, body: JSON.stringify(payload) });
-      const d = await readResponseBody(r);
+      let intent = workspaceIntent;
+      if (!login) {
+        if (intent === 'auto') throw Error('Choose Customer or Provider before registering.');
+        await validateSignupReferral(snapshot.referral_code || '');
+        if (!attempt.current()) return;
+        await rememberSignupWorkspace(snapshot.email || '', intent);
+      } else intent = await signupWorkspaceFor(snapshot.email || '');
+      if (!attempt.current()) return;
+      const send = async (signal: AbortSignal) => {
+        const response = await fetch(`${API_URL}${path}`, { method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'X-Client-Country-Code': country }, body: JSON.stringify(snapshot) });
+        return { status: response.status, retryAfter: response.headers.get('Retry-After'), serverDate: response.headers.get('Date'), response, body: await readResponseBody(response) };
+      };
+      // Signup is deliberately one request; this helper only wraps exact login.
+      const reply = login ? await loginWithOverloadRetry(send, attempt.signal, wait => {
+        if (attempt.current()) setLoginNotice(`Sign-in is busy. Trying again in about ${Math.ceil(wait.delayMs / 1000)} seconds (${wait.nextAttempt} of ${wait.maxAttempts}). You can cancel.`);
+      }) : await send(attempt.signal);
+      if (!attempt.current()) return;
+      const r = reply.response, d = reply.body;
       if (d.requires_email_verification) {
-        setAuthMode("signin");
-        Alert.alert("Verify your email", "Your verification email is queued. Delivery is usually quick, but can take several minutes. Check your inbox and Spam/Junk folder. Confirm it before signing in and avoid requesting duplicates immediately.");
+        setAuthMode('signin');
+        Alert.alert('Verify your email', 'Your verification email is queued. Delivery is usually quick, but can take several minutes. Check your inbox and Spam/Junk folder. Confirm it before signing in and avoid requesting duplicates immediately.');
         return;
       }
       if (r.status === 409) {
-        Alert.alert("Account conflict", d?.message || "An account already uses these details.", [
-          { text: "Cancel", style: "cancel" },
-          { text: "Sign in", onPress: () => setAuthMode("signin") },
-          { text: "Resend email", onPress: () => { void resendVerification(payload.email || ""); } }
-        ]);
-        return;
+        Alert.alert('Account conflict', d?.message || 'An account already uses these details.', [
+          { text: 'Cancel', style: 'cancel' }, { text: 'Sign in', onPress: () => setAuthMode('signin') },
+          { text: 'Resend email', onPress: () => { void resendVerification(snapshot.email || ''); } },
+        ]); return;
       }
-      if (!r.ok) throw new Error(formatHttpError(r, d, "Auth failed"));
-      await saveSession(d);
-    } catch (e) { Alert.alert("Failed", e instanceof Error ? e.message : ""); } finally { setBusy(false); }
+      if (login && r.status === 503) throw new LoginTemporarilyBusy();
+      if (!r.ok) throw new Error(formatHttpError(r, d, 'Auth failed'));
+      const saved = await saveSession(d, attempt.current);
+      if (saved && attempt.current()) setWorkspaceIntent(intent);
+    } catch (e) {
+      if (attempt.current() && !(e instanceof LoginCancelled)) Alert.alert(login ? 'Unable to sign in' : 'Unable to create account', e instanceof Error ? e.message : 'Check your connection, then try again.');
+    } finally {
+      if (attempt.current()) { passwordAttempt.current = false; setBusy(false); setLoginNotice(''); }
+      attempt.finish();
+    }
   }
 
   async function resendVerification(email: string) {
+    if (authAttempts.current.pending || busy || oauthBusy) return;
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       Alert.alert("Email required", "Enter your email address first.");
       return;
     }
+    const attempt = authAttempts.current.begin(); if (!attempt) return;
     setBusy(true);
     try {
       const r = await fetch(`${API_URL}/api/v1/auth/resend-verification`, {
@@ -1196,6 +1234,7 @@ function AcrossApp() {
         body: JSON.stringify({ email: normalizedEmail })
       });
       const d = await readResponseBody(r);
+      if (!attempt.current()) return;
       if (r.status === 429) {
         const seconds = Math.max(1, Number(d?.retry_after_seconds || r.headers.get("Retry-After") || 60));
         const minutes = Math.max(1, Math.ceil(seconds / 60));
@@ -1205,9 +1244,11 @@ function AcrossApp() {
       if (!r.ok) throw new Error(formatHttpError(r, d, "Could not resend verification"));
       Alert.alert("Verification email", d?.message || "If the account exists, a verification email has been sent. Check your inbox and Spam/Junk folder.");
     } catch (e) {
+      if (!attempt.current()) return;
       Alert.alert("Failed", e instanceof Error ? e.message : "Could not resend verification");
     } finally {
-      setBusy(false);
+      if (attempt.current()) setBusy(false);
+      attempt.finish();
     }
   }
 
@@ -1217,7 +1258,9 @@ function AcrossApp() {
       Alert.alert("Sign-in is still preparing", "Check your internet connection and try again in a moment.");
       return;
     }
-    if (oauthBusy) return;
+    if (oauthBusy || busy || logoutInProgress.current) return;
+    const attempt = authAttempts.current.begin(); if (!attempt) return;
+    googleAttempt.current = attempt;
     // Carry only a navigation preference through OAuth, never a provider role.
     googleWorkspaceIntent.current = authMode === 'signup' ? workspaceIntent : 'auto';
     setOauthBusy(true);
@@ -1225,30 +1268,48 @@ function AcrossApp() {
       if (privyReady && privyUser) { await finishPrivyLogin(); return; }
       await loginWithOAuth({ provider: "google" });
     } catch (e: any) {
+      if (!attempt.current()) return;
       const msg = e?.message || "";
-      if (msg.toLowerCase().includes("already logged in") && privyUser) { await finishPrivyLogin(); return; }
-      setOauthBusy(false); Alert.alert("Sign-in failed", msg || "Please try again");
+      // The SDK can know its session before this render receives privyUser.
+      // Verify its signed token instead of failing on that stale render value.
+      if (e?.code === 'attempted_login_with_oauth_while_already_logged_in' || msg.toLowerCase().includes("already logged in")) { await finishPrivyLogin(); return; }
+      setOauthBusy(false); attempt.finish(); googleAttempt.current = null;
+      if (e?.code === 'login_with_oauth_was_cancelled_by_user') return;
+      Alert.alert("Google sign-in failed", msg || "Check your connection, then try again.");
     }
   }
 
   async function finishPrivyLogin() {
-    if (googleVerificationInFlight.current) return;
-    googleVerificationInFlight.current = true;
+    const attempt = googleAttempt.current;
+    if (!attempt?.current() || googleVerificationInFlight.current === attempt) return;
+    googleVerificationInFlight.current = attempt;
+    const intent = googleWorkspaceIntent.current;
+    let invalidGoogleSession = false;
     setBusy(true);
     try {
       const privyToken = await getPrivyAccessTokenWithRetry();
+      if (!attempt.current()) return;
       if (!privyToken) throw new Error("Could not get access token");
       await validateSignupReferral(referralCode);
-      const r = await fetchWithTimeout(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) });
-      const d = await readResponseBody(r);
+      if (!attempt.current()) return;
+      const {response:r,body:d} = await googleSessionRequest(`${API_URL}/api/v1/auth/privy/verify`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${privyToken}`, "X-Client-Country-Code": catalogCountry }, body: JSON.stringify({ privy_token: privyToken, ...(referralCode.trim() ? {referral_code: referralCode.trim().toUpperCase()} : {}) }) }, attempt.signal);
+      invalidGoogleSession = r.status === 401 || r.status === 403;
       if (!r.ok) throw new Error(formatHttpError(r, d, "Verification failed"));
-      setWorkspaceIntent(googleWorkspaceIntent.current);
-      await saveSession(d); setOauthBusy(false);
+      if (!attempt.current()) return;
+      const saved = await saveSession(d, attempt.current); if (saved && attempt.current()) { setWorkspaceIntent(intent); setOauthBusy(false); }
     } catch (e) {
+      if (!attempt.current()) return;
       setOauthBusy(false);
-      await privyLogout().catch(() => undefined);
-      Alert.alert("Sign-in failed", e instanceof Error ? e.message : "");
-    } finally { googleVerificationInFlight.current = false; googleWorkspaceIntent.current = 'auto'; setBusy(false); }
+      // Preserve a completed Google login after temporary exchange/network
+      // failures. A manual retry can finish the handoff without another browser
+      // flow. Only rejected credentials require clearing the Google session.
+      if (invalidGoogleSession) {
+        setGoogleSessionClearing(true);
+        try {await privyLogout();} catch {if (attempt.current()) setGoogleSessionClearing(false);}
+      }
+      if (!attempt.current()) return;
+      Alert.alert("Google sign-in could not finish", e instanceof Error ? e.message : "Check your connection, then try again.");
+    } finally { if (googleVerificationInFlight.current === attempt) googleVerificationInFlight.current = null; if (attempt.current()) { googleWorkspaceIntent.current = 'auto'; setBusy(false); googleAttempt.current = null; } attempt.finish(); }
   }
 
   async function getPrivyAccessTokenWithRetry() {
@@ -1279,11 +1340,13 @@ function AcrossApp() {
   }
 
   async function requestPasswordReset(email: string) {
+    if (authAttempts.current.pending || busy || oauthBusy) return;
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail) {
       Alert.alert("Email required", "Enter your email address first.");
       return;
     }
+    const attempt = authAttempts.current.begin(); if (!attempt) return;
     setBusy(true);
     try {
       const r = await fetch(`${API_URL}/api/v1/auth/forgot-password`, {
@@ -1292,12 +1355,15 @@ function AcrossApp() {
         body: JSON.stringify({ email: normalizedEmail })
       });
       const d = await readResponseBody(r);
+      if (!attempt.current()) return;
       if (!r.ok) throw new Error(formatHttpError(r, d, "Could not request password reset"));
       Alert.alert("Check your email", d?.message || "If an account exists for that email, a password reset link has been sent. Check your inbox and Spam/Junk folder.");
     } catch (e) {
+      if (!attempt.current()) return;
       Alert.alert("Failed", e instanceof Error ? e.message : "Could not request password reset");
     } finally {
-      setBusy(false);
+      if (attempt.current()) setBusy(false);
+      attempt.finish();
     }
   }
   function clearPendingPayment() {
@@ -1875,9 +1941,7 @@ function AcrossApp() {
 
   async function pickAvatar() {
     if (!token) { Alert.alert("Session expired", "Please sign in again."); return; }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) { Alert.alert("Permission needed", "Allow access to your photo library."); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
+    const result = await chooseLibraryMedia({ mediaTypes: ["images"], quality: 0.8, allowsEditing: true, aspect: [1, 1] });
     if (result.canceled || !result.assets[0]) return;
 
     const asset = result.assets[0];
@@ -1922,7 +1986,7 @@ function AcrossApp() {
     : "";
 
   if (stage === "booting") return <LaunchScreen />;
-	if (stage === "auth") return <AuthScreen referralCode={referralCode} onReferralCode={setReferralCode} workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} onModeChange={setAuthMode} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
+	if (stage === "auth") return <AuthScreen referralCode={referralCode} onReferralCode={setReferralCode} workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} loginNotice={loginNotice} onCancelLogin={cancelPasswordLogin} onModeChange={mode => { if (oauthBusy) return; cancelPasswordLogin(); if (!authAttempts.current.pending) setAuthMode(mode); }} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
   if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === workspaceEntryNavigation.current.request) setProviderWorkspaceVisible(true);}}/>;
 
