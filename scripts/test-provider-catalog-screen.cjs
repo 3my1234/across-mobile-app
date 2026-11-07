@@ -10,6 +10,7 @@ const react = {
   useCallback: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) hooks[i] = {deps, fn}; return hooks[i].fn;},
 };
 const modules = {
+  './providerVideoProcessing': {waitForProviderVideo: async value => value},
   './mediaLibraryPicker': {chooseLibraryMedia: async()=>({canceled:true,assets:null})},
   './ProviderPanel': {ProviderPanel: 'Modal'}, './NativeServiceCategory': {NativeServiceCategory: 'Category'},
   react,

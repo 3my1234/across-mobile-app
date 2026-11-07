@@ -1,9 +1,10 @@
+import {waitForProviderVideo} from './providerVideoProcessing';
 import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {NativeServiceCategory} from './NativeServiceCategory';
 import {ProviderPanel} from './ProviderPanel';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Linking, Pressable,  StyleSheet, Switch, View} from 'react-native';
+import {AppState, ActivityIndicator, Alert, Linking, Pressable,  StyleSheet, Switch, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
@@ -31,6 +32,7 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
   const errorAt = (key: string) => fieldErrors[key] ? <Text accessibilityRole="alert" style={{color: c.danger}}>{fieldErrors[key]}</Text> : null;
   const focusError = (errors: Record<string, string>) => {setFieldErrors(errors); const key = Object.keys(errors)[0]; if (['capacity', 'country_code', 'currency_code', 'service_radius_km', 'delivery_times'].includes(key)) setAdvanced(true); scroll.current?.scrollTo({y: Math.max(0, (positions.current[key] ?? positions.current.options ?? 0) - 16), animated: true});};
   const [mapOpen, setMapOpen] = useState(false);
+  const [videoJobs,setVideoJobs]=useState<{key:string;status:string;url?:string;thumbnail_url?:string}[]>([]);
   const [availability, setAvailability] = useState<{id: string; title: string; media_urls?: string[]} | null>(null);
   const [search, setSearch] = useState(''), [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -80,16 +82,17 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
   const setVideos = (urls: string[]) => kind === 'listings' ? patch('attributes', {...draft?.attributes, video_urls: urls}) : patch('video_urls', urls);
   const addMedia = (video = false) => void run(async () => {
     const limits: PostPolicy = await providerRequest(token, '/providers/me/post-policy');
+    if (video && limits.video_uploads_paused) throw new Error('New video uploads are temporarily paused. Your published videos remain available.');
     if (video ? videos.length >= limits.max_videos : images.length >= limits.max_images) throw new Error(video ? 'Your plan does not allow more videos. Remove a video or upgrade.' : 'Your image limit is reached. Remove an image or upgrade.');
     const result = await chooseLibraryMedia({mediaTypes: video ? ['videos'] : ['images'], quality: 1, allowsEditing: false}); if (result.canceled) return;
     const asset = result.assets[0], mime = asset.mimeType || '';
     if (video) {
-      if (mime !== 'video/mp4' || !asset.duration || asset.duration > limits.max_video_seconds * 1000 || !asset.fileSize || asset.fileSize > 50 * 1024 * 1024) throw new Error('Choose an MP4 up to 50 MB, with each video no longer than 60 seconds.');
+      if (mime !== 'video/mp4' || !asset.duration || asset.duration > limits.max_video_seconds * 1000 || !asset.fileSize || asset.fileSize > 50 * 1024 * 1024) throw new Error(`Choose an MP4 up to 50 MB and ${limits.max_video_seconds} seconds.`);
     } else {const validation = verificationImageError(mime, asset.fileSize || 0); if (validation) throw new Error(validation);}
-    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || (video ? 'post.mp4' : 'post.jpg'), mime_type: mime, purpose: video ? 'post_video' : 'listing', post_id: draft?.id || undefined, post_kind: kind})});
-    await putProviderPhoto(signed.upload_url, asset.uri, mime, video ? 50 * 1024 * 1024 : 10 * 1024 * 1024);
-    if (video) {const verified = await providerRequest(token, '/providers/me/videos/complete', {method: 'POST', body: JSON.stringify({key: signed.key})}); if (mounted.current) setVideos([...videos, verified.url]);}
-    else if (mounted.current) setImages([...images, signed.view_url]);
+    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || (video ? 'post.mp4' : 'post.jpg'), mime_type: mime, purpose: video ? 'post_video' : 'listing', post_id: draft?.id || undefined, post_kind: kind, file_size: asset.fileSize})});
+    const processedImage=await putProviderPhoto(signed.upload_url, asset.uri, mime, video ? 50 * 1024 * 1024 : 10 * 1024 * 1024,{token,key:signed.key,processing_required:signed.processing_required,active:()=>mounted.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive'});
+    if (video) {const accepted = await providerRequest(token, '/providers/me/videos/complete', {method: 'POST', body: JSON.stringify({key: signed.key})}); const verified = await waitForProviderVideo(accepted,signed.key,path=>providerRequest(token,path),()=>mounted.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive'); if (mounted.current) setVideos([...videos, verified.url]);}
+    else if (mounted.current) setImages([...images, processedImage?.url || signed.view_url]);
     if (mounted.current) setPolicy(limits);
   }, video ? 'videos' : 'images');
   const locate = () => void run(async () => {setNumericText(old => {const next = {...old}; for (const key of ['latitude', 'longitude', 'inventory_latitude', 'inventory_longitude']) delete next[key]; return next;}); const location = await currentForegroundLocation(); if (!mounted.current) return; const {latitude, longitude, accuracy} = location.coords; setConfirmed(false); setDraft(old => old ? kind === 'listings' ? {...old, latitude, longitude, attributes: {...old.attributes, location_source: 'device', location_accuracy_m: accuracy, location_captured_at: new Date().toISOString()}} : {...old, inventory_latitude: latitude, inventory_longitude: longitude} : old);}, 'location');
@@ -160,7 +163,7 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
         {Number.isFinite(latitude) && Number.isFinite(longitude) && <><Text>Selected pin: {latitude.toFixed(6)}, {longitude.toFixed(6)}</Text>{button('Check this pin in Maps', () => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`).catch(() => setError('Could not open Maps. Retry.')))}</>}
         <View style={s.header}><Text style={{flex: 1}}>Yes, this pin is at my actual service / stock location</Text><Switch accessibilityLabel="Confirm actual listing location" disabled={busy} value={confirmed} onValueChange={value => {setConfirmed(value); setFieldErrors(old => {const next = {...old}; delete next.location; return next;});}}/></View>{errorAt('location')}
       </View>}
-      <View onLayout={event => {positions.current.images = event.nativeEvent.layout.y;}}><Text style={s.title}>4. Add clear photos</Text>{errorAt('images')}</View><View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>{images.map((url: string, index: number) => <View key={`${url}-${index}`}><ResilientImage uri={url} fallbackUri="" style={{width: 110, height: 90, borderRadius: 10}}/>{button('Remove', () => setImages(images.filter((_: string, i: number) => i !== index)))}</View>)}</View>{button('Add image', () => addMedia())}<Text style={s.title}>Videos (optional)</Text>{errorAt('videos')}{videos.map((url: string, index: number) => <View key={index}><Text>Video {index + 1}</Text>{button('Preview video', () => void run(async () => {await Linking.openURL(providerVideoPreviewURL(url));}))}{button('Remove video', () => setVideos(videos.filter((_: string, i: number) => i !== index)))}</View>)}{button('Add video', () => addMedia(true), !policy || policy.max_videos === 0)}{button('Save draft', save, !policy)}<Text>Save your draft, then submit it for review. After approval, customers can see it and message you.</Text>
+      <View onLayout={event => {positions.current.images = event.nativeEvent.layout.y;}}><Text style={s.title}>4. Add clear photos</Text>{errorAt('images')}</View><View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>{images.map((url: string, index: number) => <View key={`${url}-${index}`}><ResilientImage uri={url} fallbackUri="" style={{width: 110, height: 90, borderRadius: 10}}/>{button('Remove', () => setImages(images.filter((_: string, i: number) => i !== index)))}</View>)}</View>{button('Add image', () => addMedia())}<Text style={s.title}>Videos (optional)</Text>{errorAt('videos')}{videos.map((url: string, index: number) => <View key={index}><Text>Video {index + 1}</Text>{button('Preview video', () => void run(async () => {await Linking.openURL(providerVideoPreviewURL(url));}))}{button('Remove video', () => setVideos(videos.filter((_: string, i: number) => i !== index)))}</View>)}{button('Add video', () => addMedia(true), !policy || policy.max_videos === 0 || policy.video_uploads_paused === true)}{button('Check uploaded videos',()=>void run(async()=>{const response=await providerRequest(token,'/providers/me/videos');if(mounted.current)setVideoJobs(response.items||[]);}))}{videoJobs.map(job=><View key={job.key}>{job.thumbnail_url&&<ResilientImage uri={job.thumbnail_url} fallbackUri="" style={{width:96,height:72,borderRadius:8}}/>}<Text>{job.status==='complete'?'Video ready':job.status==='failed'?'Video could not be prepared':'Preparing video'}</Text>{job.status==='complete'&&job.url&&button('Use video',()=>{if(job.url)setVideos([...videos,job.url]);},!policy||videos.length>=policy.max_videos||videos.includes(job.url)||policy.video_uploads_paused===true)}</View>)}{button('Save draft', save, !policy)}<Text>Save your draft, then submit it for review. After approval, customers can see it and message you.</Text>
     </>}
   </ScrollView>{mapOpen && draft && <NativeProviderLocationPicker initial={latitude == null || longitude == null ? undefined : {latitude, longitude}} onClose={() => setMapOpen(false)} onChoose={point => {chooseAddress(point); if (kind === 'listings') setDraft(old => old ? {...old, attributes: {...old.attributes, location_source: 'map'}} : old); setMapOpen(false);}}/>}</KeyboardFrame></ProviderPanel>;
 }

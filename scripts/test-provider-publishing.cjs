@@ -9,6 +9,12 @@ function compile(code, globals = {}) {
   assert.equal(policy.providerVideoPreviewURL('https://media.example.test/video.mp4'), 'https://media.example.test/video.mp4');
   for (const url of ['javascript:alert(1)', 'http://media.example.test/video.mp4', 'https://user:secret@media.example.test/video.mp4']) assert.throws(() => policy.providerVideoPreviewURL(url));
   const limits = {post_limit: 20, max_images: 8, max_videos: 2, max_video_seconds: 60};
+  const goldLaunch = {post_limit:60,max_images:12,max_videos:1,max_video_seconds:30};
+  const diamondLaunch = {...goldLaunch,max_videos:0};
+  assert.equal(policy.postMediaError(diamondLaunch,['image'],['existing-video'],[],['existing-video']),'','published video survives tighter new-upload policy');
+  assert.ok(policy.postMediaError(diamondLaunch,['image'],['new-video'],[],[]),'new Diamond video blocked');
+  assert.ok(policy.postMediaError(goldLaunch,['image'],['first','second'],[],[]),'new Gold video count bounded');
+
   const service = policy.makeServiceDraft({contact_email: 'example@example.test'});
   Object.assign(service, {title: 'Repair', description: 'Repair work', category: 'Repair', city: 'Test city', state: 'Test state', media_urls: ['https://storage.test/one'], latitude: 9, longitude: 7});
   policy.validatePostDraft('listings', service, limits, true);

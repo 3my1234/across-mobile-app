@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
-let timers=new Map(),timerID=0,calls=[],respond;
-const ctx={exports:{},Error,AbortController,require:()=>({API_URL:'https://example.test',AUTH_TIMEOUT_MS:5000}),fetch:async(url,options)=>{calls.push({url,options});return respond();},setTimeout:fn=>{timers.set(++timerID,fn);return timerID;},clearTimeout:id=>timers.delete(id)};
+let timers=new Map(),timerID=0,calls=[],respond,now=100000;
+const ctx={exports:{},Error,AbortController,Date:class extends Date{static now(){return now;}},require:()=>({API_URL:'https://example.test',AUTH_TIMEOUT_MS:5000}),fetch:async(url,options)=>{calls.push({url,options});return respond();},setTimeout:fn=>{timers.set(++timerID,fn);return timerID;},clearTimeout:id=>timers.delete(id)};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/communityApi.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,ctx);
 const request=ctx.exports.communityRequest;
 async function main(){
@@ -16,6 +16,17 @@ async function main(){
  respond=()=>({status:403,ok:false,headers:{get:()=>null},text:async()=>'{"message":"Not admitted"}'});await assert.rejects(request('buyer','/messages'),/Not admitted/);
  respond=()=>({status:429,ok:false,headers:{get:name=>name==='Retry-After'?'25':name==='X-Request-ID'?'request-ref':null},text:async()=>'{"error":"Too many requests. Please wait and try again."}'});
  await assert.rejects(request('buyer','/messages',{method:'POST'}),error=>{assert.match(error.message,/Too many requests/);assert.match(error.message,/25 seconds/);assert.equal(error.status,429);assert.equal(error.requestID,'request-ref');return true;});
+ now+=25000;
+ const payload=JSON.stringify({message:'Retry safely',client_message_id:'same-reference'}),mutation={method:'POST',body:payload};
+ respond=()=>({status:503,ok:false,headers:{get:name=>name==='Retry-After'?'2':null},text:async()=>'{"error":"This chat is busy. Please retry shortly."}'});
+ const before=calls.length;
+ await assert.rejects(request('buyer','/messages',mutation),error=>error.status===503&&error.retryAfterSeconds===2);
+ await assert.rejects(request('buyer','/messages',mutation),error=>error.status===503);
+ assert.equal(calls.length,before+1,'early manual retry must not hit the server');
+ now+=1999;await assert.rejects(request('buyer','/messages',mutation),error=>error.status===503);assert.equal(calls.length,before+1);
+ now+=1;respond=()=>({status:201,ok:true,headers:{get:()=>null},text:async()=>'{"id":"saved"}'});
+ await request('buyer','/messages',mutation);assert.equal(calls.length,before+2);assert.equal(calls.at(-1).options.body,payload,'retry keeps original idempotency reference and payload');
+ assert.equal(timers.size,0,'cooldown creates no background retry timers');
  respond=()=>({status:500,ok:false,headers:{get:()=>null},text:async()=>'{"error":{"detail":"internal SQL details"}}'});await assert.rejects(request('buyer','/messages',{method:'POST'}),error=>{assert.match(error.message,/message could not be sent/);assert.doesNotMatch(error.message,/SQL|object Object/);return true;});
  respond=()=>({status:500,ok:false,headers:{get:()=>null},text:async()=>'Internal Server Error'});await assert.rejects(request('buyer','/messages',{method:'POST'}),/message could not be sent/);
  assert.equal(timers.size,0);console.log('Community API passed: full body deadline, abort, cleanup, no duplicate mutation, 304, malformed and permission errors.');
