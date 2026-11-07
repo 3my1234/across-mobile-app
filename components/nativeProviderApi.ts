@@ -36,7 +36,7 @@ export async function acknowledgeProviderRoute(token: string, eventID: string, n
   }
 }
 // Signed storage requests deliberately carry no application credentials.
-export async function putProviderPhoto(uploadURL: string, uri: string, mime: string, maximumBytes = 10 * 1024 * 1024) {
+export async function putProviderPhoto(uploadURL: string, uri: string, mime: string, maximumBytes = 10 * 1024 * 1024, processing?:{token:string;key:string;processing_required?:boolean;active?:()=>boolean}) {
   const url = new URL(uploadURL);
   if (url.protocol !== 'https:' || url.username || url.password) throw new Error('The upload link is invalid. Please retry.');
   const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 120000);
@@ -46,6 +46,18 @@ export async function putProviderPhoto(uploadURL: string, uri: string, mime: str
     if (typeof blob.size === 'number' && (blob.size <= 0 || blob.size > maximumBytes)) throw new Error('The selected file exceeds the upload limit.');
     const response = await fetch(uploadURL, {method: 'PUT', headers: {'Content-Type': mime}, body: blob, signal: controller.signal, credentials: 'omit'});
     if (!response.ok) throw new Error('Storage could not accept this file. Please retry or contact Support.');
+    clearTimeout(timer);
+    if(processing?.processing_required){
+      let result=await providerRequest(processing.token,'/providers/me/images/complete',{method:'POST',body:JSON.stringify({key:processing.key})});
+      for(let attempt=0;!result.url&&attempt<60;attempt++){
+        if(processing.active&&!processing.active())throw Error('Image processing continues. Reopen your account to check it.');
+        await new Promise(resolve=>setTimeout(resolve,Math.min(2000+attempt*500,6000)));
+        result=await providerRequest(processing.token,'/providers/me/images/status?key='+encodeURIComponent(processing.key));
+      }
+      if(!result.url)throw Error('Your image is still processing. Check its status before uploading again.');
+      return result as {url:string;thumbnail_url?:string;fallback_url?:string};
+    }
+
   } catch (error) {
     if (controller.signal.aborted) throw new Error('The file upload timed out. Check your connection and retry.');
     throw error;

@@ -83,5 +83,17 @@ function load(path, dependencies = {}, globals = {}) {
   assert.equal(calls[1][1].credentials, 'omit');
   await assert.rejects(api.putProviderPhoto('http://storage.example.test/photo', 'file:///x', 'image/jpeg'), /invalid/);
   await assert.rejects(api.putProviderPhoto('https://user:password@storage.example.test/photo', 'file:///x', 'image/jpeg'), /invalid/);
+  calls=[];
+  next={response:{ok:true,status:200},body:{url:'https://api.example.test/processed.webp',thumbnail_url:'https://api.example.test/thumbnail.webp'}};
+  const image=await api.putProviderPhoto('https://storage.example.test/image','file:///selected.jpg','image/jpeg',1024,{token:'owner-token',key:'private/image-pending/owned',processing_required:true});
+  assert.equal(image.url,next.body.url);
+  assert.equal(calls.length,3,'one local read, one storage PUT and one completion POST');
+  assert.equal(calls[1][1].headers.Authorization,undefined);
+  assert.equal(calls[2][1].method,'POST');
+  assert.equal(calls[2][1].headers.Authorization,'Bearer owner-token');
+  assert.equal(JSON.parse(calls[2][1].body).key,'private/image-pending/owned');
+  calls=[];next={response:{ok:true,status:202},body:{state:'queued'}};
+  await assert.rejects(api.putProviderPhoto('https://storage.example.test/image','file:///selected.jpg','image/jpeg',1024,{token:'owner-token',key:'owned',processing_required:true,active:()=>false}),/processing continues/);
+  assert.equal(calls.length,3,'background cancellation never replays completion or starts status reads');
   console.log('Native provider tests passed: entitlement dates, driver evidence, deep links, ownership errors, no mutation replay, isolated signed photo upload.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

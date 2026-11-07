@@ -1,6 +1,6 @@
 import {chooseLibraryMedia} from './mediaLibraryPicker';
 import React, {useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Pressable, View} from 'react-native';
+import {ActivityIndicator, Alert, AppState, Pressable, View} from 'react-native';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {ProviderAccount, verificationImageError} from './nativeProviderPolicy';
@@ -24,9 +24,9 @@ export function NativeProviderProfile({token, provider, onSaved}: {token: string
     const asset = result.assets[0], mime = asset.mimeType || '';
     const validation = verificationImageError(mime, asset.fileSize || 0); if (validation) throw new Error(validation);
     if ((asset.fileSize || 0) > 5 * 1024 * 1024) throw new Error('Choose a profile or banner image no larger than 5 MB.');
-    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || 'profile.jpg', mime_type: mime, purpose: banner ? 'banner' : 'logo'})});
-    await putProviderPhoto(signed.upload_url, asset.uri, mime, 5 * 1024 * 1024);
-    await providerRequest(token, '/providers/me/media', {method: 'PUT', body: JSON.stringify({[banner ? 'banner_url' : 'photo_url']: signed.view_url})});
+    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || 'profile.jpg', mime_type: mime, purpose: banner ? 'banner' : 'logo',file_size:asset.fileSize})});
+    const processed=await putProviderPhoto(signed.upload_url,asset.uri,mime,5*1024*1024,{token,key:signed.key,processing_required:signed.processing_required,active:()=>mounted.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive'});
+    await providerRequest(token, '/providers/me/media', {method: 'PUT', body: JSON.stringify({[banner ? 'banner_url' : 'photo_url']: processed?.url || signed.view_url})});
     if (mounted.current) {setNotice('Business image updated.'); await onSaved();}
   });
   const remove = (banner: boolean) => Alert.alert('Remove business image?', 'You can upload a replacement whenever you are ready.', [{text: 'Keep image', style: 'cancel'}, {text: 'Remove', style: 'destructive', onPress: () => void run(async () => {await providerRequest(token, '/providers/me/media', {method: 'PUT', body: JSON.stringify({[banner ? 'banner_url' : 'photo_url']: ''})}); if (mounted.current) {setNotice('Business image removed.'); await onSaved();}})}]);

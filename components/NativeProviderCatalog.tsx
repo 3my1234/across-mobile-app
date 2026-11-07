@@ -4,7 +4,7 @@ import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {NativeServiceCategory} from './NativeServiceCategory';
 import {ProviderPanel} from './ProviderPanel';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {ActivityIndicator, Alert, Linking, Pressable,  StyleSheet, Switch, View} from 'react-native';
+import {AppState, ActivityIndicator, Alert, Linking, Pressable,  StyleSheet, Switch, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
@@ -89,10 +89,10 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
     if (video) {
       if (mime !== 'video/mp4' || !asset.duration || asset.duration > limits.max_video_seconds * 1000 || !asset.fileSize || asset.fileSize > 50 * 1024 * 1024) throw new Error(`Choose an MP4 up to 50 MB and ${limits.max_video_seconds} seconds.`);
     } else {const validation = verificationImageError(mime, asset.fileSize || 0); if (validation) throw new Error(validation);}
-    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || (video ? 'post.mp4' : 'post.jpg'), mime_type: mime, purpose: video ? 'post_video' : 'listing', post_id: draft?.id || undefined, post_kind: kind, file_size: video ? asset.fileSize : undefined})});
-    await putProviderPhoto(signed.upload_url, asset.uri, mime, video ? 50 * 1024 * 1024 : 10 * 1024 * 1024);
-    if (video) {const accepted = await providerRequest(token, '/providers/me/videos/complete', {method: 'POST', body: JSON.stringify({key: signed.key})}); const verified = await waitForProviderVideo(accepted,signed.key,path=>providerRequest(token,path),()=>mounted.current); if (mounted.current) setVideos([...videos, verified.url]);}
-    else if (mounted.current) setImages([...images, signed.view_url]);
+    const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: asset.fileName || (video ? 'post.mp4' : 'post.jpg'), mime_type: mime, purpose: video ? 'post_video' : 'listing', post_id: draft?.id || undefined, post_kind: kind, file_size: asset.fileSize})});
+    const processedImage=await putProviderPhoto(signed.upload_url, asset.uri, mime, video ? 50 * 1024 * 1024 : 10 * 1024 * 1024,{token,key:signed.key,processing_required:signed.processing_required,active:()=>mounted.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive'});
+    if (video) {const accepted = await providerRequest(token, '/providers/me/videos/complete', {method: 'POST', body: JSON.stringify({key: signed.key})}); const verified = await waitForProviderVideo(accepted,signed.key,path=>providerRequest(token,path),()=>mounted.current&&AppState.currentState!=='background'&&AppState.currentState!=='inactive'); if (mounted.current) setVideos([...videos, verified.url]);}
+    else if (mounted.current) setImages([...images, processedImage?.url || signed.view_url]);
     if (mounted.current) setPolicy(limits);
   }, video ? 'videos' : 'images');
   const locate = () => void run(async () => {setNumericText(old => {const next = {...old}; for (const key of ['latitude', 'longitude', 'inventory_latitude', 'inventory_longitude']) delete next[key]; return next;}); const location = await currentForegroundLocation(); if (!mounted.current) return; const {latitude, longitude, accuracy} = location.coords; setConfirmed(false); setDraft(old => old ? kind === 'listings' ? {...old, latitude, longitude, attributes: {...old.attributes, location_source: 'device', location_accuracy_m: accuracy, location_captured_at: new Date().toISOString()}} : {...old, inventory_latitude: latitude, inventory_longitude: longitude} : old);}, 'location');
