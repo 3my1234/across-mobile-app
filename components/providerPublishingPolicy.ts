@@ -1,4 +1,4 @@
-export type PostPolicy = {post_limit: number; max_images: number; max_videos: number; max_video_seconds: number; town_hall: boolean; visibility: string};
+export type PostPolicy = {post_limit: number; max_images: number; max_videos: number; max_video_seconds: number; max_provider_videos?: number; max_video_bytes?: number; video_uploads_paused?: boolean; town_hall: boolean; visibility: string};
 export type ProviderPost = Record<string, any>;
 export function providerVideoPreviewURL(raw: string) {
   const url = new URL(raw);
