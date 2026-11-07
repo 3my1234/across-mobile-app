@@ -3,12 +3,13 @@ export class CommunityRequestError extends Error {
     constructor(message:string,public status:number,public requestID:string,public retryAfterSeconds?:number){super(message);this.name='CommunityRequestError';}
 }
 // Mutations remain explicit user actions: never replay a POST automatically.
-// Remember bounded server cooldowns so repeated taps cannot hammer a busy room.
-const mutationCooldowns=new Map<string,{until:number;error:CommunityRequestError}>();
+// Remember bounded server cooldowns for both manual sends and automatic reads.
+const requestCooldowns=new Map<string,{until:number;error:CommunityRequestError}>();
 export async function communityRequest(token: string, path: string, options: RequestInit = {}) {
-    const mutation=(options.method||'GET').toUpperCase()==='POST',cooldownKey=token+'\n'+path;
-    const now=Date.now();for(const [key,value] of mutationCooldowns)if(value.until<=now)mutationCooldowns.delete(key);
-    const cooldown=mutation?mutationCooldowns.get(cooldownKey):undefined;
+    const method=(options.method||'GET').toUpperCase(),mutation=method==='POST',read=method==='GET';
+    const cooldownKey=token+'\n'+method+'\n'+(read?path.split('?')[0]:path);
+    const now=Date.now();for(const [key,value] of requestCooldowns)if(value.until<=now)requestCooldowns.delete(key);
+    const cooldown=mutation||read?requestCooldowns.get(cooldownKey):undefined;
     if(cooldown&&cooldown.until>now)throw cooldown.error;
     const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
     const deadline=new Promise<never>((_,reject)=>{timer=setTimeout(()=>{reject(new Error('The server took too long to respond. Please retry.'));controller.abort();},Number.isFinite(AUTH_TIMEOUT_MS)?Math.min(15000,Math.max(1000,AUTH_TIMEOUT_MS)):12000);});
@@ -24,9 +25,9 @@ export async function communityRequest(token: string, path: string, options: Req
         const supplied=[data?.message,data?.error].find(value=>typeof value==='string'&&value.trim().length>0&&value.length<=500);
         const message=(supplied||fallback)+(retryAfter?` Try again in ${retryAfter} seconds.`:'');
         const error=new CommunityRequestError(message,response.status,response.headers.get('X-Request-ID')||'',retryAfter);
-        if(mutation&&retryAfter){
-            if(mutationCooldowns.size>=64&&!mutationCooldowns.has(cooldownKey))mutationCooldowns.delete(mutationCooldowns.keys().next().value!);
-            mutationCooldowns.set(cooldownKey,{until:Date.now()+retryAfter*1000,error});
+        if((mutation||read)&&retryAfter){
+            if(requestCooldowns.size>=64&&!requestCooldowns.has(cooldownKey))requestCooldowns.delete(requestCooldowns.keys().next().value!);
+            requestCooldowns.set(cooldownKey,{until:Date.now()+retryAfter*1000+(read?Math.floor(Math.random()*501):0),error});
         }
         throw error;
     }
