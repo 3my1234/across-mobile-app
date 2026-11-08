@@ -27,6 +27,16 @@ async function main(){
  now+=1;respond=()=>({status:201,ok:true,headers:{get:()=>null},text:async()=>'{"id":"saved"}'});
  await request('buyer','/messages',mutation);assert.equal(calls.length,before+2);assert.equal(calls.at(-1).options.body,payload,'retry keeps original idempotency reference and payload');
  assert.equal(timers.size,0,'cooldown creates no background retry timers');
+ const readsBefore=calls.length;
+ respond=()=>({status:503,ok:false,headers:{get:name=>name==='Retry-After'?'2':null},text:async()=>'{"error":"Busy"}'});
+ await assert.rejects(request('buyer','/chat/room/messages?limit=20'),e=>e.status===503);
+ await assert.rejects(request('buyer','/chat/room/messages?limit=40&cursor=changed'),e=>e.status===503);
+ assert.equal(calls.length,readsBefore+1,'query variation cannot bypass read cooldown');
+ respond=()=>({status:200,ok:true,headers:{get:()=>null},text:async()=>'{"items":[]}'});
+ await request('other-account','/chat/room/messages');
+ await request('buyer','/chat/another/messages');
+ assert.equal(calls.length,readsBefore+3,'other accounts and rooms remain independent');
+ now+=2501;await request('buyer','/chat/room/messages');assert.equal(calls.length,readsBefore+4,'read recovers after bounded delay');
  respond=()=>({status:500,ok:false,headers:{get:()=>null},text:async()=>'{"error":{"detail":"internal SQL details"}}'});await assert.rejects(request('buyer','/messages',{method:'POST'}),error=>{assert.match(error.message,/message could not be sent/);assert.doesNotMatch(error.message,/SQL|object Object/);return true;});
  respond=()=>({status:500,ok:false,headers:{get:()=>null},text:async()=>'Internal Server Error'});await assert.rejects(request('buyer','/messages',{method:'POST'}),/message could not be sent/);
  assert.equal(timers.size,0);console.log('Community API passed: full body deadline, abort, cleanup, no duplicate mutation, 304, malformed and permission errors.');

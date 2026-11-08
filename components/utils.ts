@@ -83,12 +83,32 @@ export async function fetchJSONWithTimeout(url: string, init?: RequestInit, time
   } finally { clearTimeout(timer!); }
 }
 
+// Store only transient error responses, never successful private history.
+const historyReadCooldowns=new Map<string,{until:number;result:{response:Response;body:any}}>();
+function historyReadKey(url:string,headers?:HeadersInit){
+ let auth='';
+ if(headers){
+  if(typeof (headers as Headers).get==='function')auth=(headers as Headers).get('Authorization')||'';
+  else if(Array.isArray(headers))auth=headers.find(([key])=>key.toLowerCase()==='authorization')?.[1]||'';
+  else auth=Object.entries(headers).find(([key])=>key.toLowerCase()==='authorization')?.[1]||'';
+ }
+ return auth+'\n'+url.split('?')[0];
+}
 // Only history reads are retried. Never replay a message or booking mutation.
 export async function fetchHistoryJSON(url: string, init?: RequestInit): Promise<{ response: Response; body: any }> {
   if (init?.method && init.method !== "GET") throw new Error("History requests must use GET");
+  const cooldownKey=historyReadKey(url,init?.headers),now=Date.now();
+  for(const [key,value] of historyReadCooldowns)if(value.until<=now)historyReadCooldowns.delete(key);
+  const cooldown=historyReadCooldowns.get(cooldownKey);if(cooldown)return cooldown.result;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const result = await fetchJSONWithTimeout(url, { ...init, cache: "no-store" }, 10000);
+      const retry=Number(result.response.headers?.get?.('Retry-After'));
+      if([429,503].includes(result.response.status)&&Number.isFinite(retry)&&retry>0){
+        if(historyReadCooldowns.size>=64&&!historyReadCooldowns.has(cooldownKey))historyReadCooldowns.delete(historyReadCooldowns.keys().next().value!);
+        historyReadCooldowns.set(cooldownKey,{until:Date.now()+Math.min(3600,Math.ceil(retry))*1000+Math.floor(Math.random()*501),result});
+        return result;
+      }
       if (attempt === 0 && [502, 503, 504].includes(result.response.status)) { await sleep(300); continue; }
       return result;
     } catch {

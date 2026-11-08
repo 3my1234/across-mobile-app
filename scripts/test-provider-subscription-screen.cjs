@@ -84,6 +84,14 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  provider.subscription={status:'active',current_period_end:'2027-01-01T00:00:00Z'};renewal={...renewal,renewal_status:'active',current_plan_id:id};render();
  button('Stop automatic renewal').props.onPress();alert[2].find(item=>item.text==='Confirm').onPress();await settle();
  assert.ok(text(tree).includes('Cancellation not confirmed'));assert.equal(provider.subscription.status,'active','unconfirmed cancellation cannot revoke paid access');
+ // Uncertainty must remain recoverable even if paid access expires while the
+ // process was down. The replacement checkout stays disabled.
+ provider.subscription={status:'expired',current_period_end:'2020-01-01T00:00:00Z',billing_mode:'recurring'};
+ button('Refresh billing status').props.onPress();await settle();render();
+ assert.ok(button('Retry cancellation'),'expired uncertain subscription exposes manual reconciliation');
+ assert.equal(button('Continue: NGN 500').props.disabled,true,'unresolved renewal cannot start replacement checkout');
+ button('Retry cancellation').props.onPress();alert[2].find(item=>item.text==='Confirm').onPress();await settle();
+ assert.ok(text(tree).includes('Cancellation not confirmed'),'failed reconciliation remains uncertain');
  const count=checkouts().length;await settle();assert.equal(checkouts().length,count,'checkout is never automatically replayed');
  hooks.forEach(hook=>hook?.cleanup?.());console.log('Native subscription screen passed: confirmation, duplicate taps, durable interrupted checkout, authoritative recovery and uncertain cancellation.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

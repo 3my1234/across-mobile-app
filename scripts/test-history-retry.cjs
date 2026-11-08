@@ -22,6 +22,18 @@ async function main() {
  mode='offline';calls=0;await assert.rejects(read('https://example.test'),/conversations have not been removed/);assert.equal(calls,2);assert.equal(timers.size,0);
  mode='body-timeout';calls=0;result=await read('https://example.test');assert.equal(calls,2,'a stalled JSON body must time out and retry');assert.equal(result.body.items[0].id,'saved');assert.equal(timers.size,0);
  calls=0;await assert.rejects(read('https://example.test',{method:'POST'}),/must use GET/);assert.equal(calls,0,'writes must never be replayed');
+ mode='busy-header';calls=0;
+ let tick=100000;
+ context.Date=class extends Date{static now(){return tick;}};
+ globals.fetch=async()=>{throw Error('unused')};
+ context.fetch=async(_url,options)=>{calls++;return {status:503,ok:false,headers:{get:()=> '2'},json:async()=>({error:'busy'})};};
+ let busy=await read('https://example.test/history?limit=20',{headers:{Authorization:'owner'}});
+ assert.equal(busy.response.status,503);assert.equal(calls,1,'no300ms retry before server deadline');
+ await read('https://example.test/history?limit=40',{headers:{Authorization:'owner'}});assert.equal(calls,1,'query variation shares cooldown');
+ await read('https://example.test/history',{headers:{Authorization:'other'}});assert.equal(calls,2,'account isolation');
+ context.fetch=async()=>{calls++;return {status:200,ok:true,json:async()=>({items:[]})};};
+ tick+=2501;await read('https://example.test/history',{headers:{Authorization:'owner'}});assert.equal(calls,3,'bounded recovery');
+ assert.equal(timers.size,0,'cooldowns create no background retry timers');
  console.log('History retries passed: transient gateway/network errors, body deadlines, permission errors, timer cleanup and no mutation replay.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

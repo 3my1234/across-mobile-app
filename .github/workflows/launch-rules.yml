@@ -27,6 +27,7 @@ jobs:
         run: |
           node scripts/test-provider-workspace.cjs
           node scripts/test-community-api.cjs
+          node scripts/test-history-retry.cjs
           node scripts/test-chat-unread.cjs
           node scripts/test-town-hall-feed.cjs
           node scripts/test-catalog.cjs
