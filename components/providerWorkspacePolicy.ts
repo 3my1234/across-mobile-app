@@ -1,6 +1,16 @@
-export const PROVIDER_ORIGIN='https://provider.atlxpres.com';
-export function trustedProviderURL(value:string){try{const url=new URL(value);return url.origin===PROVIDER_ORIGIN&&!url.username&&!url.password;}catch{return false;}}
-export function providerWorkspaceURL(route=''){const url=new URL(PROVIDER_ORIGIN+'/');const query=new URLSearchParams(route);const views=['overview','profile','verification','subscription','products','listings','requests','messages','support','merchant-orders'];const view=query.get('view');if(view&&views.includes(view))url.searchParams.set('view',view);for(const key of ['conversation','shared','hall','ticket','event','notification']){const value=query.get(key);if(value&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value))url.searchParams.set(key,value);}url.searchParams.set('embedded','1');url.searchParams.set('release','20261015-drivers');return url.toString();}
-export function providerInitScript(token:string,preference:string,nonce:string){return `(function(){if(location.origin!==${JSON.stringify(PROVIDER_ORIGIN)})return;window.ATLProviderNativeStart?.(${JSON.stringify({token,preference,nonce})});})();true;`;}
-export function safeExternalURL(value:string){try{return ['https:','mailto:','tel:'].includes(new URL(value).protocol);}catch{return false;}}
-export function providerCacheReplyScript(reply:unknown){return `(function(){if(location.origin===${JSON.stringify(PROVIDER_ORIGIN)})window.ATLProviderCacheReply?.(${JSON.stringify(reply)});})();true;`;}
+// Only navigation is carried by a link. Login and provider authorization remain unchanged.
+export function providerAppRoute(value: string): string | null {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'across:' || url.hostname !== 'providers' || url.username || url.password || url.port || !['', '/'].includes(url.pathname)) return null;
+    const query = new URLSearchParams();
+    const views = ['overview', 'profile', 'verification', 'subscription', 'products', 'listings', 'requests', 'messages', 'support', 'merchant-orders', 'more'];
+    const view = url.searchParams.get('view');
+    if (view && views.includes(view)) query.set('view', view);
+    for (const key of ['conversation', 'shared', 'hall', 'ticket', 'event', 'notification', 'listing', 'request']) {
+      const id = url.searchParams.get(key);
+      if (id && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)) query.set(key, id);
+    }
+    return query.toString();
+  } catch { return null; }
+}

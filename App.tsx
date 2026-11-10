@@ -26,6 +26,7 @@ import { SupportConversation } from "./components/SupportConversation";
 import { PaymentHistoryScreen } from "./components/PaymentHistoryScreen";
 import { ProviderWorkspace } from "./components/ProviderWorkspace";
 import {isProviderSubscriptionReturn} from './components/providerSubscriptionPolicy';
+import {providerAppRoute} from './components/providerWorkspacePolicy';
 import React, { Component, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { StatusBar } from "expo-status-bar";
 import * as SecureStore from "expo-secure-store";
@@ -234,17 +235,17 @@ function AcrossApp() {
   const chatCacheOwner=useRef(token);useEffect(()=>{const previous=chatCacheOwner.current;if(previous&&previous!==token){void privateChatStore.clear(previous);setShowSettings(false);}chatCacheOwner.current=token;},[token]);
   const manageOwnListing=(kind:'product'|'service',id:string)=>{setSelectedProduct(null);setProviderWorkspaceRoute(`view=${kind==='product'?'products':'listings'}&listing=${encodeURIComponent(id)}`);setProviderWorkspaceVisible(true);};
   const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
-  const [pendingProviderReturn,setPendingProviderReturn]=useState(false);
+  const [pendingProviderRoute,setPendingProviderRoute]=useState<string|null>(null);
   useEffect(()=>{
     let mounted=true;
-    const receive=(url:string|null)=>{if(mounted&&url&&isProviderSubscriptionReturn(url))setPendingProviderReturn(true);};
+    const receive=(url:string|null)=>{if(!mounted||!url)return;const route=isProviderSubscriptionReturn(url)?'view=subscription':providerAppRoute(url);if(route!==null)setPendingProviderRoute(route);};
     void Linking.getInitialURL().then(receive).catch(()=>{});
     const listener=Linking.addEventListener('url',event=>receive(event.url));
     return ()=>{mounted=false;listener.remove();};
   },[]);
   useEffect(()=>{
-    if(token&&pendingProviderReturn){setProviderWorkspaceRoute('view=subscription');setProviderWorkspaceVisible(true);setPendingProviderReturn(false);}
-  },[token,pendingProviderReturn]);
+    if(token&&pendingProviderRoute!==null){setProviderWorkspaceRoute(pendingProviderRoute);setProviderWorkspaceVisible(true);setPendingProviderRoute(null);}
+  },[token,pendingProviderRoute]);
   const cartHydrated = useRef(false);
   const cartStorageWrites = useRef(Promise.resolve());
   const restoredPendingPayment = useRef(false);

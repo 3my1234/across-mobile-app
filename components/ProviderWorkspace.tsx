@@ -17,7 +17,6 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {ResilientImage} from './ResilientImage';
-import {LegacyProviderWorkspace} from './LegacyProviderWorkspace';
 import {hasPaidProviderAccess, nativeProviderView, privateDocumentPreviewURL, providerRouteContext, providerSupportTicket, ProviderAccount, verificationFileError, verificationKinds} from './nativeProviderPolicy';
 import {acknowledgeProviderRoute, providerRequest, ProviderRequestError, putProviderPhoto} from './nativeProviderApi';
 import {NativeProviderCatalog} from './NativeProviderCatalog';
@@ -34,9 +33,8 @@ import {KeyboardFrame} from './KeyboardFrame';
 type Document = {id: string; document_type: string; status: string; review_notes?: string};
 type Props = {token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenReferrals?: () => void; onOpenSettings?: () => void; onOpenNotification?: (notification: Record<string, unknown>) => void};
 
-// Native is the normal app experience. Explicit false retains the rollback path.
+// Provider tools are native in every build; the web workspace is retired.
 export function ProviderWorkspace(props: Props) {
-  if (process.env.EXPO_PUBLIC_NATIVE_PROVIDER_ACCOUNT === 'false') return <LegacyProviderWorkspace {...props}/>;
   return <NativeProviderAccount {...props}/>;
 }
 export function NativeProviderAccount({token, route = '', onClose, onOpenSupport, onOpenSettings, onOpenNotification}: Props) {
