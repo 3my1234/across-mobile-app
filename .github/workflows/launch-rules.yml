@@ -31,4 +31,5 @@ jobs:
           node scripts/test-chat-unread.cjs
           node scripts/test-town-hall-feed.cjs
           node scripts/test-catalog.cjs
+          node scripts/test-public-catalog-cache.cjs
           node scripts/test-account-design.cjs

@@ -44,7 +44,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { usePrivy, PrivyProvider, useLoginWithOAuth } from "@privy-io/expo";
 import { Product, CartItem, Quote, OrderSummary, Tab, AuthMode, AppStage, SupportTicket, SupportMessage } from "./components/types";
 import { API_URL, TOKEN_KEY, EXPIRY_KEY, CART_KEY, PENDING_PAYMENT_KEY, LOGO, FLUTTERWAVE_LOGO, INTERNATIONAL_TRACKING_STAGES, LOCAL_TRACKING_STAGES, BOTTOM_NAV_HEIGHT } from "./components/config";
-import { money, fetchWithTimeout, fetchJSONWithTimeout, fetchHistoryJSON, sleep, mapProduct } from "./components/utils";
+import { money, fetchWithTimeout, fetchJSONWithTimeout, fetchHistoryJSON, sleep, mapProduct, normalizeMediaUrl } from "./components/utils";
+import {readPublicCatalog, writePublicCatalog} from './components/publicCatalogCache';
+import {publicImageCachePolicy} from './components/publicImageCache';
+import {Image as CachedImage} from 'expo-image';
 import { ALERT_CHANNEL_ID, ensureAndroidNotificationChannels } from "./components/notificationChannels";
 import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
@@ -163,6 +166,8 @@ function AcrossApp() {
   useDriverPresenceLifecycle(token);
   const [products, setProducts] = useState<Product[]>([]);
   const [productFeed, setProductFeed] = useState<{key: string; status: "loading" | "ready" | "error"}>({key: "", status: "loading"});
+  const [savedCatalogKey, setSavedCatalogKey] = useState('');
+  const freshCatalogKeys = useRef(new Set<string>());
   const [stockView, setStockView] = useState<"all" | "local" | "international">("all");
   const [internationalProducts, setInternationalProducts] = useState<Product[]>([]);
   const [internationalLoading, setInternationalLoading] = useState(false);
@@ -468,6 +473,20 @@ function AcrossApp() {
       if (catalogRequestKeyRef.current !== key) return;
       await loadProducts(true);
     })();
+  }, [catalogCountry, catalogState, catalogCity]);
+
+  useEffect(() => {
+    const key = `${catalogCountry}|${catalogState}|${catalogCity}`;
+    let active = true;
+    setSavedCatalogKey('');
+    void readPublicCatalog(key).then(saved => {
+      // Storage may resolve after the network or a destination switch. Never
+      // replace fresh data, or reconcile a cart/payment quote, from this cache.
+      if (!active || !saved?.length || freshCatalogKeys.current.has(key)) return;
+      setProducts(saved);
+      setSavedCatalogKey(key);
+    });
+    return () => { active = false; };
   }, [catalogCountry, catalogState, catalogCity]);
 
   useEffect(() => {
@@ -1053,8 +1072,11 @@ function AcrossApp() {
           if (!r.ok) throw new Error(`catalog request failed: ${r.status}`);
           const catalog: Product[] = ((await r.json()).products ?? []).map(mapProduct);
           if (catalogRequestKeyRef.current && catalogRequestKeyRef.current !== key) return;
+          freshCatalogKeys.current.add(key);
+          setSavedCatalogKey('');
           setProducts(catalog.map(item => latestProductSnapshot(productSnapshots.current.get(item.id), item)));
           setProductFeed({key, status: "ready"});
+          void writePublicCatalog(key, catalog);
           await hydrateCart(catalog);
           applyProductSnapshots(catalog);
           // A bounded feed may omit a cart/detail item. Revalidate those by ID
@@ -1069,7 +1091,8 @@ function AcrossApp() {
           }));
           catalog.slice(0, 12).forEach(product => {
             const uri = product.image_urls?.[0];
-            if (uri) void Image.prefetch(uri).catch(() => false);
+            const normalized = normalizeMediaUrl(uri || '');
+            if (normalized && publicImageCachePolicy(normalized) === 'memory-disk') void CachedImage.prefetch(normalized, {cachePolicy: 'memory-disk'}).catch(() => false);
           });
           void loadFlashSales(true, flashSaleContext.current.visible ? flashSaleContext.current.search : "");
           return;
@@ -2110,7 +2133,7 @@ function AcrossApp() {
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
-            ListHeaderComponent={<><DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
+            ListHeaderComponent={<>{stockView !== 'international' && savedCatalogKey === `${catalogCountry}|${catalogState}|${catalogCity}` && <Text accessibilityLiveRegion="polite" style={{paddingHorizontal:14,paddingVertical:8,color:theme.color('#66736F')}}>Saved listings. Connect to refresh prices and availability.</Text>}<DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <Text style={{ color: theme.color("#191919", "color"), fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
                 <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
