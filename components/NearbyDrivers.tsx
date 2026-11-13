@@ -21,9 +21,9 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
  const [filters,setFilters]=useState(false),[draftKind,setDraftKind]=useState<TransportKind>('all'),[draftRadius,setDraftRadius]=useState(10);
  const [safetyDriver,setSafetyDriver]=useState<Driver|null>(null);
  useEffect(()=>{setSafetyDriver(null);},[token]);
- const actor=useRef(token),gps=useRef(''),gpsSequence=useRef(0);actor.current=token;const theme=useTheme();
- async function locate(){if(gps.current===token)return;gps.current=token;const owner=token,version=++gpsSequence.current;setError('');try{const p=await currentForegroundLocation();if(actor.current===owner&&version===gpsSequence.current&&AppState.currentState==='active')setPickup({latitude:p.coords.latitude,longitude:p.coords.longitude});}catch(e){if(actor.current===owner&&version===gpsSequence.current)setError('Location is unavailable. Choose your pickup area on the map instead.');}finally{if(gps.current===owner)gps.current='';}}
- useEffect(()=>{actor.current=token;setPickup(null);void locate();return()=>{gpsSequence.current++;if(actor.current===token)actor.current='';};},[token]);
+ const actor=useRef(token),gps=useRef(''),gpsSequence=useRef(0),pickupMode=useRef<'gps'|'manual'>('gps');actor.current=token;const theme=useTheme();
+ async function locate(){if(gps.current===token)return;pickupMode.current='gps';gps.current=token;const owner=token,version=++gpsSequence.current;setPickup(null);setItems([]);setChecked(false);setBusy(false);setError('');try{const p=await currentForegroundLocation();if(actor.current===owner&&version===gpsSequence.current&&AppState.currentState==='active')setPickup({latitude:p.coords.latitude,longitude:p.coords.longitude});}catch(e){if(actor.current===owner&&version===gpsSequence.current)setError('Location is unavailable. Choose your pickup area on the map instead.');}finally{if(version===gpsSequence.current&&gps.current===owner)gps.current='';}}
+ useEffect(()=>{actor.current=token;pickupMode.current='gps';gps.current='';setPickup(null);void locate();return()=>{gpsSequence.current++;if(actor.current===token)actor.current='';};},[token]);
  const resultContext=useRef('');
  useEffect(()=>{let alive=true,flight=false;const context=JSON.stringify([token,pickup?.latitude,pickup?.longitude,kind,radius]);if(resultContext.current!==context){resultContext.current=context;setItems([]);setChecked(false);}
   async function load(){if(!pickup||flight||AppState.currentState!=='active')return;flight=true;setBusy(true);setError('');const started=Date.now();
@@ -32,7 +32,7 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
    finally{flight=false;if(alive)setBusy(false);}}
   void load();const timer=setInterval(()=>void load(),30000);return()=>{alive=false;clearInterval(timer);};
  },[token,pickup?.latitude,pickup?.longitude,kind,radius,reload]);
- useEffect(()=>{const tick=setInterval(()=>setNow(Date.now()),1000),listener=AppState.addEventListener('change',state=>{setSafetyDriver(null);setForeground(state==='active');setItems([]);setChecked(false);if(state==='active')setReload(n=>n+1);});return()=>{clearInterval(tick);listener.remove();};},[]);
+ useEffect(()=>{const tick=setInterval(()=>setNow(Date.now()),1000),listener=AppState.addEventListener('change',state=>{setSafetyDriver(null);setForeground(state==='active');setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';if(pickupMode.current==='gps'){setPickup(null);if(state==='active')void locate();}else if(state==='active')setReload(n=>n+1);});return()=>{clearInterval(tick);listener.remove();};},[token]);
  const colors={surface:theme.dark?'#102D25':'#FFFFFF',panel:theme.dark?'#0E3329':'#E8F6EF',border:theme.dark?'#335B4E':'#C5DED2',muted:theme.dark?'#AFC5BB':'#50695D',accent:theme.dark?'#50E3AF':'#007C55',background:theme.dark?'#081E17':'#F3F8F5'};
  const visible=foreground?items.filter(item=>item.freshUntil>now):[];
  const selected=transports.find(([value])=>value===kind)!;
@@ -56,7 +56,7 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
   <View style={styles.toolbar}>
    <Pressable accessibilityRole="button" accessibilityLabel={`Transport filter: ${selected[1]}`} accessibilityState={{expanded:filters}} onPress={openFilters} style={[styles.filterControl,styles.outline,outline,{flex:1.4}]}><Ionicons name={selected[2]} size={18} color={colors.accent}/><Text numberOfLines={1} style={[styles.controlText,styles.flex]}>{selected[1]}</Text><Ionicons name="chevron-down" size={14} color={colors.muted}/></Pressable>
    <Pressable accessibilityRole="button" accessibilityLabel={`Search radius: ${radius} kilometres`} accessibilityState={{expanded:filters}} onPress={openFilters} style={[styles.filterControl,styles.outline,outline,{flex:1}]}><Ionicons name="location-outline" size={18} color={colors.accent}/><Text style={[styles.controlText,styles.flex]}>{radius} km</Text><Ionicons name="chevron-down" size={14} color={colors.muted}/></Pressable>
-   <Pressable accessibilityRole="button" accessibilityLabel="Refresh nearby drivers" accessibilityState={{disabled:busy||!pickup,busy}} onPress={()=>setReload(n=>n+1)} disabled={busy||!pickup} style={[styles.iconButton,styles.outline,outline,{opacity:!pickup?0.5:1}]}>{busy?<ActivityIndicator size="small" color={colors.accent}/>:<Ionicons name="refresh" size={21} color={colors.accent}/>}</Pressable>
+   <Pressable accessibilityRole="button" accessibilityLabel="Refresh nearby drivers" accessibilityState={{disabled:busy||!pickup,busy}} onPress={()=>{if(pickupMode.current==='gps')void locate();else setReload(n=>n+1);}} disabled={busy||!pickup} style={[styles.iconButton,styles.outline,outline,{opacity:!pickup?0.5:1}]}>{busy?<ActivityIndicator size="small" color={colors.accent}/>:<Ionicons name="refresh" size={21} color={colors.accent}/>}</Pressable>
   </View>
   <View style={styles.resultsHeading}><Text accessibilityRole="header" style={styles.resultsTitle}>Nearby providers</Text><Text style={[styles.caption,{color:colors.muted}]}>{busy?'Updating...':`${visible.length} available`}</Text></View>
   {!!error&&<Text accessibilityRole="alert" style={[styles.error,{color:theme.dark?'#FFB4A9':'#AC2920'}]}>{error}</Text>}
@@ -66,7 +66,7 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
     const identity=item.provider_identity,name=identity?.name||item.title;
     const label=transports.find(([value])=>value===item.transport_kind)?.[1];
     const serviceLabel=item.transport_kind==='passenger'?'Passenger driver':item.transport_kind==='courier'?'Motorcycle courier':label||item.title;
-    const distance=item.distance_km<.5?'About 0.5 km':`About ${item.distance_km.toFixed(1)} km`;
+    const distance=item.distance_km<.5?'Under 0.5 km straight-line':`About ${item.distance_km.toFixed(1)} km straight-line`;
     return <View style={[styles.driver,{backgroundColor:colors.surface}]}>
      <Pressable accessibilityRole="button" accessibilityLabel={`View nearby provider ${name}`} onPress={()=>{if(item.freshUntil>Date.now())setSafetyDriver(item);else setReload(n=>n+1);}} style={styles.driverDetails}>
       <View style={styles.avatarWrap}>
@@ -85,13 +85,13 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
      <View style={styles.sheetHeading}><Text accessibilityRole="header" style={styles.resultsTitle}>Nearby filters</Text><Pressable accessibilityRole="button" accessibilityLabel="Close nearby filters" onPress={()=>setFilters(false)} style={styles.iconButton}><Ionicons name="close" size={24} color={colors.muted}/></Pressable></View>
      <ScrollView><Text style={styles.sectionTitle}>Transport</Text><View style={styles.options}>{transports.map(([value,label,icon])=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:draftKind===value}} onPress={()=>setDraftKind(value)} style={[styles.option,styles.outline,{backgroundColor:draftKind===value?colors.panel:colors.surface,borderColor:draftKind===value?colors.accent:colors.border}]}><Ionicons name={icon} size={20} color={colors.accent}/><Text style={[styles.controlText,styles.flex]}>{label}</Text>{draftKind===value&&<Ionicons name="checkmark-circle" size={18} color={colors.accent}/>}</Pressable>)}</View>
      <Text style={styles.sectionTitle}>Search radius</Text><View style={styles.controls}>{[5,10,20].map(value=><Pressable key={value} accessibilityRole="radio" accessibilityState={{checked:draftRadius===value}} onPress={()=>setDraftRadius(value)} style={[styles.control,styles.outline,{backgroundColor:draftRadius===value?colors.panel:colors.surface,borderColor:draftRadius===value?colors.accent:colors.border}]}><Text style={styles.controlText}>{value} km</Text>{draftRadius===value&&<Ionicons name="checkmark" size={18} color={colors.accent}/>}</Pressable>)}</View>
-     <View style={styles.filterHint}><Ionicons name="location" size={18} color={colors.muted}/><Text style={[styles.caption,styles.flex,{color:colors.muted}]}>Search around your selected pickup location.</Text></View>
+     <View style={styles.filterHint}><Ionicons name="location" size={18} color={colors.muted}/><Text style={[styles.caption,styles.flex,{color:colors.muted}]}>Straight-line radius from your pickup location. Road journeys may be longer; this is not driving distance or arrival time.</Text></View>
      <Pressable accessibilityRole="button" onPress={()=>{setKind(draftKind);setRadius(draftRadius);setFilters(false);}} style={[styles.control,styles.primary,styles.apply]}><Text style={styles.primaryText}>Show nearby providers</Text></Pressable></ScrollView>
     </SafeAreaView>
    </View>
   </Modal>
   {safetyDriver&&<DriverSafetyProfile key={`${token}:${safetyDriver.id}`} token={token} listingID={safetyDriver.id} onClose={()=>setSafetyDriver(null)} onOpenService={()=>{openDriver(safetyDriver);setSafetyDriver(null);}}/>}
-  {map&&<NativeProviderLocationPicker title="Choose your pickup area" hint="Search an address or place a pin. This is where you need a driver or courier, and may differ from your phone location." initial={pickup||undefined} onChoose={point=>{gpsSequence.current++;setPickup(point);setMap(false);}} onClose={()=>setMap(false)}/>}
+  {map&&<NativeProviderLocationPicker title="Choose your pickup area" hint="Search an address or place a pin. This is where you need a driver or courier, and may differ from your phone location." initial={pickup||undefined} onChoose={point=>{gpsSequence.current++;gps.current='';pickupMode.current='manual';setPickup(point);setMap(false);}} onClose={()=>setMap(false)}/>}
  </View>;
 }
 const styles=StyleSheet.create({
