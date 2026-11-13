@@ -19,6 +19,11 @@ export function priceMoney(value: number, currency = "NGN") {
 export function normalizeMediaUrl(rawUrl: string): string {
   const raw = String(rawUrl || "").trim();
   if (!raw) return "";
+  // Never turn a private signed URL into a public URL/cache identity.
+  try {
+    const path = decodeURIComponent(new URL(raw, API_URL).pathname).toLowerCase();
+    if (path.split('/').some(part => ['private', 'verification', 'private-chat'].includes(part))) return raw;
+  } catch { return raw; }
   if (raw.startsWith("user-uploads/")) {
     return withPortableImageFormat(`${API_URL}/api/v1/public/images/view/${encodeS3Key(raw)}`);
   }

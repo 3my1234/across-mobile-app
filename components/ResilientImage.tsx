@@ -3,11 +3,12 @@ import { AppState, ImageProps as NativeImageProps } from "react-native";
 import { Image, ImageProps } from "expo-image";
 import { API_URL, FALLBACK_IMAGES } from "./config";
 import { normalizeMediaUrl } from "./utils";
+import {publicImageCachePolicy} from './publicImageCache';
 
 type Props = Omit<ImageProps, "source" | "onLoad" | "onError"> & { uri?: string | null; uris?: (string | null | undefined)[]; fallbackUri?: string; onLoad?:NativeImageProps['onLoad'];onError?:NativeImageProps['onError'] };
 
 // Retry the original photo before replacing it with a fallback.
-export function ResilientImage({ uri, uris, fallbackUri = FALLBACK_IMAGES[0], onError, onLoad, ...props }: Props) {
+export function ResilientImage({ uri, uris, fallbackUri = FALLBACK_IMAGES[0], onError, onLoad, cachePolicy, ...props }: Props) {
   // Signed S3 URLs can rotate without changing the object. Compare canonical
   // public URLs so a catalogue refresh cannot reset an already loaded bitmap.
   const signature = JSON.stringify(Array.from(new Set([...(uris?.length ? uris : [uri]), fallbackUri]
@@ -71,7 +72,7 @@ export function ResilientImage({ uri, uris, fallbackUri = FALLBACK_IMAGES[0], on
   },[attempt.index,attempt.retry,attempt.cycle,signature]);
   // Keep the same native view when a request retries. Expo Image retains cached
   // bitmaps on disk and in memory instead of remounting a blank native image.
-  return <Image {...props} cachePolicy={current.startsWith(`${API_URL}/api/v1/public/images/view/`) ? 'memory-disk' : 'memory'} transition={120}
+  return <Image {...props} cachePolicy={publicImageCachePolicy(current) === 'memory-disk' ? cachePolicy ?? 'memory-disk' : 'memory'} transition={120}
     style={[{ backgroundColor: "#E5EBE7" }, props.style]} source={source}
     onLoad={event => {
       if(!mounted.current || activeRequest.current !== requestKey) return;

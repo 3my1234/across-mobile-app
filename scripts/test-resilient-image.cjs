@@ -3,7 +3,8 @@ let hooks=[],index=0,effects=[],timers=new Map(),nextTimer=0,changed=false,appSt
 const same=(a,b)=>a&&b&&a.length===b.length&&a.every((v,i)=>Object.is(v,b[i]));
 const react={createElement:(type,props)=>({type,props}),useRef:initial=>{const i=index++;return hooks[i]||(hooks[i]={current:initial});},useState:initial=>{const i=index++;if(!(i in hooks))hooks[i]=initial;return [hooks[i],value=>{hooks[i]=typeof value==='function'?value(hooks[i]):value;changed=true;}];},useMemo:(fn,deps)=>{const i=index++;if(!hooks[i]||!same(hooks[i].deps,deps))hooks[i]={value:fn(),deps};return hooks[i].value;},useEffect:(fn,deps)=>{const i=index++;if(!hooks[i]||!same(hooks[i].deps,deps)){const previous=hooks[i];hooks[i]={deps};effects.push(()=>{previous?.cleanup?.();hooks[i].cleanup=fn();});}}};
 const utils={exports:{},require:()=>({API_URL:'https://api.test'})};vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/utils.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,{...utils,URL});
-const context={exports:{},require:name=>name==='react'?react:name==='expo-image'?{Image:'Image'}:name==='react-native'?{Image:'Image',AppState:{addEventListener:(_name,fn)=>{appState=fn;return {remove(){appState=null;}};}}}:name==='./config'?{API_URL:'https://api.test',FALLBACK_IMAGES:['https://fallback.test/photo.png']}:utils.exports,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
+const policy={exports:{},URL,Set,require:()=>({API_URL:'https://api.test'})};vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/publicImageCache.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,policy);
+const context={exports:{},require:name=>name==='react'?react:name==='expo-image'?{Image:'Image'}:name==='react-native'?{Image:'Image',AppState:{addEventListener:(_name,fn)=>{appState=fn;return {remove(){appState=null;}};}}}:name==='./config'?{API_URL:'https://api.test',FALLBACK_IMAGES:['https://fallback.test/photo.png']}:name==='./publicImageCache'?policy.exports:utils.exports,setTimeout:(fn,delay)=>{const id=++nextTimer;timers.set(id,{fn,delay});return id;},clearTimeout:id=>timers.delete(id)};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/ResilientImage.tsx','utf8'),{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,esModuleInterop:true}}).outputText,context);
 const original='https://api.test/api/v1/public/images/view/photo.jpg';let props={uri:original};
 function render(){let node;for(let count=0;count<6;count++){index=0;effects=[];changed=false;node=context.exports.ResilientImage(props);effects.forEach(fn=>fn());if(!changed)return node;}throw Error('render loop');}
@@ -15,6 +16,16 @@ props={uri:'https://bucket.s3.eu-west-1.amazonaws.com/catalog/photo.jpg?X-Amz-Si
 assert.equal(utils.exports.normalizeMediaUrl(utils.exports.normalizeMediaUrl('user-uploads/a.avif')),utils.exports.normalizeMediaUrl('user-uploads/a.avif'),'portable cache URL is idempotent');
 props={uri:'https://api.test/private-chat/photo?token=short-lived'};image=render();assert.equal(image.props.cachePolicy,'memory','private/signed image routes do not enter the public disk cache');
 props={uri:original+'-updated'};image=render();assert.equal(image.props.source.cacheKey,original+'-updated','provider image replacement selects a new cache entry');
+const cdn='https://media.atlxpres.com/user-uploads/providers/p/listing/image.webp';
+props={uri:cdn+'?v=1'};image=render();assert.equal(image.props.cachePolicy,'memory-disk','live catalogue CDN images must survive process restart');
+const cdnKey=image.props.source.cacheKey;
+props={uri:cdn+'?v=2'};image=render();assert.notEqual(image.props.source.cacheKey,cdnKey,'a replacement version must not display the previous photo');
+props={uri:cdn,cachePolicy:'none'};image=render();assert.equal(image.props.cachePolicy,'none','public callers can opt out');
+for(const uri of [cdn+'?token=private',cdn+'?X-Amz-Signature=secret','https://media.atlxpres.com/private/photo.jpg','https://media.atlxpres.com/user-uploads/providers/p/verification/image.jpg','https://media.atlxpres.com.evil.test/image.jpg','https://other.test/public.jpg','https://api.test/private-chat/photo?token=secret','file:///private/image.jpg']){
+ props={uri,cachePolicy:'memory-disk'};image=render();assert.equal(image.props.cachePolicy,'memory','unknown/signed/private media cannot opt into the shared disk cache');
+}
+const privateURL='https://bucket.s3.eu-west-1.amazonaws.com/private/photo.jpg?X-Amz-Signature=secret';
+assert.equal(utils.exports.normalizeMediaUrl(privateURL),privateURL,'private S3 links retain their authorization and never become public URLs');
 
 // Execute the real JSX maps and compare rendered child identity across a URL
 // refresh and a different listing. No literal key-expression assertion.
