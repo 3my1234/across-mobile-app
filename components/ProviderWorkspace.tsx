@@ -57,6 +57,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [documentDriver,setDocumentDriver]=useState(false);
+  const [documentRevision,refreshDocumentReview]=useState(0);
   const [kind, setKind] = useState<string>('');
   const verificationScroll=useRef<React.ElementRef<typeof ScrollView>|null>(null);
   const [expiresOn, setExpiresOn] = useState('');
@@ -97,7 +98,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     let current = true;
     void providerRequest(token, '/providers/me/verification-documents').then(data => {if (current) {setDocuments(data.items || []);setDocumentDriver(data.is_driver===true);}}).catch(failure => {if (current) setError(failure instanceof Error ? failure.message : 'Documents could not load. Retry.');});
     return () => {current = false;};
-  }, [token, view, provider?.id]);
+  }, [token, view, provider?.id,documentRevision]);
 
   const run = async (action: () => Promise<void>) => {
     if (mutation.current) return;
@@ -156,7 +157,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     view === 'merchant-orders' ? <NativeProviderOrders embedded token={token} onClose={back}/> :
     view === 'notifications' && onOpenNotification ? <NativeProviderNotifications embedded token={token} hasProvider onClose={back} onOpen={onOpenNotification}/> :
     view === 'referrals' ? <NativeReferrals embedded token={token} onClose={back} onOpenXP={() => onOpenNotification?.({notification_type: 'xp_earned'})}/> :
-    <ScrollView ref={verificationScroll} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} contentContainerStyle={{padding: 16, gap: 12}} refreshControl={<RefreshControl refreshing={loading && ready} onRefresh={() => {if (!busy) void load();}}/>}>
+    <ScrollView ref={verificationScroll} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} contentContainerStyle={{padding: 16, gap: 12}} refreshControl={<RefreshControl refreshing={loading && ready} onRefresh={() => {if (!busy) {void load();if(view==='verification')refreshDocumentReview(value=>value+1);}}}/>}>
       {view === 'overview' && <>
 <View style={[s.card, {padding: 0, overflow: 'hidden', backgroundColor: c.surface, borderColor: c.line}]}><View style={{height: 126, backgroundColor: c.soft}}>{!!provider.provider_identity?.banner_url && <ResilientImage fallbackUri="" uri={provider.provider_identity.banner_url} style={{width: '100%', height: 126}}/>}</View><View style={{padding: 16, paddingTop: 0, gap: 8}}><View style={{marginTop: -35, width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: c.surface, backgroundColor: c.soft, overflow: 'hidden'}}>{provider.provider_identity?.avatar_url ? <ResilientImage fallbackUri="" uri={provider.provider_identity.avatar_url} style={{width: '100%', height: '100%'}}/> : <Text style={{padding: 20, fontSize: 24}}>{provider.business_name[0]}</Text>}</View><Text style={s.title}>{provider.business_name}</Text><Text>Verification: {provider.verification_status}</Text>{!!provider.verification_notes && <Text>{provider.verification_notes}</Text>}<Text>{paid ? `Paid access ends ${new Date(provider.subscription!.current_period_end!).toLocaleDateString()}` : 'Free access: one post and one image after approval. Upgrade for more.'}</Text>{provider.is_active === false && <Text style={{color: c.danger}}>Provider access is restricted. Permitted customer features remain available.</Text>}</View></View>
         <NativeProviderOverviewSummary key={`${provider.id}:${token}`} token={token} products={provider.can_sell_products !== false} services={provider.can_offer_services !== false}/>
@@ -172,7 +173,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
 {provider && view === 'verification' && <View style={{gap:12}}>
  <ProviderVerificationDocuments driver={!!provider.is_driver||documentDriver} documents={documents} busy={busy||loading||provider.is_active===false} onSelect={setKind} onView={id=>previewDocument(id)}/>
  {(provider.is_driver||documentDriver)&&<TransportSafetyNotice audience="driver"/>}
- {!!kind&&<View onLayout={()=>verificationScroll.current?.scrollToEnd({animated:true})} style={[s.card,{backgroundColor:c.surface,borderColor:c.accent,gap:10}]}>
+ {!!kind&&<View key={kind} onLayout={()=>verificationScroll.current?.scrollToEnd({animated:true})} style={[s.card,{backgroundColor:c.surface,borderColor:c.accent,gap:10}]}>
   <Text style={{fontSize:17,fontWeight:'700'}}>Upload {verificationKinds.find(([value])=>value===kind)?.[1]||'ID'}</Text>
   {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if printed (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
   {button('Take and submit photo',()=>uploadDocument('camera'),provider.is_active===false||loading)}
@@ -195,7 +196,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     {!!error && <View style={{padding: 12, gap: 8}}><Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>{button('Refresh account', () => void load())}</View>}
     {!!notice && <Text style={{padding: 12, color: c.accent}}>{notice}</Text>}{busy && <ActivityIndicator/>}
     <DriverPresenceNotice token={token} alwaysVisible={!!provider?.is_driver}/>
-    <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(isDriver ? 'drivers_license' : 'government_id'); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
+    <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(''); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
     <View accessibilityLabel="Provider navigation" style={[s.tabs, {backgroundColor: c.surface, borderColor: c.line}]}>{([['overview', 'Overview', 'home-outline'], ['catalog', 'Listings', 'list-outline'], ['requests', 'Bookings', 'calendar-outline'], ['messages', 'Chats', 'chatbubbles-outline'], ['more', 'More', 'ellipsis-horizontal']] as const).map(([id, label, icon]) => <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected: selected === id, disabled: busy}} disabled={busy} onPress={() => tab(id)} style={({pressed}) => ({flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 60, gap: 4, backgroundColor: pressed ? c.soft : c.surface})}><Ionicons name={icon} size={22} color={selected === id ? c.accent : c.muted}/><Text style={{fontSize: 11, color: selected === id ? c.accent : c.muted}}>{label}</Text></Pressable>)}</View>
   </KeyboardFrame></Modal></ProviderPanelBackContext.Provider>;
 }
