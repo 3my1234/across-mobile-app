@@ -1,10 +1,10 @@
 const fs=require('node:fs'),ts=require('typescript'),vm=require('node:vm'),assert=require('node:assert/strict');
-let launch,calls=[],alerts=[],permissionCalls=0,sourceChoice='Photos',pendingSource;
+let launch,documentLaunch,documentCalls=[],calls=[],alerts=[],permissionCalls=0,sourceChoice='Photos',pendingSource;
 const platform={OS:'android'};
 const picker={UIImagePickerPreferredAssetRepresentationMode:{Compatible:'compatible'},launchImageLibraryAsync:async options=>{calls.push(options);return launch(options);},requestMediaLibraryPermissionsAsync:async()=>{permissionCalls++;return{granted:false};}};
-const context={exports:{},Promise,Error,String,require:name=>name==='react-native'?{Platform:platform,Alert:{alert:(...args)=>{alerts.push(args);const buttons=args[2];if(!buttons)return;if(sourceChoice==='hold'){pendingSource=args;return;}if(sourceChoice==='dismiss'){args[3].onDismiss();return;}const button=buttons.find(b=>b.text===sourceChoice)||buttons.at(-1);button.onPress();}}}:picker};
+const context={exports:{},Promise,Error,String,require:name=>name==='react-native'?{Platform:platform,Alert:{alert:(...args)=>{alerts.push(args);const buttons=args[2];if(!buttons)return;if(sourceChoice==='hold'){pendingSource=args;return;}if(sourceChoice==='dismiss'){args[3].onDismiss();return;}const button=buttons.find(b=>b.text===sourceChoice)||buttons.at(-1);button.onPress();}}}:name==='expo-document-picker'?{getDocumentAsync:async options=>{documentCalls.push(options);return documentLaunch(options);}}:picker};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/mediaLibraryPicker.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,context);
-const choose=context.exports.chooseLibraryMedia;
+const choose=context.exports.chooseLibraryMedia,chooseDocument=context.exports.chooseUploadDocument;
 const asset={uri:'file:///synthetic.jpg',mimeType:'image/jpeg',fileSize:123};
 (async()=>{
  launch=async()=>({canceled:false,assets:[asset]});const options={mediaTypes:['images'],allowsMultipleSelection:true,selectionLimit:3,quality:.8};
@@ -25,11 +25,41 @@ const asset={uri:'file:///synthetic.jpg',mimeType:'image/jpeg',fileSize:123};
  sourceChoice='Gallery or Files';calls=[];launch=async()=>({canceled:true,assets:null});await choose(options);assert.equal(calls.length,1,'alternative cancellation does not reopen Photos');
  calls=[];launch=async()=>{throw Object.assign(Error('No activity'),{code:'ERR_MISSING_ACTIVITY_TO_HANDLE_INTENT'});};await choose(options);assert.equal(calls.length,1,'failed alternative must not recursively relaunch itself');
  sourceChoice='Photos';launch=async()=>({canceled:false,assets:[asset]});calls=[];await choose(options);assert.equal(calls.length,1,'another attempt works after cancellation/error');
- platform.OS='android';const beforeVideo=alerts.length;await choose({mediaTypes:['videos']});assert.equal(alerts.length,beforeVideo,'video-only flow remains direct');
+ platform.OS='android';const beforeVideo=alerts.length;sourceChoice='Videos';await choose({mediaTypes:['videos']});assert.equal(alerts[beforeVideo][0],'Choose video source','video uploads expose source choices too');
+ sourceChoice='Gallery or Files';calls=[];const video={uri:'file:///clip.mp4',mimeType:'video/mp4',duration:12000,fileSize:1024,fileName:'clip.mp4'};launch=async()=>({canceled:false,assets:[video]});assert.equal((await choose({mediaTypes:['videos'],allowsEditing:false})).assets[0],video);assert.equal(calls[0].legacy,true);assert.equal(calls[0].mediaTypes[0],'videos','Files/gallery alternate keeps video metadata and filtering');
  platform.OS='ios';const beforeIOS=alerts.length;await choose(options);assert.equal(alerts.length,beforeIOS,'iOS retains its original direct photo flow');
+ // Documents and gallery use the SAME lock. A file-oriented verification
+ // action must never bypass the alternate source or drop its size/MIME metadata.
+ platform.OS='android';sourceChoice='Gallery / Photos';calls=[];launch=async()=>({canceled:false,assets:[asset]});
+ const docOptions={type:['application/pdf','image/jpeg'],copyToCacheDirectory:true,multiple:false};
+ let document=await chooseDocument(docOptions);assert.equal(document.canceled,false);assert.equal(document.assets[0].uri,asset.uri);assert.equal(document.assets[0].mimeType,'image/jpeg');assert.equal(document.assets[0].size,123);assert.equal(calls[0].legacy,true);assert.equal(calls[0].allowsEditing,false);
+ sourceChoice='Files';documentCalls=[];const pdf={uri:'file:///proof.pdf',name:'proof.pdf',size:456,mimeType:'application/pdf',lastModified:1};documentLaunch=async()=>({canceled:false,assets:[pdf]});document=await chooseDocument(docOptions);assert.equal(document.assets[0],pdf);assert.equal(documentCalls[0],docOptions,'PDF types, single selection and cache-copy policy are preserved');
+ documentLaunch=async()=>({canceled:true,assets:null});assert.equal((await chooseDocument(docOptions)).canceled,true);assert.equal(documentCalls.length,2,'cancel never relaunches another source');
+ documentLaunch=async()=>({canceled:false,assets:[]});assert.equal((await chooseDocument(docOptions)).canceled,true,'empty document results cannot crash verification');
+ sourceChoice='Cancel';calls=[];documentCalls=[];assert.equal((await chooseDocument(docOptions)).canceled,true);assert.equal(calls.length+documentCalls.length,0);
+ sourceChoice='dismiss';assert.equal((await chooseDocument(docOptions)).canceled,true);
+ sourceChoice='hold';const pendingDocument=chooseDocument(docOptions);assert.equal((await choose({mediaTypes:['videos']})).canceled,true,'verification source dialog prevents overlapping video picker');assert.equal((await chooseDocument(docOptions)).canceled,true);pendingSource[2].find(b=>b.text==='Gallery / Photos').onPress();launch=async()=>({canceled:false,assets:[asset]});await pendingDocument;
+ sourceChoice='Gallery / Photos';calls=[];platform.OS='ios';await chooseDocument(docOptions);assert.equal(calls[0].legacy,undefined);assert.equal(calls[0].preferredAssetRepresentationMode,'compatible');
+ sourceChoice='Files';documentLaunch=async()=>{throw Error('provider unavailable');};assert.equal((await chooseDocument(docOptions)).canceled,true);sourceChoice='Gallery / Photos';launch=async()=>({canceled:false,assets:[asset]});assert.equal((await chooseDocument(docOptions)).canceled,false,'errors release the shared lock');
  for(const file of ['App.tsx','components/CommunityUpdates.tsx','components/NativeProviderCatalog.tsx','components/NativeProviderProfile.tsx','components/ProviderConversation.tsx','components/Screens.tsx','components/ProviderWorkspace.tsx']){
   const source=fs.readFileSync(file,'utf8');assert.ok(source.includes('chooseLibraryMedia('),file);assert.ok(!source.includes('requestMediaLibraryPermissionsAsync'),file+' must not gate gallery access');
  }
  assert.ok(fs.readFileSync('components/ProviderWorkspace.tsx','utf8').includes('requestCameraPermissionsAsync'),'camera permissions remain required');
- console.log('Gallery policy passed: explicit Android Photos/other-gallery routes, source-dialog dismissal, no retry loops, denied broad access, cancellation, Android missing-picker fallback, original selection limits, one picker, errors, iOS isolation, all seven upload entry points and camera protection.');
+ // Run verification's actual upload handler so the file-button route, MIME/
+ // expiry checks and private presign purpose are covered beyond a picker unit.
+ const policyScope={exports:{},URL};vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/nativeProviderPolicy.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,policyScope);
+ const workspace=fs.readFileSync('components/ProviderWorkspace.tsx','utf8');const handler=workspace.slice(workspace.indexOf('  const uploadDocument ='),workspace.indexOf('  const previewDocument ='));
+ let uploadFlight,verificationChoice={canceled:false,assets:[{uri:asset.uri,name:'proof.jpg',mimeType:asset.mimeType,size:asset.fileSize}]},verificationMedia={canceled:false,assets:[asset]};const writes=[];
+ const uploadScope={exports:{},kind:'government_id',expiresOn:'',token:'test-owner',mounted:{current:true},driverPhotoKinds:policyScope.exports.driverPhotoKinds,verificationExpiryError:policyScope.exports.verificationExpiryError,verificationFileError:policyScope.exports.verificationFileError,
+  run:action=>{uploadFlight=action();return uploadFlight;},chooseUploadDocument:async()=>verificationChoice,chooseLibraryMedia:async()=>verificationMedia,ImagePicker:{requestCameraPermissionsAsync:async()=>({granted:false})},setNotice(){},setDocuments(){},load:async()=>{},putProviderPhoto:async()=>{},
+  providerRequest:async(token,path,options)=>{if(options?.method==='POST'){writes.push({token,path,body:JSON.parse(options.body)});if(path.endsWith('/presign'))return {upload_url:'https://upload.invalid/private',view_url:'https://private.invalid/verification'};return {id:'saved'};}return {items:[]};}};
+ vm.runInNewContext(ts.transpileModule(handler+';exports.uploadDocument=uploadDocument;', {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText,uploadScope);
+ uploadScope.exports.uploadDocument('file');await uploadFlight;assert.equal(writes[0].body.purpose,'verification');assert.equal(writes[1].body.document_type,'government_id');assert.equal(writes[1].body.document_url,'https://private.invalid/verification');assert.ok(writes.every(write=>write.token==='test-owner'));
+ writes.length=0;verificationMedia={canceled:true,assets:null};uploadScope.exports.uploadDocument('library');await uploadFlight;assert.equal(writes.length,0,'cancelled verification selection never presigns or submits');
+ verificationChoice={canceled:false,assets:[pdf]};uploadScope.kind='driver_face';uploadScope.exports.uploadDocument('file');await assert.rejects(uploadFlight,/JPG, PNG or WebP/);assert.equal(writes.length,0,'gallery/file alternatives do not permit PDFs for driver photo evidence');
+ uploadScope.kind='driver_license';uploadScope.expiresOn='2030-12-31';verificationChoice={canceled:false,assets:[{uri:asset.uri,name:'license.jpg',mimeType:asset.mimeType,size:asset.fileSize}]};uploadScope.exports.uploadDocument('file');await uploadFlight;assert.equal(writes[1].body.expires_on,'2030-12-31','document expiry survives alternative-source selection');
+ const uploads=['App.tsx',...fs.readdirSync('components').filter(name=>/\.tsx?$/.test(name)).map(name=>'components/'+name)];
+ for(const file of uploads){if(file.endsWith('mediaLibraryPicker.ts'))continue;const source=fs.readFileSync(file,'utf8');assert.ok(!/\.launchImageLibraryAsync\s*\(|\.getDocumentAsync\s*\(/.test(source),file+' must use the shared upload source choices');}
+ assert.ok(fs.readFileSync('components/ProviderWorkspace.tsx','utf8').includes('chooseUploadDocument('),'verification file button uses the shared alternative');
+ console.log('Gallery policy passed: explicit Android Photos/other-gallery routes, source-dialog dismissal, no retry loops, denied broad access, cancellation, Android missing-picker fallback, original selection limits, one picker, errors, iOS isolation, all image/video/document entry points, verification PDF/gallery metadata and camera protection.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
