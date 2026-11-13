@@ -653,7 +653,7 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
     }
   }
 
-  const heading = LISTING_TYPES.find(item => item.key === type)?.label || "Services";
+  const heading = LISTING_TYPES.find(item => item.key === type)?.label || "All services";
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
   if (active && selectedConversation) {
@@ -757,13 +757,12 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
             <Pressable accessibilityRole="button" accessibilityState={{ selected: highlyRated }} accessibilityLabel="Filter services rated four stars and above" onPress={() => setHighlyRated(value => !value)} style={[styles.chip, highlyRated && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, highlyRated && styles.chipTextActive]}>4+ stars</Text></Pressable>
             {LISTING_TYPES.map(item => <Pressable key={item.key} onPress={() => setType(item.key)} style={[styles.chip, type === item.key && styles.chipActive]}><Text maxFontSizeMultiplier={1.2} style={[styles.chipText, type === item.key && styles.chipTextActive]}>{item.label}</Text></Pressable>)}
           </ScrollView>
-          <View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{listingPending ? "Loading services..." : `${items.length} verified listings`}</Text></View>
           {listingPending && !items.length ? <ActivityIndicator color={theme.color("#FF4747")} style={styles.loader} /> : (
             <FlatList
               style={styles.results}
               data={items}
               keyExtractor={item => item.id}
-              ListHeaderComponent={<DiscoverySections kind="service" owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={active&&discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
+              ListHeaderComponent={<><DiscoverySections kind="service" owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={active&&discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/><View style={styles.listHeading}><Text style={styles.sectionTitle}>{heading}</Text><Text style={styles.meta}>{listingPending ? "Loading services..." : `${items.length} verified listings`}</Text></View></>}
               numColumns={2}
               initialNumToRender={2}
               maxToRenderPerBatch={2}

@@ -52,14 +52,14 @@ export function ProviderProfileHeader({identity,compact=false,animate=false,show
   </View>
  </View>;
 }
-export function ProviderIdentity({identity,animate=false,compact=true}:{identity?:ProviderIdentityData;animate?:boolean;compact?:boolean}) {
+export function ProviderIdentity({identity,animate=false,compact=true,dense=false}:{identity?:ProviderIdentityData;animate?:boolean;compact?:boolean;dense?:boolean}) {
  const theme=useTheme();
  if(!identity?.name)return null;
- const size=compact?22:30;
- return <View style={styles.row}>
+ const size=dense?18:compact?22:30;
+ return <View style={[styles.row,dense&&{marginVertical:0,gap:4}]}>
   {identity.avatar_url?<ResilientImage fallbackUri="" uri={identity.avatar_url} style={{width:size,height:size,borderRadius:size/2}} resizeMode="cover"/>:<View style={[styles.avatar,{width:size,height:size,borderRadius:size/2,backgroundColor:theme.color("#E8EEEB","backgroundColor")}]}><Text style={styles.initial}>{identity.name.slice(0,1).toUpperCase()}</Text></View>}
-  <Text style={[styles.name,!compact&&{fontSize:13}]} numberOfLines={1}>{identity.name}</Text>
-  <ProviderBadge identity={identity} animate={animate}/>
+  <Text style={[styles.name,!compact&&{fontSize:13},dense&&{fontSize:10,lineHeight:14}]} numberOfLines={1}>{identity.name}</Text>
+  <ProviderBadge identity={identity} size={dense?14:18} animate={animate}/>
  </View>;
 }
 const styles=StyleSheet.create({row:{flexDirection:"row",alignItems:"center",gap:5,marginVertical:4,minWidth:0},name:{fontSize:11,lineHeight:16,flexShrink:1,fontWeight:"600"},avatar:{alignItems:"center",justifyContent:"center"},initial:{fontSize:11,fontWeight:"700"}});

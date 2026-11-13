@@ -1,4 +1,4 @@
-import {chooseLibraryMedia} from './mediaLibraryPicker';
+import {chooseLibraryMedia,chooseUploadDocument} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {refreshAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {DriverPresenceNotice} from './DriverPresenceNotice';
@@ -11,7 +11,6 @@ import {NativeProviderNotifications} from './NativeProviderNotifications';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Image, Modal, Pressable, RefreshControl,  StyleSheet, View} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
@@ -114,7 +113,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     let file: {uri: string; mime: string; bytes: number; name: string};
     if (source === 'file') {
       const driverPhoto = driverPhotoKinds.includes(documentKind);
-      const result = await DocumentPicker.getDocumentAsync({type: driverPhoto ? ['image/jpeg', 'image/png', 'image/webp'] : ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], copyToCacheDirectory: true, multiple: false});
+      const result = await chooseUploadDocument({type: driverPhoto ? ['image/jpeg', 'image/png', 'image/webp'] : ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], copyToCacheDirectory: true, multiple: false});
       if (result.canceled) return;
       const asset = result.assets[0]; file = {uri: asset.uri, mime: asset.mimeType || '', bytes: asset.size || 0, name: asset.name};
     } else {
@@ -173,8 +172,8 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   <Text>Face photo: show your own unobstructed face clearly, passport-style, without sunglasses or filters. Vehicle photo: show the exact car/bike you will use and a readable plate. Approved face, vehicle and plate photos are shown to customers; identity and other documents stay private.</Text>
   <Text>Select a document type</Text>{verificationKinds.map(([value, label]) => <Pressable accessibilityRole="radio" accessibilityState={{checked: kind === value}} key={value} onPress={() => setKind(value)} style={[s.button, {borderColor: c.line, backgroundColor: kind === value ? c.soft : c.surface}]}><Text>{label}</Text></Pressable>)}
   {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if the document has one (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
-  {button('Take and submit photo', () => uploadDocument('camera'), provider.is_active === false || loading)}{button('Choose and submit photo', () => uploadDocument('library'), provider.is_active === false || loading)}{button('Choose document from files', () => uploadDocument('file'), provider.is_active === false || loading)}
-  <Text>Up to 10 MB. Driver/rider evidence must be clear JPG, PNG or WebP photos. Other business documents may also be PDF. If your gallery does not show the photo, choose it from Files instead.</Text>
+  {button('Take and submit photo', () => uploadDocument('camera'), provider.is_active === false || loading)}{button('Choose and submit photo', () => uploadDocument('library'), provider.is_active === false || loading)}{button('Choose document or photo', () => uploadDocument('file'), provider.is_active === false || loading)}
+  <Text>Up to 10 MB. Driver/rider evidence must be clear JPG, PNG or WebP photos. Other business documents may also be PDF. Choose Gallery / Photos or Files. If one source is empty, cancel it and try the other.</Text>
   {documents.length === 0 && !loading && <Text>No documents submitted yet.</Text>}{documents.map(document => <View key={document.id} style={[s.card, {borderColor: c.line}]}><Text style={{fontWeight: '700'}}>{verificationKinds.find(([value]) => value === document.document_type)?.[1] || document.document_type}</Text><Text>{document.status}{document.expires_on ? ` · Expires ${document.expires_on}` : ''}</Text>{button('View submitted document', () => previewDocument(document.id))}{!!document.review_notes && <Text>{document.review_notes}</Text>}</View>)}
 </>)}
       {view === 'subscription' && card('Subscriptions and renewal', <NativeProviderSubscription key={`${provider.id}:${token}`} token={token} provider={provider} onChanged={load}/>)}
