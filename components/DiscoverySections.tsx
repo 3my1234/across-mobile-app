@@ -15,10 +15,10 @@ export function discoveryViewable(x:number,y:number,width:number,height:number,s
 }
 function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:DiscoveryCard[];active:boolean;onOpen:(card:DiscoveryCard)=>void;compact?:boolean}) {
  const c=useAccountDesign(),screen=useWindowDimensions(),refs=useRef(new Map<string,View>()),entered=useRef(new Map<string,number>()),measuring=useRef(new Set<string>());
- // Use listing-like photo proportions instead of letterboxing portraits in a wide banner.
- const tileWidth=Math.round(Math.max(160,Math.min(230,(screen.width-36)*.56))),stride=tileWidth+12;
+ // Wide, shallow promotions leave room for the ordinary catalogue below.
+ const tileWidth=Math.round(Math.max(200,Math.min(320,(screen.width-36)*.84))),stride=tileWidth+12;
  const captionHeight=Math.ceil(15+45*Math.max(1,screen.fontScale||1));
- const imageHeight=Math.round(tileWidth*.8),bannerHeight=imageHeight+captionHeight;
+ const imageHeight=Math.round(tileWidth*.28),bannerHeight=imageHeight+captionHeight;
  const row=useRef<View|null>(null),scroll=useRef<ScrollView|null>(null),viewport=useRef({width:screen.width,content:0,x:0}),interaction=useRef({touching:false,until:0});
  const [paused,setPaused]=useState(false),[position,setPosition]=useState({count:1,index:0});
  const updatePosition=()=>{
@@ -79,19 +79,19 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
 }
 export function DiscoverySections({owner,country='NG',state='',city='',search='',kind,sourceKind,sourceID,topics=[],active=true,onOpen}:{owner:string|null;country?:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string;topics?:string[];active?:boolean;onOpen:(card:DiscoveryCard)=>void}) {
  const listingKind=sourceID?sourceKind:kind, noun=listingKind==='product'?'Products':listingKind==='service'?'Services':'Listings';
- const c=useAccountDesign(),[data,setData]=useState<{similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]}|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),sequence=useRef(0),topicsRef=useRef(topics);topicsRef.current=topics;
+ const c=useAccountDesign(),[data,setData]=useState<{similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]}|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),sequence=useRef(0),dataContext=useRef(''),topicsRef=useRef(topics);topicsRef.current=topics;
  useCatalogFreshness(()=>setRetry(n=>n+1),active);
  useEffect(()=>{
   const version=++sequence.current;if(!active)return;
   let alive=true;const context={owner,country,state,city,search,kind,sourceKind,sourceID};
   if(sourceID)rememberDiscoveryTopics(owner,topicsRef.current);
-  setData(cachedDiscoveryFeed(context));setError('');
+  const key=JSON.stringify(context),sameContext=dataContext.current===key;dataContext.current=key;
+  const cached=cachedDiscoveryFeed(context);setData(previous=>cached||(sameContext?previous:null));setError('');
   const load=(force=false)=>{if(AppState.currentState!=='active')return;void discoveryFeed(context,force).then(next=>{if(alive&&version===sequence.current){setData(next);setError('');}}).catch(()=>{if(alive&&version===sequence.current)setError('Could not refresh discovery. Tap to retry.');});};
   const delay=setTimeout(()=>load(retry>0),300),timer=setInterval(()=>load(),60000);
   const foreground=AppState.addEventListener('change',state=>{if(state==='active')load();});
   return()=>{alive=false;clearTimeout(delay);clearInterval(timer);foreground.remove();};
  },[owner,country,state,city,search,kind,sourceKind,sourceID,active,retry]);
- if(!active)return null;
  const cards=data?(sourceID?data.similar:data.promoted):[];
  return <View>{!data&&!error&&<ActivityIndicator accessibilityLabel="Loading listing discovery" style={{padding:12}}/>}{!!error&&<Pressable accessibilityRole="button" onPress={()=>setRetry(n=>n+1)}><Text style={{color:c.danger,padding:12}}>{error}</Text></Pressable>}{data&&<Rail title={sourceID?`Recommended ${noun}`:`Promoted ${noun}`} cards={cards} compact={!sourceID} active={active} onOpen={onOpen}/>}</View>;
 }

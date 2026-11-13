@@ -133,7 +133,7 @@ function bookingQuantityCopy(listingType: string) {
   return { label: "Number of people receiving this service", help: "Enter 1 when booking only for yourself. This is not the number of days.", unit: "person" };
 }
 
-export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explore",initialConversationId="",initialListingId="",country="NG",destinationState="",destinationCity="",discoveryActive=true,onOpenProduct,onManageListing,onConversationVisibilityChange }: { token: string | null; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;initialListingId?:string;country?:string;destinationState?:string;destinationCity?:string;discoveryActive?:boolean;onOpenProduct?:(product:Product)=>void;onManageListing?:(kind:'product'|'service',id:string)=>void;onConversationVisibilityChange?:(visible:boolean)=>void }) {
+export function MarketplaceScreen({ token, active=true, bottomInset = 0, initialMode = "explore",initialConversationId="",initialListingId="",country="NG",destinationState="",destinationCity="",discoveryActive=true,onOpenProduct,onManageListing,onConversationVisibilityChange }: { token: string | null; active?:boolean; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;initialListingId?:string;country?:string;destinationState?:string;destinationCity?:string;discoveryActive?:boolean;onOpenProduct?:(product:Product)=>void;onManageListing?:(kind:'product'|'service',id:string)=>void;onConversationVisibilityChange?:(visible:boolean)=>void }) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
@@ -157,17 +157,18 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const threadRequest = useRef(0);
   const threadInFlight = useRef(false);
   const chatActor = useRef(token); chatActor.current = token;
-  useEffect(()=>{onConversationVisibilityChange?.(!!selectedConversation);return()=>onConversationVisibilityChange?.(false);},[!!selectedConversation,onConversationVisibilityChange]);
+  useEffect(()=>{onConversationVisibilityChange?.(active && !!selectedConversation);return()=>onConversationVisibilityChange?.(false);},[active,!!selectedConversation,onConversationVisibilityChange]);
   const threadLoader = useRef(loadConversationMessages); threadLoader.current = loadConversationMessages;
   const requestsGeneration = useRef(0);
   const conversationsGeneration = useRef(0);
   const conversationsRead = useRef<{actor: string | null; generation: number} | null>(null);
   const conversationRef = useRef(selectedConversation); conversationRef.current = selectedConversation;
   const [selected, setSelected] = useState<Listing | null>(null);
-  const contactAccess=useBusinessContact(token,selected?.provider_id||selected?.provider_identity?.id);
+  const contactAccess=useBusinessContact(token,active ? selected?.provider_id||selected?.provider_identity?.id : undefined);
+ const initialListingHandled=useRef(''),initialConversationHandled=useRef('');
  const discoveryListingRead=useRef(0),discoveryVisible=useRef(discoveryActive);discoveryVisible.current=discoveryActive;
  async function openDiscoveryService(id:string){const request=++discoveryListingRead.current,actor=token;try{const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/listings/${encodeURIComponent(id)}`);if(request!==discoveryListingRead.current||chatActor.current!==actor||!discoveryVisible.current)return;if(!response.ok||body.id!==id)throw Error('Service unavailable');await openListing(body);}catch{if(request===discoveryListingRead.current&&chatActor.current===actor)Alert.alert('Service unavailable','Refresh and choose another listing.');}}
- useEffect(()=>{if(initialListingId)void openDiscoveryService(initialListingId);return()=>{discoveryListingRead.current++;};},[initialListingId,token]);
+ useEffect(()=>{if(!active)return;if(initialListingId && initialListingId!==initialListingHandled.current){initialListingHandled.current=initialListingId;void openDiscoveryService(initialListingId);}if(!initialListingId)initialListingHandled.current='';return()=>{discoveryListingRead.current++;};},[active,initialListingId,token]);
   const [slots, setSlots] = useState<Slot[]>([]);
   const [type, setType] = useState("");
   const [search, setSearch] = useState("");
@@ -327,7 +328,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }
 
   useEffect(() => {
-    if (locationRequested) return;
+    if (!active || locationRequested) return;
     setLocationRequested(true);
     void (async () => {
       try {
@@ -337,7 +338,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
         // Keep the full verified marketplace usable if location is temporarily unavailable.
       }
     })();
-  }, [locationRequested, readNearbyPosition]);
+  }, [active, locationRequested, readNearbyPosition]);
 
   useEffect(() => {
     let active = true;
@@ -406,17 +407,18 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   }, [authHeaders, token]);
 
   useEffect(() => {
+    if (!active) return;
     const timer = setTimeout(() => {
       if (mode === "explore") void loadListings();
       else if (mode === "requests") void loadRequests();
       else void loadConversations();
     }, mode === "explore" ? 250 : 0);
     return () => clearTimeout(timer);
-  }, [loadConversations, loadListings, loadRequests, mode]);
+  }, [active, loadConversations, loadListings, loadRequests, mode]);
 
   useCatalogFreshness(async () => {
     await Promise.allSettled([mode === "explore" ? loadListings(true) : Promise.resolve(), selectedRef.current ? refreshSelectedListing(selectedRef.current.id) : Promise.resolve()]);
-  });
+  }, active);
 
   async function refreshSelectedListing(id: string) {
     const request = ++detailRequest.current;
@@ -526,7 +528,8 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     providerChatHistory.clear();threadETags.current.clear();threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);conversationsRef.current=[];setConversationListCursor("");setChatError("");setChatSending(false);setChatLoading(false);
   },[token]);
   useEffect(()=>{
-    if(!token || !initialConversationId)return;
+    if(!active || !token || !initialConversationId || initialConversationHandled.current===initialConversationId)return;
+    initialConversationHandled.current=initialConversationId;
     const actor=token;let cancelled=false;
     setMode("messages");setChatLoading(true);
     void (async()=>{
@@ -539,8 +542,9 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
       }catch(error){if(!cancelled && actor===chatActor.current){setError(error instanceof Error?error.message:"Conversation could not open. Please retry.");setChatLoading(false);}}
     })();
     return()=>{cancelled=true;threadRequest.current++;};
-  },[token,initialConversationId]);
+  },[active,token,initialConversationId]);
   useEffect(()=>{
+    if (!active) return;
     let stopped=false, busy=false;
     const refresh=async()=>{
       if(stopped||busy||!token||AppState.currentState!=="active"||chatBusy.current||threadInFlight.current)return;
@@ -551,7 +555,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     const timer=setInterval(()=>void refresh(),5000);
     const foreground=AppState.addEventListener("change",state=>{if(state==="active")void refresh();});
     return()=>{stopped=true;clearInterval(timer);foreground.remove();};
-  },[token,mode,selectedConversation?.id,authHeaders,loadConversations,loadRequests]);
+  },[active,token,mode,selectedConversation?.id,authHeaders,loadConversations,loadRequests]);
 
   async function openListing(item: Listing) {
     recordDiscoveryDetail(token,'service',item.id,[item.category]);
@@ -652,13 +656,13 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
   const heading = LISTING_TYPES.find(item => item.key === type)?.label || "Services";
   const detailBottomPadding = bottomInset + BOTTOM_NAV_HEIGHT + 32;
 
-  if (selectedConversation) {
+  if (active && selectedConversation) {
     return <ProviderConversation receiptContext={{channel:'business',conversationId:selectedConversation.id}} token={token || ""} key={`${token}:${selectedConversation.id || selectedConversation.listing_id}`} title={selectedConversation.listing_title} provider={selectedConversation.counterpart_name} identity={selectedConversation.provider_identity} messages={conversationMessages} busy={chatSending} loading={chatLoading} paused={!selectedConversation.subscription_active || selectedConversation.status!=="open"} error={chatError} hasEarlier={!!conversationCursor} bottomInset={0}
       onClose={()=>{threadRequest.current++;threadInFlight.current=false;conversationRef.current=null;setSelectedConversation(null);void loadConversations(true);}}
       onSend={sendConversationMessage} onEarlier={()=>{if(conversationCursor&&!threadInFlight.current)void loadConversationMessages(selectedConversation,conversationCursor);}} onRefresh={()=>void loadConversationMessages(selectedConversation)}/>;
   }
 
-  if (selected) {
+  if (active && selected) {
     const requiresSafetyAcknowledgement = !selected.direct_booking;
     const quantityCopy = bookingQuantityCopy(selected.listing_type);
     return (
@@ -733,7 +737,7 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
     );
   }
 
-  if(showDrivers)return <NearbyDrivers token={token||''} onClose={()=>setShowDrivers(false)} onOpen={id=>{setShowDrivers(false);void (async()=>{try{const response=await fetchWithTimeout(API_URL+'/api/v1/marketplace/listings/'+id);if(!response.ok)throw Error('This driver service is no longer available.');await openListing(await response.json());}catch(error){Alert.alert('Driver unavailable',error instanceof Error?error.message:'Please refresh.');}})();}}/>;
+  if(active && showDrivers)return <NearbyDrivers token={token||''} onClose={()=>setShowDrivers(false)} onOpen={id=>{setShowDrivers(false);void (async()=>{try{const response=await fetchWithTimeout(API_URL+'/api/v1/marketplace/listings/'+id);if(!response.ok)throw Error('This driver service is no longer available.');await openListing(await response.json());}catch(error){Alert.alert('Driver unavailable',error instanceof Error?error.message:'Please refresh.');}})();}}/>;
   return (
     <View style={styles.fill}>
       <View style={styles.modeBar}>
@@ -759,13 +763,13 @@ export function MarketplaceScreen({ token, bottomInset = 0, initialMode = "explo
               style={styles.results}
               data={items}
               keyExtractor={item => item.id}
-              ListHeaderComponent={<DiscoverySections kind="service" owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
+              ListHeaderComponent={<DiscoverySections kind="service" owner={token} country={country} state={destinationState} city={destinationCity} search={search || type} active={active&&discoveryActive&&!selected&&!selectedConversation} onOpen={card=>{void openDiscovery(card,{country,state:destinationState,city:destinationCity},product=>onOpenProduct?.(product),id=>{void openDiscoveryService(id);}).catch(error=>Alert.alert('Listing unavailable',error.message));}}/>}
               numColumns={2}
               initialNumToRender={2}
               maxToRenderPerBatch={2}
               windowSize={5}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void loadListings(true)} tintColor="#FF4747" />}
-              onEndReached={() => { if (listingCursor && !loadingMore) void loadListings(false, listingCursor); }}
+              onEndReached={() => { if (active && listingCursor && !loadingMore) void loadListings(false, listingCursor); }}
               onEndReachedThreshold={0.35}
               contentContainerStyle={{ padding: 8, paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 24 }}
               columnWrapperStyle={styles.columns}
