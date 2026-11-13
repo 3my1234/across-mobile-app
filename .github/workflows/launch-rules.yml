@@ -32,4 +32,6 @@ jobs:
           node scripts/test-town-hall-feed.cjs
           node scripts/test-catalog.cjs
           node scripts/test-public-catalog-cache.cjs
+          node scripts/test-media-library-picker.cjs
+          node scripts/test-driver-safety.cjs
           node scripts/test-account-design.cjs

@@ -28,7 +28,7 @@ async function settle() {for (let i = 0; i < 6; i++) {await new Promise(resolve 
   render(); submit().props.onPress(); await settle(); assert.equal(calls.length, 0, 'invalid business cannot be submitted');
   for (const [label, value] of [['Business name', 'Synthetic business'], ['Business contact email', 'owner@example.test'], ['Business contact phone', '+2340000000000'], ['City', 'Lagos'], ['State / region', 'Lagos']]) nodes(tree).find(n => n.props.accessibilityLabel === label).props.onChangeText(value);
   nodes(tree).find(n => n.props.accessibilityRole === 'radio').props.onPress(); nodes(tree).find(n => n.type === 'Switch').props.onValueChange(true); render();
-  assert.match(text(tree), /driver licence, your car and the plate number/);
+  assert.match(text(tree), /face photo.*vehicle\/bike.*plate photos.*driving licence.*registration.*insurance.*roadworthiness/);
   let release; held = new Promise(resolve => {release = resolve;});
   submit().props.onPress(); submit().props.onPress(); await settle(); assert.equal(calls.length, 1, 'double tap submits once'); assert.equal(submit().props.disabled, true);
   assert.equal(calls[0].token, 'new-verified-owner'); assert.equal(calls[0].path, '/providers/onboarding');

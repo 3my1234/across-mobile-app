@@ -11,7 +11,23 @@ export const verificationKinds = [
   ['professional_license', 'Professional qualification'], ['property_authority', 'Property authority'],
   ['address_proof', 'Proof of address'], ['drivers_license', 'Driver licence'],
   ['driver_vehicle', 'Car / vehicle'], ['driver_plate', 'Plate number'],
+  ['driver_face', 'Clear face photo (shown to customers)'],
+  ['vehicle_registration', 'Vehicle registration / licence'], ['vehicle_insurance', 'Vehicle insurance'],
+  ['roadworthiness', 'Roadworthiness certificate'], ['driver_lasrra', 'Lagos LASRRA card'], ['driver_lasdri', 'Lagos LASDRI card'],
 ] as const;
+export const driverPhotoKinds = ['drivers_license', 'driver_face', 'driver_vehicle', 'driver_plate', 'vehicle_registration', 'vehicle_insurance', 'roadworthiness', 'driver_lasrra', 'driver_lasdri'];
+export const driverExpiryKinds = ['drivers_license', 'vehicle_insurance', 'roadworthiness'];
+export function requiredDriverDocuments(provider: Pick<ProviderAccount, 'country_code' | 'state'>) {
+  const kinds = ['driver_face', 'driver_vehicle', 'driver_plate', 'drivers_license', 'vehicle_registration', 'vehicle_insurance', 'roadworthiness'];
+  if (provider.country_code?.toUpperCase() === 'NG' && ['lagos', 'lagos state'].includes(provider.state?.trim().toLowerCase() || '')) kinds.push('driver_lasrra', 'driver_lasdri');
+  return kinds;
+}
+export function verificationExpiryError(kind: string, value: string, now = Date.now()) {
+  if (!value.trim()) return driverExpiryKinds.includes(kind) ? 'Enter the expiry date printed on this document.' : '';
+  const date = Date.parse(value.trim() + 'T00:00:00Z');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value.trim()) || !Number.isFinite(date) || new Date(date).toISOString().slice(0, 10) !== value.trim() || date < Math.floor(now / 86400000) * 86400000) return 'Enter a current expiry date as YYYY-MM-DD.';
+  return '';
+}
 export function hasPaidProviderAccess(provider: ProviderAccount, now = Date.now()) {
   const end = Date.parse(provider.subscription?.current_period_end || '');
   return provider.subscription?.status === 'active' && Number.isFinite(end) && end > now;
@@ -22,7 +38,7 @@ export function verificationImageError(mime: string, bytes: number) {
   return '';
 }
 export function verificationFileError(kind: string, mime: string, bytes: number) {
-  if (['drivers_license', 'driver_vehicle', 'driver_plate'].includes(kind)) return verificationImageError(mime, bytes);
+  if (driverPhotoKinds.includes(kind)) return verificationImageError(mime, bytes);
   if (!['application/pdf', 'image/jpeg', 'image/png', 'image/webp'].includes(mime)) return 'Choose a PDF, JPG, PNG or WebP document.';
   if (!Number.isFinite(bytes) || bytes <= 0 || bytes > 10 * 1024 * 1024) return 'Choose a document no larger than 10 MB.';
   return '';
