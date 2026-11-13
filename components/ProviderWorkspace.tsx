@@ -1,6 +1,7 @@
 import {chooseLibraryMedia,chooseUploadDocument} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {refreshAutomaticDriverAvailability} from './automaticDriverAvailability';
+import {ProviderVerificationDocuments} from './ProviderVerificationDocuments';
 import {DriverPresenceNotice} from './DriverPresenceNotice';
 import {NativeProviderPromotions} from './NativeProviderPromotions';
 import {ProviderPanelBackContext} from './ProviderPanel';
@@ -17,7 +18,7 @@ import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
 import {TransportSafetyNotice} from './TransportSafetyNotice';
 import {useAccountDesign} from './AccountDesign';
 import {ResilientImage} from './ResilientImage';
-import {hasPaidProviderAccess, nativeProviderView, privateDocumentPreviewURL, providerRouteContext, providerSupportTicket, ProviderAccount, verificationFileError, verificationKinds, driverPhotoKinds, driverExpiryKinds, requiredDriverDocuments, verificationExpiryError} from './nativeProviderPolicy';
+import {hasPaidProviderAccess, nativeProviderView, privateDocumentPreviewURL, providerRouteContext, providerSupportTicket, ProviderAccount, verificationFileError, verificationKinds, driverPhotoKinds, driverExpiryKinds, verificationExpiryError} from './nativeProviderPolicy';
 import {acknowledgeProviderRoute, providerRequest, ProviderRequestError, putProviderPhoto} from './nativeProviderApi';
 import {NativeProviderCatalog} from './NativeProviderCatalog';
 import {NativeProviderOnboarding} from './NativeProviderOnboarding';
@@ -55,7 +56,10 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const [ready, setReady] = useState(false), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false);
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [kind, setKind] = useState<string>('government_id');
+  const [documentDriver,setDocumentDriver]=useState(false);
+  const [documentRevision,refreshDocumentReview]=useState(0);
+  const [kind, setKind] = useState<string>('');
+  const verificationScroll=useRef<React.ElementRef<typeof ScrollView>|null>(null);
   const [expiresOn, setExpiresOn] = useState('');
   useEffect(() => {setExpiresOn('');}, [kind]);
   const readFlight = useRef(false);
@@ -92,9 +96,9 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   useEffect(() => {
     if (view !== 'verification' || !provider?.id) return;
     let current = true;
-    void providerRequest(token, '/providers/me/verification-documents').then(data => {if (current) setDocuments(data.items || []);}).catch(failure => {if (current) setError(failure instanceof Error ? failure.message : 'Documents could not load. Retry.');});
+    void providerRequest(token, '/providers/me/verification-documents').then(data => {if (current) {setDocuments(data.items || []);setDocumentDriver(data.is_driver===true);}}).catch(failure => {if (current) setError(failure instanceof Error ? failure.message : 'Documents could not load. Retry.');});
     return () => {current = false;};
-  }, [token, view, provider?.id]);
+  }, [token, view, provider?.id,documentRevision]);
 
   const run = async (action: () => Promise<void>) => {
     if (mutation.current) return;
@@ -131,7 +135,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     await putProviderPhoto(signed.upload_url, file.uri, file.mime);
     // Never replay this mutation automatically after an ambiguous timeout.
     await providerRequest(token, '/providers/me/verification-documents', {method: 'POST', body: JSON.stringify({document_type: documentKind, document_url: signed.view_url, ...(expiry ? {expires_on: expiry} : {})})});
-    if (mounted.current) {setNotice('Document submitted for review.'); await load(); const data = await providerRequest(token, '/providers/me/verification-documents'); if (mounted.current) setDocuments(data.items || []);}
+    if (mounted.current) {setNotice('Document submitted for review.'); setKind(''); await load(); const data = await providerRequest(token, '/providers/me/verification-documents'); if (mounted.current) setDocuments(data.items || []);}
   });
   const previewDocument = (id: string) => void run(async () => {
     // Fetch a new short-lived signed link. Never persist links in the app cache.
@@ -153,7 +157,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     view === 'merchant-orders' ? <NativeProviderOrders embedded token={token} onClose={back}/> :
     view === 'notifications' && onOpenNotification ? <NativeProviderNotifications embedded token={token} hasProvider onClose={back} onOpen={onOpenNotification}/> :
     view === 'referrals' ? <NativeReferrals embedded token={token} onClose={back} onOpenXP={() => onOpenNotification?.({notification_type: 'xp_earned'})}/> :
-    <ScrollView keyboardShouldPersistTaps="handled" removeClippedSubviews={false} contentContainerStyle={{padding: 16, gap: 12}} refreshControl={<RefreshControl refreshing={loading && ready} onRefresh={() => {if (!busy) void load();}}/>}>
+    <ScrollView ref={verificationScroll} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} contentContainerStyle={{padding: 16, gap: 12}} refreshControl={<RefreshControl refreshing={loading && ready} onRefresh={() => {if (!busy) {void load();if(view==='verification')refreshDocumentReview(value=>value+1);}}}/>}>
       {view === 'overview' && <>
 <View style={[s.card, {padding: 0, overflow: 'hidden', backgroundColor: c.surface, borderColor: c.line}]}><View style={{height: 126, backgroundColor: c.soft}}>{!!provider.provider_identity?.banner_url && <ResilientImage fallbackUri="" uri={provider.provider_identity.banner_url} style={{width: '100%', height: 126}}/>}</View><View style={{padding: 16, paddingTop: 0, gap: 8}}><View style={{marginTop: -35, width: 76, height: 76, borderRadius: 38, borderWidth: 4, borderColor: c.surface, backgroundColor: c.soft, overflow: 'hidden'}}>{provider.provider_identity?.avatar_url ? <ResilientImage fallbackUri="" uri={provider.provider_identity.avatar_url} style={{width: '100%', height: '100%'}}/> : <Text style={{padding: 20, fontSize: 24}}>{provider.business_name[0]}</Text>}</View><Text style={s.title}>{provider.business_name}</Text><Text>Verification: {provider.verification_status}</Text>{!!provider.verification_notes && <Text>{provider.verification_notes}</Text>}<Text>{paid ? `Paid access ends ${new Date(provider.subscription!.current_period_end!).toLocaleDateString()}` : 'Free access: one post and one image after approval. Upgrade for more.'}</Text>{provider.is_active === false && <Text style={{color: c.danger}}>Provider access is restricted. Permitted customer features remain available.</Text>}</View></View>
         <NativeProviderOverviewSummary key={`${provider.id}:${token}`} token={token} products={provider.can_sell_products !== false} services={provider.can_offer_services !== false}/>
@@ -166,16 +170,19 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
         {card('Preferences and help', <>{row('Notifications', 'notifications-outline', () => go('notifications'))}{onOpenSettings && row('App settings and notifications', 'settings-outline', onOpenSettings)}{row('Support', 'help-circle-outline', () => onOpenSupport())}</>)}
         {row('Switch to customer', 'swap-horizontal-outline', onClose)}<Text>Browse and buy with the same account. Open Account to return to your provider workspace.</Text>
       </>}
-{provider && view === 'verification' && card('Verification documents', <>
-  <Text>{provider.is_driver ? 'All required driver/rider evidence must be current and approved before driving services go live. Replacing a document or photo returns it to review.' : 'Upload clear evidence for your business. Documents are sent for private review.'}</Text>
-  {provider.is_driver && <><Text style={{fontWeight:'700'}}>Required evidence</Text>{requiredDriverDocuments(provider).map(value => <Text key={value}>{verificationKinds.find(([key]) => key === value)?.[1] || value}</Text>)}<TransportSafetyNotice audience="driver"/></>}
-  <Text>Face photo: show your own unobstructed face clearly, passport-style, without sunglasses or filters. Vehicle photo: show the exact car/bike you will use and a readable plate. Approved face, vehicle and plate photos are shown to customers; identity and other documents stay private.</Text>
-  <Text>Select a document type</Text>{verificationKinds.map(([value, label]) => <Pressable accessibilityRole="radio" accessibilityState={{checked: kind === value}} key={value} onPress={() => setKind(value)} style={[s.button, {borderColor: c.line, backgroundColor: kind === value ? c.soft : c.surface}]}><Text>{label}</Text></Pressable>)}
-  {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if the document has one (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
-  {button('Take and submit photo', () => uploadDocument('camera'), provider.is_active === false || loading)}{button('Choose and submit photo', () => uploadDocument('library'), provider.is_active === false || loading)}{button('Choose document or photo', () => uploadDocument('file'), provider.is_active === false || loading)}
-  <Text>Up to 10 MB. Driver/rider evidence must be clear JPG, PNG or WebP photos. Other business documents may also be PDF. Choose Gallery / Photos or Files. If one source is empty, cancel it and try the other.</Text>
-  {documents.length === 0 && !loading && <Text>No documents submitted yet.</Text>}{documents.map(document => <View key={document.id} style={[s.card, {borderColor: c.line}]}><Text style={{fontWeight: '700'}}>{verificationKinds.find(([value]) => value === document.document_type)?.[1] || document.document_type}</Text><Text>{document.status}{document.expires_on ? ` · Expires ${document.expires_on}` : ''}</Text>{button('View submitted document', () => previewDocument(document.id))}{!!document.review_notes && <Text>{document.review_notes}</Text>}</View>)}
-</>)}
+{provider && view === 'verification' && <View style={{gap:12}}>
+ <ProviderVerificationDocuments driver={!!provider.is_driver||documentDriver} documents={documents} busy={busy||loading||provider.is_active===false} onSelect={setKind} onView={id=>previewDocument(id)}/>
+ {(provider.is_driver||documentDriver)&&<TransportSafetyNotice audience="driver"/>}
+ {!!kind&&<View key={kind} onLayout={()=>verificationScroll.current?.scrollToEnd({animated:true})} style={[s.card,{backgroundColor:c.surface,borderColor:c.accent,gap:10}]}>
+  <Text style={{fontSize:17,fontWeight:'700'}}>Upload {verificationKinds.find(([value])=>value===kind)?.[1]||'ID'}</Text>
+  {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if printed (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
+  {button('Take and submit photo',()=>uploadDocument('camera'),provider.is_active===false||loading)}
+  {button('Choose and submit photo',()=>uploadDocument('library'),provider.is_active===false||loading)}
+  {button('Choose document or photo',()=>uploadDocument('file'),provider.is_active===false||loading)}
+  <Text style={{fontSize:12,color:c.muted}}>Up to 10 MB. Driver/rider evidence must be JPG, PNG or WebP photos; other IDs may also be PDF. Choose Gallery / Photos or Files. If one source is empty, cancel and try the other.</Text>
+  {button('Cancel upload',()=>setKind(''))}
+ </View>}
+</View>}
       {view === 'subscription' && card('Subscriptions and renewal', <NativeProviderSubscription key={`${provider.id}:${token}`} token={token} provider={provider} onChanged={load}/>)}
       {view === 'promotions' && <NativeProviderPromotions key={`${provider.id}:${token}`} token={token}/>}
       {view === 'profile' && card('Business profile', <NativeProviderProfile key={provider.id} token={token} provider={provider} onSaved={load}/>)}
@@ -185,11 +192,11 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   </>;
   return <ProviderPanelBackContext.Provider value={registerPanelBack}><Modal animationType="slide" onRequestClose={() => {const handlers = [...panelBackHandlers.current.values()]; if (handlers.length) {handlers[handlers.length - 1](); return;} if (history.length || !roots.includes(view)) back(); else tab('more');}}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, backgroundColor: c.background, paddingTop: insets.top}}>
     <View style={[s.header, {backgroundColor: c.surface, borderColor: c.line}]}><Image source={LOGO} resizeMode="contain" style={{width: 32, height: 32}}/><Text style={{fontSize: 10, color: c.muted}}>PROVIDER</Text><Text numberOfLines={1} style={[s.title, {flex: 1, fontSize: 16}]}>{labels[view] || 'Provider workspace'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Provider notifications" onPress={() => go('notifications')} style={{padding: 10}}><Ionicons name="notifications-outline" color={c.accent} size={23}/></Pressable></View>
-    {!roots.includes(view) && !['products', 'listings', 'merchant-orders', 'notifications', 'referrals', 'messages'].includes(view) && <View style={{paddingHorizontal: 16}}>{button('Back', back)}</View>}
+    {!roots.includes(view) && !['products', 'listings', 'merchant-orders', 'notifications', 'referrals', 'messages'].includes(view) && <View style={{paddingHorizontal: 16}}>{view==='verification'?<Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={{flexDirection:'row',alignItems:'center',gap:10,minHeight:48}}><Ionicons name="arrow-back" size={24} color={c.accent}/><Text style={{fontSize:18,fontWeight:'700'}}>Verification documents</Text></Pressable>:button('Back', back)}</View>}
     {!!error && <View style={{padding: 12, gap: 8}}><Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>{button('Refresh account', () => void load())}</View>}
     {!!notice && <Text style={{padding: 12, color: c.accent}}>{notice}</Text>}{busy && <ActivityIndicator/>}
     <DriverPresenceNotice token={token} alwaysVisible={!!provider?.is_driver}/>
-    <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(isDriver ? 'drivers_license' : 'government_id'); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
+    <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(''); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
     <View accessibilityLabel="Provider navigation" style={[s.tabs, {backgroundColor: c.surface, borderColor: c.line}]}>{([['overview', 'Overview', 'home-outline'], ['catalog', 'Listings', 'list-outline'], ['requests', 'Bookings', 'calendar-outline'], ['messages', 'Chats', 'chatbubbles-outline'], ['more', 'More', 'ellipsis-horizontal']] as const).map(([id, label, icon]) => <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected: selected === id, disabled: busy}} disabled={busy} onPress={() => tab(id)} style={({pressed}) => ({flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 60, gap: 4, backgroundColor: pressed ? c.soft : c.surface})}><Ionicons name={icon} size={22} color={selected === id ? c.accent : c.muted}/><Text style={{fontSize: 11, color: selected === id ? c.accent : c.muted}}>{label}</Text></Pressable>)}</View>
   </KeyboardFrame></Modal></ProviderPanelBackContext.Provider>;
 }
