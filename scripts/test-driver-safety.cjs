@@ -2,9 +2,9 @@ const fs = require('node:fs'), vm = require('node:vm'), ts = require('typescript
 const compile = path => ts.transpileModule(fs.readFileSync(path, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React, esModuleInterop: true}}).outputText;
 const policy = {exports: {}, URL, URLSearchParams}; vm.runInNewContext(compile('components/nativeProviderPolicy.ts'), policy);
 const p = policy.exports, now = Date.parse('2026-11-13T12:00:00Z');
-assert.equal(p.requiredDriverDocuments({country_code:'NG',state:'Abuja'}).length,7);
-assert.equal(p.requiredDriverDocuments({country_code:'NG',state:' Lagos State '}).length,9);
-assert.equal(p.requiredDriverDocuments({country_code:'GB',state:'Lagos'}).length,7,'local permits must not leak across countries');
+assert.equal(p.requiredDriverDocuments({country_code:'NG',state:'Abuja'}).length,5);
+assert.equal(p.requiredDriverDocuments({country_code:'NG',state:' Lagos State '}).length,5);
+assert.equal(p.requiredDriverDocuments({country_code:'GB',state:'Lagos'}).length,5,'requirements are the same five across locations');
 for (const kind of ['driver_face','driver_vehicle','driver_plate','drivers_license','vehicle_registration','vehicle_insurance','roadworthiness','driver_lasrra','driver_lasdri']) {
   assert.ok(p.verificationKinds.some(([value]) => value === kind));
   assert.ok(p.verificationFileError(kind,'application/pdf',1000),'driver evidence requires a photo');
@@ -40,5 +40,5 @@ const profile={driver_name:'Actual driver',face_photo_url:'https://bucket.s3.tes
   for(const url of ['http://unsafe/photo','javascript:bad','https://user:password@test/photo']) assert.equal(context.exports.validDriverSafetyProfile({...profile,face_photo_url:url}),false);
   expiration();await settle();assert.equal(nodes(tree).filter(n=>n.type==='Photo').length,0,'expired links never leave stale reviewed photos displayed');
   hooks.forEach(h=>h?.cleanup?.());assert.ok(pending[3].options.signal.aborted);
-  console.log('Driver safety passed: required evidence/expiry/local permits, reviewed-photo projection, private cache, token/navigation races, retry and cancellation.');
+  console.log('Driver safety passed: five required documents, legacy expiry compatibility, reviewed-photo projection, private cache, token/navigation races, retry and cancellation.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -18,9 +18,30 @@ export const verificationKinds = [
 export const driverPhotoKinds = ['drivers_license', 'driver_face', 'driver_vehicle', 'driver_plate', 'vehicle_registration', 'vehicle_insurance', 'roadworthiness', 'driver_lasrra', 'driver_lasdri'];
 export const driverExpiryKinds = ['drivers_license', 'vehicle_insurance', 'roadworthiness'];
 export function requiredDriverDocuments(provider: Pick<ProviderAccount, 'country_code' | 'state'>) {
-  const kinds = ['driver_face', 'driver_vehicle', 'driver_plate', 'drivers_license', 'vehicle_registration', 'vehicle_insurance', 'roadworthiness'];
-  if (provider.country_code?.toUpperCase() === 'NG' && ['lagos', 'lagos state'].includes(provider.state?.trim().toLowerCase() || '')) kinds.push('driver_lasrra', 'driver_lasdri');
-  return kinds;
+  return ['drivers_license', 'driver_face', 'driver_vehicle', 'driver_plate', 'vehicle_registration'];
+}
+export type VerificationDocument = {id:string;document_type:string;status:string;review_notes?:string;expires_on?:string;created_at?:string};
+export const verificationChecklist = (driver:boolean) => driver ? [
+  {kind:'drivers_license',label:'Driver licence / ID',group:'Identity',icon:'card-outline',help:'Required. Your current driver licence also counts as your government-issued ID; upload it once.'},
+  {kind:'driver_face',label:'Clear face photo',group:'Identity',icon:'person-outline',help:'Required. Your own unobstructed, passport-style face photo. Shown to customers after approval.'},
+  {kind:'driver_vehicle',label:'Vehicle photo',group:'Vehicle',icon:'car-outline',help:'Required. The exact car or bike you will use. Shown to customers after approval.'},
+  {kind:'driver_plate',label:'Plate number',group:'Vehicle',icon:'ellipsis-horizontal-circle-outline',help:'Required. Upload a clear photo of the number plate. Shown to customers after approval.'},
+  {kind:'vehicle_registration',label:'Vehicle registration',group:'Vehicle',icon:'document-text-outline',help:'Required. Registration must match the vehicle and plate. Visible only to authorized reviewers.'},
+] : [{kind:'government_id',label:'Government-issued ID',group:'Identity',icon:'card-outline',help:'Required. Upload a clear government-issued ID, such as a national ID, passport, voter card or driver licence.'}];
+export function latestVerificationDocument(documents:VerificationDocument[],kind:string) {
+  return documents.filter(document=>document.document_type===kind).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'') || (a.created_at&&b.created_at?b.id.localeCompare(a.id):0))[0];
+}
+export function verificationDocumentStatus(document:VerificationDocument|undefined,kind:string,now=Date.now()) {
+  if(!document)return {label:'Required',tone:'danger' as const,submitted:false};
+  const expired=!!document.expires_on && document.expires_on<new Date(now).toISOString().slice(0,10);
+  if(expired || (kind==='drivers_license'&&document.status==='approved'&&!document.expires_on))return {label:expired?'Expired':'Needs replacement',tone:'danger' as const,submitted:false};
+  if(document.status==='approved')return {label:'Approved',tone:'success' as const,submitted:true};
+  if(document.status==='pending')return {label:'Under review',tone:'pending' as const,submitted:true};
+  return {label:'Needs replacement',tone:'danger' as const,submitted:false};
+}
+export function identityVerificationDocument(documents:VerificationDocument[]) {
+  const choices=['government_id','drivers_license'].map(kind=>latestVerificationDocument(documents,kind)).filter((document):document is VerificationDocument=>!!document);
+  return choices.find(document=>verificationDocumentStatus(document,document.document_type).label==='Approved') || choices.find(document=>document.status==='pending') || choices[0];
 }
 export function verificationExpiryError(kind: string, value: string, now = Date.now()) {
   if (!value.trim()) return driverExpiryKinds.includes(kind) ? 'Enter the expiry date printed on this document.' : '';
