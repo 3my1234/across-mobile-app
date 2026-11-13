@@ -14,10 +14,11 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as WebBrowser from 'expo-web-browser';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {ThemedText as Text} from './ThemeProvider';
+import {ThemedText as Text, ThemedTextInput as Input} from './ThemeProvider';
+import {TransportSafetyNotice} from './TransportSafetyNotice';
 import {useAccountDesign} from './AccountDesign';
 import {ResilientImage} from './ResilientImage';
-import {hasPaidProviderAccess, nativeProviderView, privateDocumentPreviewURL, providerRouteContext, providerSupportTicket, ProviderAccount, verificationFileError, verificationKinds} from './nativeProviderPolicy';
+import {hasPaidProviderAccess, nativeProviderView, privateDocumentPreviewURL, providerRouteContext, providerSupportTicket, ProviderAccount, verificationFileError, verificationKinds, driverPhotoKinds, driverExpiryKinds, requiredDriverDocuments, verificationExpiryError} from './nativeProviderPolicy';
 import {acknowledgeProviderRoute, providerRequest, ProviderRequestError, putProviderPhoto} from './nativeProviderApi';
 import {NativeProviderCatalog} from './NativeProviderCatalog';
 import {NativeProviderOnboarding} from './NativeProviderOnboarding';
@@ -30,7 +31,7 @@ import {NativeProviderSubscription} from './NativeProviderSubscription';
 import {NativeProviderOverviewSummary} from './NativeProviderOverviewSummary';
 import {KeyboardFrame} from './KeyboardFrame';
 
-type Document = {id: string; document_type: string; status: string; review_notes?: string};
+type Document = {id: string; document_type: string; status: string; review_notes?: string; expires_on?: string};
 type Props = {token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenReferrals?: () => void; onOpenSettings?: () => void; onOpenNotification?: (notification: Record<string, unknown>) => void};
 
 // Provider tools are native in every build; the web workspace is retired.
@@ -56,6 +57,8 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [kind, setKind] = useState<string>('government_id');
+  const [expiresOn, setExpiresOn] = useState('');
+  useEffect(() => {setExpiresOn('');}, [kind]);
   const readFlight = useRef(false);
   const generation = useRef(0), mutation = useRef(false), mounted = useRef(true);
   const invalidate = useCallback(() => {generation.current++; readFlight.current = false;}, []);
@@ -105,9 +108,12 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const card = (title: string, children: React.ReactNode) => <View style={[s.card, {backgroundColor: c.surface, borderColor: c.line}]}><Text style={s.title}>{title}</Text>{children}</View>;
   const uploadDocument = (source: 'camera' | 'library' | 'file') => void run(async () => {
     const documentKind = kind;
+    const expiry = expiresOn.trim();
+    const expiryError = verificationExpiryError(documentKind, expiry);
+    if (expiryError) throw new Error(expiryError);
     let file: {uri: string; mime: string; bytes: number; name: string};
     if (source === 'file') {
-      const driverPhoto = ['drivers_license', 'driver_vehicle', 'driver_plate'].includes(documentKind);
+      const driverPhoto = driverPhotoKinds.includes(documentKind);
       const result = await DocumentPicker.getDocumentAsync({type: driverPhoto ? ['image/jpeg', 'image/png', 'image/webp'] : ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'], copyToCacheDirectory: true, multiple: false});
       if (result.canceled) return;
       const asset = result.assets[0]; file = {uri: asset.uri, mime: asset.mimeType || '', bytes: asset.size || 0, name: asset.name};
@@ -125,7 +131,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     const signed = await providerRequest(token, '/providers/me/uploads/presign', {method: 'POST', body: JSON.stringify({filename: file.name, mime_type: file.mime, purpose: 'verification'})});
     await putProviderPhoto(signed.upload_url, file.uri, file.mime);
     // Never replay this mutation automatically after an ambiguous timeout.
-    await providerRequest(token, '/providers/me/verification-documents', {method: 'POST', body: JSON.stringify({document_type: documentKind, document_url: signed.view_url})});
+    await providerRequest(token, '/providers/me/verification-documents', {method: 'POST', body: JSON.stringify({document_type: documentKind, document_url: signed.view_url, ...(expiry ? {expires_on: expiry} : {})})});
     if (mounted.current) {setNotice('Document submitted for review.'); await load(); const data = await providerRequest(token, '/providers/me/verification-documents'); if (mounted.current) setDocuments(data.items || []);}
   });
   const previewDocument = (id: string) => void run(async () => {
@@ -161,7 +167,16 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
         {card('Preferences and help', <>{row('Notifications', 'notifications-outline', () => go('notifications'))}{onOpenSettings && row('App settings and notifications', 'settings-outline', onOpenSettings)}{row('Support', 'help-circle-outline', () => onOpenSupport())}</>)}
         {row('Switch to customer', 'swap-horizontal-outline', onClose)}<Text>Browse and buy with the same account. Open Account to return to your provider workspace.</Text>
       </>}
-{provider && view === 'verification' && card('Verification documents', <><Text>{provider.is_driver ? 'Upload separate clear photos of your driver licence, your car and its plate number. All three need approval before driving services go live.' : 'Upload clear evidence for your business. Documents are sent for private review.'}</Text><Text>Select a document type</Text>{verificationKinds.map(([value, label]) => <Pressable accessibilityRole="radio" accessibilityState={{checked: kind === value}} key={value} onPress={() => setKind(value)} style={[s.button, {borderColor: c.line, backgroundColor: kind === value ? c.soft : c.surface}]}><Text>{label}</Text></Pressable>)}{button('Take and submit photo', () => uploadDocument('camera'), provider.is_active === false || loading)}{button('Choose and submit photo', () => uploadDocument('library'), provider.is_active === false || loading)}{button('Choose document from files', () => uploadDocument('file'), provider.is_active === false || loading)}<Text>Up to 10 MB. Driver licence, car and plate evidence must be photos. Other documents may also be PDF.</Text>{documents.length === 0 && !loading && <Text>No documents submitted yet.</Text>}{documents.map(document => <View key={document.id} style={[s.card, {borderColor: c.line}]}><Text style={{fontWeight: '700'}}>{verificationKinds.find(([value]) => value === document.document_type)?.[1] || document.document_type}</Text><Text>{document.status}</Text>{button('View submitted document', () => previewDocument(document.id))}{!!document.review_notes && <Text>{document.review_notes}</Text>}</View>)}</>)}
+{provider && view === 'verification' && card('Verification documents', <>
+  <Text>{provider.is_driver ? 'All required driver/rider evidence must be current and approved before driving services go live. Replacing a document or photo returns it to review.' : 'Upload clear evidence for your business. Documents are sent for private review.'}</Text>
+  {provider.is_driver && <><Text style={{fontWeight:'700'}}>Required evidence</Text>{requiredDriverDocuments(provider).map(value => <Text key={value}>{verificationKinds.find(([key]) => key === value)?.[1] || value}</Text>)}<TransportSafetyNotice audience="driver"/></>}
+  <Text>Face photo: show your own unobstructed face clearly, passport-style, without sunglasses or filters. Vehicle photo: show the exact car/bike you will use and a readable plate. Approved face, vehicle and plate photos are shown to customers; identity and other documents stay private.</Text>
+  <Text>Select a document type</Text>{verificationKinds.map(([value, label]) => <Pressable accessibilityRole="radio" accessibilityState={{checked: kind === value}} key={value} onPress={() => setKind(value)} style={[s.button, {borderColor: c.line, backgroundColor: kind === value ? c.soft : c.surface}]}><Text>{label}</Text></Pressable>)}
+  {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if the document has one (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
+  {button('Take and submit photo', () => uploadDocument('camera'), provider.is_active === false || loading)}{button('Choose and submit photo', () => uploadDocument('library'), provider.is_active === false || loading)}{button('Choose document from files', () => uploadDocument('file'), provider.is_active === false || loading)}
+  <Text>Up to 10 MB. Driver/rider evidence must be clear JPG, PNG or WebP photos. Other business documents may also be PDF. If your gallery does not show the photo, choose it from Files instead.</Text>
+  {documents.length === 0 && !loading && <Text>No documents submitted yet.</Text>}{documents.map(document => <View key={document.id} style={[s.card, {borderColor: c.line}]}><Text style={{fontWeight: '700'}}>{verificationKinds.find(([value]) => value === document.document_type)?.[1] || document.document_type}</Text><Text>{document.status}{document.expires_on ? ` · Expires ${document.expires_on}` : ''}</Text>{button('View submitted document', () => previewDocument(document.id))}{!!document.review_notes && <Text>{document.review_notes}</Text>}</View>)}
+</>)}
       {view === 'subscription' && card('Subscriptions and renewal', <NativeProviderSubscription key={`${provider.id}:${token}`} token={token} provider={provider} onChanged={load}/>)}
       {view === 'promotions' && <NativeProviderPromotions key={`${provider.id}:${token}`} token={token}/>}
       {view === 'profile' && card('Business profile', <NativeProviderProfile key={provider.id} token={token} provider={provider} onSaved={load}/>)}

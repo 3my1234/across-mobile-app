@@ -1,6 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import * as Application from 'expo-application';
 import {driverLocationTimeline} from './driverLocationTask';
+import {TransportSafetyNotice} from './TransportSafetyNotice';
 import {setAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {transportServiceKind} from './transportServices';
 import React, {useEffect, useRef, useState} from 'react';
@@ -43,12 +44,13 @@ export function NativeProviderDriver({token, providerID}: {token: string; provid
   }, [token, page, reload]);
   const button = (label: string, action: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{disabled}} disabled={disabled} hitSlop={0} pressRetentionOffset={0} onPress={action} style={{padding: 12, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: c.soft, opacity: disabled ? .5 : 1}}><View pointerEvents="none"><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text></View></Pressable>;
   return <View style={{gap: 12}}>
+    <TransportSafetyNotice audience="driver"/>
     <Text>With location permission, verified subscribed drivers become visible automatically while ATL Xpress is open. Go offline to pause visibility. Location updates continue across ATL Xpress screens. On Android, an ongoing notification keeps your availability updated when minimized. Signing out or Go offline stops sharing. Availability expires within two minutes without an update.</Text>
     <Text>Customers see approximate distance. Your exact location is shared in chat only when you explicitly send a location pin.</Text>
     {loading && <ActivityIndicator accessibilityLabel="Loading approved driver services"/>}
     {!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}
     {items.map(item => <Pressable key={item.id} accessibilityRole="radio" accessibilityState={{checked: selected === item.id, disabled: online || starting || busy}} disabled={online || starting || busy} onPress={() => setSelected(item.id)} style={{padding: 12, borderWidth: 1, borderColor: c.line, borderRadius: 12, backgroundColor: selected === item.id ? c.soft : c.surface}}><Text>{item.title}</Text></Pressable>)}
-    {!items.length && !loading && !error && <Text>Create a driver or courier service, keep your paid subscription active and have all three transport documents approved first. The server checks approval every time availability updates.</Text>}
+    {!items.length && !loading && !error && <Text>Create a driver or courier service, keep your paid subscription active and have all required current transport evidence approved first. The server checks approval every time availability updates.</Text>}
     {!!cursor && button('Load more services', () => setPage(cursor), loading || busy || online)}
     {button('Refresh services', () => {setPage(''); setReload(value => value + 1);}, loading || busy || online)}
     <View style={{height:112}}><Text numberOfLines={5} accessibilityLiveRegion="polite">{message}</Text></View>
