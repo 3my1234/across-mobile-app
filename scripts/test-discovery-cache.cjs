@@ -30,8 +30,9 @@ const api=scope.exports,product={owner:'owner',country:'NG',kind:'product'},serv
  const draw=()=>{for(let n=0;n<8;n++){index=0;effects=[];changed=false;tree=ui.exports.DiscoverySections({...uiContext,active,onOpen(){}});effects.forEach(fn=>fn());if(!changed)return}throw Error('render loop')};
  const nodes=n=>!n||typeof n!=='object'?[]:[n,...n.children.flatMap(nodes)];
  draw();assert.ok(!nodes(tree).some(n=>n.type==='Loading'),'cached section paints without loading placeholder');
- active=false;draw();assert.equal(tree,null);active=true;draw();delay();await new Promise(r=>setImmediate(r));draw();
+ const savedRail=nodes(tree).find(n=>n.props.cards);active=false;draw();const hiddenRail=nodes(tree).find(n=>n.props.cards);assert.equal(hiddenRail.props.cards,savedRail.props.cards,'hidden promotion images keep the same cards mounted');assert.equal(hiddenRail.props.active,false,'hidden rail stops impression/rotation timers');active=true;draw();delay();await new Promise(r=>setImmediate(r));draw();
  assert.equal(requests,beforeTabs,'returning to tab does not request fresh ads');assert.ok(!nodes(tree).some(n=>n.type==='Loading'));
+ uiContext.city='New destination';draw();assert.ok(nodes(tree).some(n=>n.type==='Loading'),'old promotions are not retained across destinations');
  hooks.forEach(h=>h?.cleanup?.());
  console.log('Discovery cache passed: tab retention, context isolation, single-flight refresh, catalogue invalidation, offline continuity, stale account rejection and bounds.');
 })().catch(error=>{console.error(error);process.exitCode=1});

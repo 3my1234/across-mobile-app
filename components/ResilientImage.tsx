@@ -72,7 +72,7 @@ export function ResilientImage({ uri, uris, fallbackUri = FALLBACK_IMAGES[0], on
   },[attempt.index,attempt.retry,attempt.cycle,signature]);
   // Keep the same native view when a request retries. Expo Image retains cached
   // bitmaps on disk and in memory instead of remounting a blank native image.
-  return <Image {...props} cachePolicy={publicImageCachePolicy(current) === 'memory-disk' ? cachePolicy ?? 'memory-disk' : 'memory'} transition={120}
+  return <Image {...props} cachePolicy={publicImageCachePolicy(current) === 'memory-disk' ? cachePolicy ?? 'memory-disk' : 'memory'} transition={0}
     style={[{ backgroundColor: "#E5EBE7" }, props.style]} source={source}
     onLoad={event => {
       if(!mounted.current || activeRequest.current !== requestKey) return;

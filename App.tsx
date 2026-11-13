@@ -59,6 +59,7 @@ import {TownHallBubble} from "./components/TownHallBubble";
 import { LaunchScreen, MissingConfigScreen, StartupErrorScreen, AuthScreen, ProductDetailScreen } from "./components/Screens";
 import { readNotificationSoundEnabled, writeNearbySnapshot, writeNotificationSoundEnabled } from "./components/nearbyCache";
 import { freshCatalogURL, useCatalogFreshness } from "./components/catalogFreshness";
+import { RetainedFeedTab } from "./components/RetainedFeedTab";
 import { cartOfferFingerprint, latestProductSnapshot, reconcileCart } from "./components/catalogState";
 import { cartGroupKey, groupCart, removePurchasedItems } from "./components/cartGroups";
 
@@ -522,7 +523,7 @@ function AcrossApp() {
   useCatalogFreshness(async () => {
     if (stockView === "international") setInternationalRefreshVersion(version => version + 1);
     await loadProducts(true);
-  }, stage === "app" && !providerWorkspaceVisible);
+  }, stage === "app" && !providerWorkspaceVisible && (activeTab === "home" || activeTab === "cart"));
 
   useEffect(() => {
     if (stage === "app" && !providerWorkspaceVisible && (activeTab === "home" || activeTab === "cart")) void loadProducts(true);
@@ -2128,22 +2129,25 @@ function AcrossApp() {
 			  refreshControl={<RefreshControl refreshing={flashSaleLoading && flashSaleProducts.length > 0} onRefresh={() => { void loadFlashSales(true); }} tintColor="#FF4747" />}
 			  ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="flash-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{flashSaleLoading ? "Loading deals..." : "No flash-sale products right now"}</Text></View>} />
 		  </View>
-		) : activeTab === "home" && (
-          <Animated.FlatList data={visibleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
+		) : null}
+        <RetainedFeedTab key={`products:${token || 'guest'}`} active={activeTab === "home" && !showFlashSale}>
+          <Animated.FlatList data={visibleProducts} keyExtractor={item => item.id} numColumns={homeColumns} initialNumToRender={6} maxToRenderPerBatch={6} windowSize={5}
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
-            ListHeaderComponent={<>{stockView !== 'international' && savedCatalogKey === `${catalogCountry}|${catalogState}|${catalogCity}` && <Text accessibilityLiveRegion="polite" style={{paddingHorizontal:14,paddingVertical:8,color:theme.color('#66736F')}}>Saved listings. Connect to refresh prices and availability.</Text>}<DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
+            ListHeaderComponent={<>{stockView !== 'international' && savedCatalogKey === `${catalogCountry}|${catalogState}|${catalogCity}` && <Text accessibilityLiveRegion="polite" style={{paddingHorizontal:14,paddingVertical:8,color:theme.color('#66736F')}}>Saved listings. Connect to refresh prices and availability.</Text>}<DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={activeTab === "home"&&!showFlashSale&&!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-                <Text style={{ color: theme.color("#191919", "color"), fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Trending now"}</Text>
+                <Text style={{ color: theme.color("#191919", "color"), fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "Products"}</Text>
                 <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
 			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
             ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || internationalFeed.status === "loading" ? "Loading products..." : internationalFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{(stockView === "international" ? internationalFeed.status === "error" : productFeed.status === "error") && <Pressable onPress={() => stockView === "international" ? setInternationalRefreshVersion(value=>value+1) : void loadProducts(true)}><Text style={{color: theme.color("#FF4747", "color"), padding: 12}}>Try again</Text></Pressable>}</View>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
-        )}
+        </RetainedFeedTab>
 
-        {activeTab === "services" && <MarketplaceScreen key={notificationNavigationKey} token={token} bottomInset={bottomInset} initialMode={serviceInitialMode} initialListingId={discoveryServiceID} onManageListing={manageOwnListing} discoveryActive={!selectedProduct&&!showSettings&&!showNotifications&&!showReferrals} country={catalogCountry} destinationState={catalogState} destinationCity={catalogCity} onOpenProduct={setSelectedProduct} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />}
+        <RetainedFeedTab key={`services:${token || 'guest'}`} active={activeTab === "services"}>
+          <MarketplaceScreen key={notificationNavigationKey} token={token} active={activeTab === "services" && !providerWorkspaceVisible} bottomInset={bottomInset} initialMode={serviceInitialMode} initialListingId={discoveryServiceID} onManageListing={manageOwnListing} discoveryActive={activeTab === "services"&&!providerWorkspaceVisible&&!selectedProduct&&!showSettings&&!showNotifications&&!showReferrals} country={catalogCountry} destinationState={catalogState} destinationCity={catalogCity} onOpenProduct={setSelectedProduct} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />
+        </RetainedFeedTab>
         {activeTab === "messages" && !providerWorkspaceVisible && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
         {activeTab === "cart" && <ScrollView contentContainerStyle={[s.screenPad,{paddingBottom:bottomInset+BOTTOM_NAV_HEIGHT+16}]}>
