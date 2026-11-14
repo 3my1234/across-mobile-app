@@ -95,5 +95,13 @@ function load(path, dependencies = {}, globals = {}) {
   calls=[];next={response:{ok:true,status:202},body:{state:'queued'}};
   await assert.rejects(api.putProviderPhoto('https://storage.example.test/image','file:///selected.jpg','image/jpeg',1024,{token:'owner-token',key:'owned',processing_required:true,active:()=>false}),/processing continues/);
   assert.equal(calls.length,3,'background cancellation never replays completion or starts status reads');
+  // Exercise the real transport/parser through providerRequest, not a mocked body.
+  let rawError='provider approval is required before subscribing', rawStatus=403;
+  const transport=load('components/utils.ts',{'./config':{API_URL:'https://api.example.test'}},{fetch:async()=>({ok:false,status:rawStatus,headers:{get:()=> 'synthetic-request-id'},text:async()=>rawError})});
+  const actualAPI=load('components/nativeProviderApi.ts',{'./config':{API_URL:'https://api.example.test'},'./utils':transport});
+  await assert.rejects(actualAPI.providerRequest('synthetic-token','/providers/me/subscription-checkout',{method:'POST'}),error=>error.status===403&&error.message.includes(rawError)&&error.requestID==='synthetic-request-id');
+  rawError='<html>Proxy denied request</html>';await assert.rejects(actualAPI.providerRequest('synthetic-token','/providers/me'),error=>!error.message.includes('<html>'));
+  rawError='private internal database error';rawStatus=500;await assert.rejects(actualAPI.providerRequest('synthetic-token','/providers/me'),error=>error.status===500&&!error.message.includes('private internal'));
+  rawError=JSON.stringify({message:'A renewal change is already in progress'});rawStatus=409;await assert.rejects(actualAPI.providerRequest('synthetic-token','/providers/me'),/A renewal change is already in progress/);
   console.log('Native provider tests passed: entitlement dates, driver evidence, deep links, ownership errors, no mutation replay, isolated signed photo upload.');
 })().catch(error => {console.error(error); process.exitCode = 1;});

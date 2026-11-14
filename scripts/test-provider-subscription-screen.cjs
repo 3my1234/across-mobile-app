@@ -13,7 +13,7 @@ const compile=path=>ts.transpileModule(fs.readFileSync(path,'utf8'),{compilerOpt
 const policy={};vm.runInNewContext(compile('components/providerSubscriptionPolicy.ts'),{exports:policy,URL,Error});
 const id='11111111-1111-4111-8111-111111111111',plan={id,name:'Basic',amount_ngn:500,period_prices:[{duration_months:12,amount_ngn:5400}]};
 let renewal={can_manage:true,renewal_status:'stopped'},paymentState='pending',cancelState='cancelled',failCancel=false;
-const provider={id,subscription:{status:'inactive'}},onChanged=async()=>{};
+const provider={id,verification_status:'approved',is_active:true,subscription:{status:'inactive'}},onChanged=async()=>{};
 const request=async(token,path,options={})=>{
  calls.push({token,path,...options});
  if(path.endsWith('subscription-checkout')){if(held)await held;if(failCheckout)throw Error('Connection interrupted');return {tx_ref:'PROVIDER-'+id,checkout_link:'https://checkout.flutterwave.com/v3/hosted/pay/test'};}
@@ -51,7 +51,12 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  provider.subscription={status:'active',billing_provider:'flutterwave',billing_mode:'recurring'};
  selected=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});assert.ok(nodes(selected).some(node=>node.props.managementOnly===true),'existing direct subscribers retain cancellation without external purchase routing');
  provider.subscription={status:'inactive'};context.process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL='direct';
- render();await settle();button('Continue: NGN 500').props.onPress();assert.equal(checkouts().length,0);
+ provider.verification_status='pending';render();await settle();
+ assert.equal(button('Continue: NGN 500').props.disabled,true,'unapproved provider cannot start payment');assert.ok(text(tree).includes('Provider approval is required before subscribing'));
+ // Even invoking a disabled handler programmatically must not reach checkout.
+ button('Continue: NGN 500').props.onPress();alert[2].find(item=>item.text==='Continue to payment').onPress();await settle();assert.equal(checkouts().length,0);assert.equal(stored,null,'approval refusal creates no pending payment marker');
+ provider.verification_status='approved';render();await settle();assert.equal(button('Continue: NGN 500').props.disabled,false,'approved provider retains checkout');
+ button('Continue: NGN 500').props.onPress();assert.equal(checkouts().length,0);
  let release;held=new Promise(resolve=>release=resolve);failCheckout=true;
  const confirm=alert[2].find(item=>item.text==='Continue to payment').onPress;confirm();confirm();await settle();
  assert.equal(checkouts().length,1,'duplicate confirmation must make only one checkout');

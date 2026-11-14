@@ -76,7 +76,20 @@ export async function fetchJSONWithTimeout(url: string, init?: RequestInit, time
       const response = await fetch(url, { ...init, signal: controller.signal });
       let body: any = {};
       if (![204, 205, 304].includes(response.status)) {
-        try {body = await response.json();}
+        try {
+          if (!response.ok && typeof response.text === 'function') {
+            const raw = await response.text();
+            try {body = JSON.parse(raw);}
+            catch {
+              // Fiber returns plain-text permission/validation errors. Retain
+              // short client-facing reasons, but never render proxy HTML or
+              // internal server-error details as application messages.
+              const message = raw.trim();
+              if (response.status >= 400 && response.status < 500 && message.length <= 300 &&
+                  message && !/[<>\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(message)) body = {message};
+            }
+          } else body = await response.json();
+        }
         catch (error) {
           // Fiber/proxies can return plain text for HTTP errors. Preserve the
           // actual status so a missing provider is not reported as no network.
