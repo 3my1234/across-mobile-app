@@ -26,7 +26,7 @@ export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;a
  async function locate(){if(!screenActive.current||gps.current===token)return;pickupMode.current='gps';gps.current=token;const owner=token,version=++gpsSequence.current;setPickup(null);setItems([]);setChecked(false);setBusy(false);setError('');try{const p=await currentForegroundLocation();if(screenActive.current&&actor.current===owner&&version===gpsSequence.current&&AppState.currentState==='active'){setPickup({latitude:p.coords.latitude,longitude:p.coords.longitude});setReload(n=>n+1);}}catch(e){if(actor.current===owner&&version===gpsSequence.current)setError('Location is unavailable. Choose your pickup area on the map instead.');}finally{if(version===gpsSequence.current&&gps.current===owner)gps.current='';}}
  useEffect(()=>{actor.current=token;pickupMode.current='gps';gps.current='';setPickup(null);return()=>{gpsSequence.current++;if(actor.current===token)actor.current='';};},[token]);
  // Bottom-tab visibility is separate from the application's foreground state.
- useEffect(()=>{setSafetyDriver(null);setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';setForeground(active&&AppState.currentState==='active');
+ useEffect(()=>{setSafetyDriver(null);setMap(false);setFilters(false);setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';setForeground(active&&AppState.currentState==='active');
   if(active&&AppState.currentState==='active'){if(pickupMode.current==='gps')void locate();else setReload(n=>n+1);}
  },[token,active]);
  const resultContext=useRef('');
@@ -38,7 +38,7 @@ export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;a
    finally{flight=false;if(alive)setBusy(false);}}
   void load();const timer=setInterval(()=>void load(),10000);return()=>{alive=false;clearInterval(timer);};
  },[token,active,foreground,pickup?.latitude,pickup?.longitude,kind,radius,reload]);
- useEffect(()=>{if(!active)return;const listener=AppState.addEventListener('change',state=>{if(!screenActive.current)return;setSafetyDriver(null);setForeground(state==='active');setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';if(pickupMode.current==='gps'){setPickup(null);if(state==='active')void locate();}else if(state==='active')setReload(n=>n+1);});return()=>listener.remove();},[token,active]);
+ useEffect(()=>{if(!active)return;const listener=AppState.addEventListener('change',state=>{if(!screenActive.current)return;setSafetyDriver(null);setMap(false);setFilters(false);setForeground(state==='active');setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';if(pickupMode.current==='gps'){setPickup(null);if(state==='active')void locate();}else if(state==='active')setReload(n=>n+1);});return()=>listener.remove();},[token,active]);
  useEffect(()=>{if(!active||!foreground)return;setNow(Date.now());const tick=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(tick);},[active,foreground]);
  const colors={surface:theme.dark?'#102D25':'#FFFFFF',panel:theme.dark?'#0E3329':'#E8F6EF',border:theme.dark?'#335B4E':'#C5DED2',muted:theme.dark?'#AFC5BB':'#50695D',accent:theme.dark?'#50E3AF':'#007C55',background:theme.dark?'#081E17':'#F3F8F5'};
  const visible=active&&foreground?items.filter(item=>item.freshUntil>now):[];
@@ -85,7 +85,7 @@ export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;a
      <View style={styles.driverAction}><Pressable accessibilityRole="button" accessibilityLabel={`View service and message ${name}`} onPress={()=>openDriver(item)} style={[styles.message,styles.outline,{borderColor:colors.accent}]}><Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.accent}/><Text style={[styles.controlText,{color:colors.accent}]}>View & chat</Text></Pressable><View accessible accessibilityLabel={`Available nearby${identity?.verified?', verified provider':''}`} style={styles.available}><View style={styles.dot}/><Text style={[styles.caption,{color:colors.muted}]}>Available</Text></View></View>
     </View>;
    }}/>
-  <Modal visible={filters} transparent animationType="slide" onRequestClose={()=>setFilters(false)}>
+  <Modal visible={active&&foreground&&filters} transparent animationType="slide" onRequestClose={()=>setFilters(false)}>
    <View style={styles.modalRoot}><Pressable accessibilityRole="button" accessibilityLabel="Dismiss nearby filters" onPress={()=>setFilters(false)} style={styles.scrim}/>
     <SafeAreaView edges={['bottom','left','right']} accessibilityViewIsModal style={[styles.sheet,{backgroundColor:colors.background}]}>
      <View style={[styles.handle,{backgroundColor:colors.muted}]}/>
@@ -97,8 +97,8 @@ export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;a
     </SafeAreaView>
    </View>
   </Modal>
-  {safetyDriver&&<DriverSafetyProfile key={`${token}:${safetyDriver.id}`} token={token} listingID={safetyDriver.id} onClose={()=>setSafetyDriver(null)} onOpenService={()=>{openDriver(safetyDriver);setSafetyDriver(null);}}/>}
-  {map&&<NativeProviderLocationPicker title="Choose your pickup area" hint="Search an address or place a pin. This is where you need a driver or courier, and may differ from your phone location." initial={pickup||undefined} onChoose={point=>{gpsSequence.current++;gps.current='';pickupMode.current='manual';setPickup(point);setMap(false);}} onClose={()=>setMap(false)}/>}
+  {active&&foreground&&safetyDriver&&<DriverSafetyProfile key={`${token}:${safetyDriver.id}`} token={token} listingID={safetyDriver.id} onClose={()=>setSafetyDriver(null)} onOpenService={()=>{openDriver(safetyDriver);setSafetyDriver(null);}}/>}
+  {active&&foreground&&map&&<NativeProviderLocationPicker title="Choose your pickup area" hint="Search an address or place a pin. This is where you need a driver or courier, and may differ from your phone location." initial={pickup||undefined} onChoose={point=>{gpsSequence.current++;gps.current='';pickupMode.current='manual';setPickup(point);setMap(false);}} onClose={()=>setMap(false)}/>}
  </View>;
 }
 const styles=StyleSheet.create({

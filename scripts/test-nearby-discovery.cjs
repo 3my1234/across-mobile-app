@@ -63,7 +63,8 @@ function press(label){const button=nodes(tree).find(n=>n.type==='Button'&&(text(
  expiresIn=5;await poll();assert.equal(resultRows()[0].freshUntil,now+5000,'honor a shorter server result lifetime');expiresIn=30;
  // Hidden tabs stop reads, discard pending responses, and retain the chosen pickup/filter.
  let finishHidden;pendingNearby=new Promise(resolve=>{finishHidden=resolve;});press('Refresh nearby drivers');await settle();
- active=false;render();await settle();const hiddenRequests=requests.length;assert.equal(timers.length,0,'no hidden nearby timers');assert.equal(resultRows().length,0);
+ press('Transport filter: Motorcycle couriers');await settle();assert.equal(nodes(tree).find(n=>n.type==='Modal').props.visible,true);
+ active=false;render();await settle();assert.equal(nodes(tree).find(n=>n.type==='Modal').props.visible,false,'hidden nearby filters cannot cover another tab');const hiddenRequests=requests.length;assert.equal(timers.length,0,'no hidden nearby timers');assert.equal(resultRows().length,0);
  finishHidden({response:{ok:true},body:{expires_in:30,items:[{id:'late',fresh_for_seconds:120}]}});pendingNearby=null;await settle();assert.equal(resultRows().length,0,'a request completed after hiding cannot repopulate results');
  assert.equal(requests.length,hiddenRequests);active=true;render();await settle();assert.equal(requests.length,hiddenRequests+1,'return to nearby immediately fetches instead of waiting for a poll');
  query=new URL(requests.at(-1).url).searchParams;assert.equal(query.get('latitude'),'8.9');assert.equal(query.get('kind'),'courier');assert.equal(query.get('radius_km'),'20');
