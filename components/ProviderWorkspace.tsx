@@ -186,7 +186,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
       {view === 'subscription' && card('Subscriptions and renewal', <NativeProviderSubscription key={`${provider.id}:${token}`} token={token} provider={provider} onChanged={load}/>)}
       {view === 'promotions' && <NativeProviderPromotions key={`${provider.id}:${token}`} token={token}/>}
       {view === 'profile' && card('Business profile', <NativeProviderProfile key={provider.id} token={token} provider={provider} onSaved={load}/>)}
-      {view === 'driver' && card('Driver availability', <NativeProviderDriver key={`${provider.id}:${token}`} token={token} providerID={provider.id}/>)}
+      {view === 'driver' && card('Driver availability', <NativeProviderDriver key={`${provider.id}:${token}`} token={token} providerID={provider.id} onManage={go}/>)}
       {view === 'legacy' && card('Link unavailable', <><Text>This provider page is unavailable.</Text>{button('Open overview', () => tab('overview'))}</>)}
     </ScrollView>}
   </>;
