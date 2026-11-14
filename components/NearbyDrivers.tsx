@@ -15,26 +15,33 @@ import {TransportSafetyNotice} from './TransportSafetyNotice';
 type Pin={latitude:number;longitude:number};
 type Driver={id:string;title:string;transport_kind?:TransportKind;provider_identity?:ProviderIdentityData;distance_km:number;location_age_seconds:number;fresh_for_seconds:number;freshUntil:number;received:number};
 const transports=[['all','All transport','car-outline'],['passenger','Passenger drivers','car-sport-outline'],['courier','Motorcycle couriers','bicycle-outline'],['delivery','Other delivery','cube-outline']] as const;
-export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>void;onOpen:(id:string)=>void}){
+export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;active?:boolean;onClose:()=>void;onOpen:(id:string)=>void}){
  const [items,setItems]=useState<Driver[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[checked,setChecked]=useState(false),[foreground,setForeground]=useState(AppState.currentState==='active');
  const [pickup,setPickup]=useState<Pin|null>(null),[map,setMap]=useState(false),[kind,setKind]=useState<TransportKind>('all'),[radius,setRadius]=useState(10),[reload,setReload]=useState(0),[now,setNow]=useState(Date.now());
  const [filters,setFilters]=useState(false),[draftKind,setDraftKind]=useState<TransportKind>('all'),[draftRadius,setDraftRadius]=useState(10);
  const [safetyDriver,setSafetyDriver]=useState<Driver|null>(null);
  useEffect(()=>{setSafetyDriver(null);},[token]);
+ const screenActive=useRef(active);screenActive.current=active;
  const actor=useRef(token),gps=useRef(''),gpsSequence=useRef(0),pickupMode=useRef<'gps'|'manual'>('gps');actor.current=token;const theme=useTheme();
- async function locate(){if(gps.current===token)return;pickupMode.current='gps';gps.current=token;const owner=token,version=++gpsSequence.current;setPickup(null);setItems([]);setChecked(false);setBusy(false);setError('');try{const p=await currentForegroundLocation();if(actor.current===owner&&version===gpsSequence.current&&AppState.currentState==='active')setPickup({latitude:p.coords.latitude,longitude:p.coords.longitude});}catch(e){if(actor.current===owner&&version===gpsSequence.current)setError('Location is unavailable. Choose your pickup area on the map instead.');}finally{if(version===gpsSequence.current&&gps.current===owner)gps.current='';}}
- useEffect(()=>{actor.current=token;pickupMode.current='gps';gps.current='';setPickup(null);void locate();return()=>{gpsSequence.current++;if(actor.current===token)actor.current='';};},[token]);
+ async function locate(){if(!screenActive.current||gps.current===token)return;pickupMode.current='gps';gps.current=token;const owner=token,version=++gpsSequence.current;setPickup(null);setItems([]);setChecked(false);setBusy(false);setError('');try{const p=await currentForegroundLocation();if(screenActive.current&&actor.current===owner&&version===gpsSequence.current&&AppState.currentState==='active'){setPickup({latitude:p.coords.latitude,longitude:p.coords.longitude});setReload(n=>n+1);}}catch(e){if(actor.current===owner&&version===gpsSequence.current)setError('Location is unavailable. Choose your pickup area on the map instead.');}finally{if(version===gpsSequence.current&&gps.current===owner)gps.current='';}}
+ useEffect(()=>{actor.current=token;pickupMode.current='gps';gps.current='';setPickup(null);return()=>{gpsSequence.current++;if(actor.current===token)actor.current='';};},[token]);
+ // Bottom-tab visibility is separate from the application's foreground state.
+ useEffect(()=>{setSafetyDriver(null);setMap(false);setFilters(false);setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';setForeground(active&&AppState.currentState==='active');
+  if(active&&AppState.currentState==='active'){if(pickupMode.current==='gps')void locate();else setReload(n=>n+1);}
+ },[token,active]);
  const resultContext=useRef('');
  useEffect(()=>{let alive=true,flight=false;const context=JSON.stringify([token,pickup?.latitude,pickup?.longitude,kind,radius]);if(resultContext.current!==context){resultContext.current=context;setItems([]);setChecked(false);}
-  async function load(){if(!pickup||flight||AppState.currentState!=='active')return;flight=true;setBusy(true);setError('');const started=Date.now();
-   try{const query=new URLSearchParams({latitude:String(pickup.latitude),longitude:String(pickup.longitude),radius_km:String(radius),kind});const{response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/drivers/nearby?${query}`,{headers:{Authorization:`Bearer ${token}`}},8000);if(!response.ok)throw Object.assign(Error(body.message||'Nearby providers could not load.'),{status:response.status});if(alive&&AppState.currentState==='active'){const received=Date.now();setItems((body.items||[]).map((item:Driver)=>({...item,received,freshUntil:nearbyFreshUntil(item.fresh_for_seconds,started,received)})));setChecked(true);}}
+  if(!active||!foreground||!pickup)return;const pin=pickup;
+  async function load(){if(flight||!screenActive.current||gps.current===token||AppState.currentState!=='active')return;flight=true;setBusy(true);setError('');const started=Date.now();
+   try{const query=new URLSearchParams({latitude:String(pin.latitude),longitude:String(pin.longitude),radius_km:String(radius),kind});const{response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/drivers/nearby?${query}`,{cache:'no-store',headers:{Authorization:`Bearer ${token}`}},8000);if(!response.ok)throw Object.assign(Error(body.message||'Nearby providers could not load.'),{status:response.status});if(alive&&screenActive.current&&AppState.currentState==='active'){const received=Date.now(),searchTTL=Number.isFinite(body.expires_in)?Math.max(0,Math.min(30,body.expires_in)):30;setItems((body.items||[]).map((item:Driver)=>({...item,received,freshUntil:nearbyFreshUntil(Math.min(item.fresh_for_seconds,searchTTL),started,received)})));setChecked(true);}}
    catch(e){if(alive){if(e&&typeof e==='object'&&'status' in e&&[401,403].includes(Number(e.status)))setItems([]);setError(e instanceof Error?e.message:'Please retry.');}}
    finally{flight=false;if(alive)setBusy(false);}}
-  void load();const timer=setInterval(()=>void load(),30000);return()=>{alive=false;clearInterval(timer);};
- },[token,pickup?.latitude,pickup?.longitude,kind,radius,reload]);
- useEffect(()=>{const tick=setInterval(()=>setNow(Date.now()),1000),listener=AppState.addEventListener('change',state=>{setSafetyDriver(null);setForeground(state==='active');setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';if(pickupMode.current==='gps'){setPickup(null);if(state==='active')void locate();}else if(state==='active')setReload(n=>n+1);});return()=>{clearInterval(tick);listener.remove();};},[token]);
+  void load();const timer=setInterval(()=>void load(),10000);return()=>{alive=false;clearInterval(timer);};
+ },[token,active,foreground,pickup?.latitude,pickup?.longitude,kind,radius,reload]);
+ useEffect(()=>{if(!active)return;const listener=AppState.addEventListener('change',state=>{if(!screenActive.current)return;setSafetyDriver(null);setMap(false);setFilters(false);setForeground(state==='active');setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';if(pickupMode.current==='gps'){setPickup(null);if(state==='active')void locate();}else if(state==='active')setReload(n=>n+1);});return()=>listener.remove();},[token,active]);
+ useEffect(()=>{if(!active||!foreground)return;setNow(Date.now());const tick=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(tick);},[active,foreground]);
  const colors={surface:theme.dark?'#102D25':'#FFFFFF',panel:theme.dark?'#0E3329':'#E8F6EF',border:theme.dark?'#335B4E':'#C5DED2',muted:theme.dark?'#AFC5BB':'#50695D',accent:theme.dark?'#50E3AF':'#007C55',background:theme.dark?'#081E17':'#F3F8F5'};
- const visible=foreground?items.filter(item=>item.freshUntil>now):[];
+ const visible=active&&foreground?items.filter(item=>item.freshUntil>now):[];
  const selected=transports.find(([value])=>value===kind)!;
  function openFilters(){setDraftKind(kind);setDraftRadius(radius);setFilters(true);}
  const outline={borderColor:colors.border,backgroundColor:colors.surface};
@@ -78,7 +85,7 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
      <View style={styles.driverAction}><Pressable accessibilityRole="button" accessibilityLabel={`View service and message ${name}`} onPress={()=>openDriver(item)} style={[styles.message,styles.outline,{borderColor:colors.accent}]}><Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.accent}/><Text style={[styles.controlText,{color:colors.accent}]}>View & chat</Text></Pressable><View accessible accessibilityLabel={`Available nearby${identity?.verified?', verified provider':''}`} style={styles.available}><View style={styles.dot}/><Text style={[styles.caption,{color:colors.muted}]}>Available</Text></View></View>
     </View>;
    }}/>
-  <Modal visible={filters} transparent animationType="slide" onRequestClose={()=>setFilters(false)}>
+  <Modal visible={active&&foreground&&filters} transparent animationType="slide" onRequestClose={()=>setFilters(false)}>
    <View style={styles.modalRoot}><Pressable accessibilityRole="button" accessibilityLabel="Dismiss nearby filters" onPress={()=>setFilters(false)} style={styles.scrim}/>
     <SafeAreaView edges={['bottom','left','right']} accessibilityViewIsModal style={[styles.sheet,{backgroundColor:colors.background}]}>
      <View style={[styles.handle,{backgroundColor:colors.muted}]}/>
@@ -90,8 +97,8 @@ export function NearbyDrivers({token,onClose,onOpen}:{token:string;onClose:()=>v
     </SafeAreaView>
    </View>
   </Modal>
-  {safetyDriver&&<DriverSafetyProfile key={`${token}:${safetyDriver.id}`} token={token} listingID={safetyDriver.id} onClose={()=>setSafetyDriver(null)} onOpenService={()=>{openDriver(safetyDriver);setSafetyDriver(null);}}/>}
-  {map&&<NativeProviderLocationPicker title="Choose your pickup area" hint="Search an address or place a pin. This is where you need a driver or courier, and may differ from your phone location." initial={pickup||undefined} onChoose={point=>{gpsSequence.current++;gps.current='';pickupMode.current='manual';setPickup(point);setMap(false);}} onClose={()=>setMap(false)}/>}
+  {active&&foreground&&safetyDriver&&<DriverSafetyProfile key={`${token}:${safetyDriver.id}`} token={token} listingID={safetyDriver.id} onClose={()=>setSafetyDriver(null)} onOpenService={()=>{openDriver(safetyDriver);setSafetyDriver(null);}}/>}
+  {active&&foreground&&map&&<NativeProviderLocationPicker title="Choose your pickup area" hint="Search an address or place a pin. This is where you need a driver or courier, and may differ from your phone location." initial={pickup||undefined} onChoose={point=>{gpsSequence.current++;gps.current='';pickupMode.current='manual';setPickup(point);setMap(false);}} onClose={()=>setMap(false)}/>}
  </View>;
 }
 const styles=StyleSheet.create({

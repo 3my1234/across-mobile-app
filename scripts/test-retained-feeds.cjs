@@ -36,6 +36,12 @@ assert.equal(wrappers[1].children.filter(ts.isJsxSelfClosingElement)[0].tagName.
 // Execute the actual service loading and polling effects with a fake clock.
 // Hidden services must not create any timers, API reads or foreground listeners.
 const marketplace=parse('components/MarketplaceScreen.tsx');
+const nearby=find(marketplace,n=>ts.isJsxSelfClosingElement(n)&&n.tagName.getText(marketplace)==='NearbyDrivers');
+assert.equal(nearby.length,1);
+const nearbyActive=nearby[0].attributes.properties.find(p=>p.name?.getText(marketplace)==='active');
+assert.equal(nearbyActive.initializer.expression.getText(marketplace),'active&&discoveryActive','nearby receives actual tab and overlay visibility');
+const nearbyBranch=find(marketplace,n=>ts.isIfStatement(n)&&ts.isReturnStatement(n.thenStatement)&&n.thenStatement.expression===nearby[0]);
+assert.equal(nearbyBranch.length,1);assert.equal(nearbyBranch[0].expression.getText(marketplace),'showDrivers','tab switches retain nearby pickup/filter state instead of remounting it');
 const callbacks=find(marketplace,n=>ts.isCallExpression(n)&&n.expression.getText(marketplace)==='useEffect').map(n=>n.arguments[0]);
 const loading=callbacks.find(n=>n.getText(marketplace).includes('const timer = setTimeout'));
 const polling=callbacks.find(n=>n.getText(marketplace).includes('let stopped=false, busy=false'));

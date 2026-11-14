@@ -737,7 +737,7 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
     );
   }
 
-  if(active && showDrivers)return <NearbyDrivers token={token||''} onClose={()=>setShowDrivers(false)} onOpen={id=>{setShowDrivers(false);void (async()=>{try{const response=await fetchWithTimeout(API_URL+'/api/v1/marketplace/listings/'+id);if(!response.ok)throw Error('This driver service is no longer available.');await openListing(await response.json());}catch(error){Alert.alert('Driver unavailable',error instanceof Error?error.message:'Please refresh.');}})();}}/>;
+  if(showDrivers)return <NearbyDrivers active={active&&discoveryActive} token={token||''} onClose={()=>setShowDrivers(false)} onOpen={id=>{setShowDrivers(false);void (async()=>{try{const response=await fetchWithTimeout(API_URL+'/api/v1/marketplace/listings/'+id);if(!response.ok)throw Error('This driver service is no longer available.');await openListing(await response.json());}catch(error){Alert.alert('Driver unavailable',error instanceof Error?error.message:'Please refresh.');}})();}}/>;
   return (
     <View style={styles.fill}>
       <View style={styles.modeBar}>
