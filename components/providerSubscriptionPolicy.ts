@@ -1,6 +1,6 @@
 import type {TierBenefits} from "./providerTierBenefits";
 export type ProviderPlan = {id: string; name: string; amount_ngn: number; card_available?: boolean; description?: string; listing_limit?: number; post_policy?: TierBenefits; period_prices?: {duration_months: number; amount_ngn: number}[]};
-export type PendingProviderCheckout = {provider_id: string; tx_ref?: string; checkout_link?: string; created_at: string};
+export type PendingProviderCheckout = {provider_id: string; tx_ref?: string; checkout_link?: string; payment_method?: 'card' | 'banktransfer'; created_at: string};
 const uuid = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 export function providerCheckoutPayload(plan: ProviderPlan, months: number, method: string, redirect: string) {
   if (!uuid(plan.id) || !Number.isFinite(plan.amount_ngn) || plan.amount_ngn <= 0 || ![1, 3, 6, 12].includes(months) || !['card', 'banktransfer'].includes(method) || method === 'card' && ![1, 12].includes(months) || providerPeriodPrice(plan, months) === undefined) throw Error('Choose an available plan, payment method and billing period. Refresh prices before paying.');
@@ -19,6 +19,7 @@ export function pendingProviderCheckout(raw: string | null, providerID: string):
   if (item.provider_id !== providerID || !uuid(providerID) || !Number.isFinite(Date.parse(item.created_at))) throw Error('The saved payment cannot be verified. Check payment status before starting another checkout.');
   if (item.tx_ref && (typeof item.tx_ref !== 'string' || !item.tx_ref.startsWith('PROVIDER-') || !uuid(item.tx_ref.slice(9)))) throw Error('The saved payment reference is invalid. Contact Support before paying again.');
   if (item.checkout_link) providerCheckoutLink(item.checkout_link);
+  if (item.payment_method !== undefined && !['card', 'banktransfer'].includes(item.payment_method)) throw Error('The saved payment method is invalid. Check payment status before starting another checkout.');
   return item;
 }
 export function providerPaymentReturn(raw: string, pending: PendingProviderCheckout) {
