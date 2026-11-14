@@ -1,5 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
-let hooks=[],index=0,effects=[],changed=false,tree,alert,held,stored=null,failCheckout=false;
+let hooks=[],index=0,effects=[],changed=false,tree,alert,held,stored=null,failCheckout=false,heldBrowser=null;
+const browserCalls=[],appListeners=new Set();
 const calls=[],same=(a,b)=>a&&b&&a.length===b.length&&a.every((value,i)=>Object.is(value,b[i]));
 const react = {
   createElement: (type, props, ...children) => ({type, props: props || {}, children: children.flat(Infinity)}),
@@ -26,9 +27,9 @@ const context={exports:{},Error,process:{env:{EXPO_PUBLIC_DISTRIBUTION_CHANNEL:'
  if(name==='./ProviderTierDetails')return{ProviderTierDetails:'TierDetails',ProviderTierUsage:'TierUsage'};
  if(name==='./providerTierBenefits')return{tierExplanation:'Verified provider plan benefits'};
  if(name==='react')return react;
- if(name==='react-native')return {ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},AppState:{addEventListener:()=>({remove(){}})},Platform:{OS:'android'},Pressable:'Button',View:'View'};
+ if(name==='react-native')return {ActivityIndicator:'Spinner',Alert:{alert:(...args)=>alert=args},AppState:{addEventListener:(_event,fn)=>{appListeners.add(fn);return{remove(){appListeners.delete(fn);}}}},Platform:{OS:'android'},Pressable:'Button',View:'View'};
  if(name==='expo-secure-store')return {getItemAsync:async()=>stored,setItemAsync:async(key,value)=>{stored=value},deleteItemAsync:async()=>{stored=null}};
- if(name==='expo-web-browser')return {openAuthSessionAsync:async()=>({type:'cancel'})};
+ if(name==='expo-web-browser')return {openAuthSessionAsync:async(...args)=>{browserCalls.push(args);return heldBrowser?await heldBrowser:{type:'cancel'};}};
  if(name==='./ThemeProvider')return {ThemedText:'Text'};
  if(name==='./AccountDesign')return {useAccountDesign:()=>({})};
  if(name==='./nativeProviderApi')return {providerRequest:request};
@@ -81,9 +82,22 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  cancelState='cancelled';button('Cancel unpaid checkout').props.onPress();const acceptCancel=alert[2].find(item=>item.text==='I have not paid').onPress;const beforeCancel=cancels().length;acceptCancel();acceptCancel();await settle();
  assert.equal(cancels().length,beforeCancel+1,'duplicate cancellation taps are serialized');assert.deepEqual(JSON.parse(cancels().at(-1).body),{},'recover all owned legacy attempts rather than repeatedly closing one stale reference');
  assert.equal(stored,null);assert.equal(button('Continue: NGN 500').props.disabled,false,'verified cancellation unlocks plans');
+ let returnFromBrowser;heldBrowser=new Promise(resolve=>{returnFromBrowser=resolve;});
  button('One-off bank transfer').props.onPress();await settle();button('Continue: NGN 500').props.onPress();alert[2].find(item=>item.text==='Continue to payment').onPress();await settle();
  assert.equal(JSON.parse(checkouts().at(-1).body).payment_method,'banktransfer','provider can retry with transfer');
- paymentState='settled';button('Check payment status').props.onPress();await settle();
+ const savedTransfer=JSON.parse(stored),transferCheckouts=checkouts().length;
+ assert.equal(savedTransfer.payment_method,'banktransfer');assert.ok(savedTransfer.tx_ref&&savedTransfer.checkout_link,'persist reference and URL before opening the bank-switchable checkout');
+ assert.equal(browserCalls.at(-1)[2].showInRecents,true,'checkout must remain in Android Recents');assert.equal(browserCalls.at(-1)[2].createTask,true,'independent browser task must not use NO_HISTORY');
+ assert.ok(text(tree).includes('Pay on this phone'));
+ const confirms=()=>calls.filter(c=>c.path.endsWith('subscription-confirm'));
+ const beforeBank=confirms().length;for(const fn of appListeners)fn('background');await settle();assert.equal(confirms().length,beforeBank,'no payment verification while bank app is in foreground');
+ for(const fn of appListeners)fn('active');returnFromBrowser({type:'dismiss'});heldBrowser=null;await settle();
+ assert.equal(checkouts().length,transferCheckouts,'return from bank app cannot create another checkout');assert.ok(stored,'pending transfer remains recoverable after browser dismissal');assert.ok(text(tree).includes('do not send another transfer'));
+ // Android may reclaim the application while the bank is open. Recover on remount.
+ hooks.forEach(h=>h?.cleanup?.());hooks=[];render();await settle();assert.equal(checkouts().length,transferCheckouts);assert.equal(JSON.parse(stored).tx_ref,savedTransfer.tx_ref);
+ button('Reopen saved checkout').props.onPress();await settle();assert.equal(browserCalls.at(-1)[0],savedTransfer.checkout_link,'reopen uses the exact existing checkout');assert.equal(checkouts().length,transferCheckouts);
+ paymentState='settled';const beforeReturn=confirms().length;for(const fn of appListeners){fn('active');fn('active');}await settle();assert.equal(confirms().length,beforeReturn+1,'foreground payment verification is single-flight');assert.equal(stored,null,'only server-confirmed settlement clears the saved transfer');
+
  renewal={...renewal,has_pending_checkout:true};button('Refresh billing status').props.onPress();await settle();assert.ok(nodes(tree).some(node=>node.type==='Button'&&text(node)==='Cancel unpaid checkout'),'server pending checkout recovers without local marker');
  renewal={...renewal,has_pending_checkout:false};button('Check payment status').props.onPress();await settle();
  provider.subscription={status:'active',current_period_end:'2027-01-01T00:00:00Z'};renewal={...renewal,renewal_status:'active',current_plan_id:id};render();

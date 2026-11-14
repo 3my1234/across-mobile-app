@@ -58,7 +58,7 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
       if (result.payment_state === 'settled' || result.payment_state === 'not_found') {
         await SecureStore.deleteItemAsync(storageKey);
         if (alive.current) {setPending(null); setNotice(result.payment_state === 'settled' ? 'Payment verified. Your paid access has been updated.' : 'No pending payment was found. You can choose a plan.'); await onChanged();}
-      } else if (alive.current) setNotice('Payment is not confirmed yet. If you have not paid, use Cancel unpaid checkout to choose another method. If you have paid, check payment status; do not pay again.');
+      } else if (alive.current) setNotice(saved?.payment_method === 'banktransfer' ? 'Transfer is not confirmed yet. If you already sent it, allow time and use Check payment status; do not send another transfer. If you have not paid, reopen the saved checkout.' : 'Payment is not confirmed yet. If you have not paid, use Cancel unpaid checkout to choose another method. If you have paid, check payment status; do not pay again.');
       if (alive.current) await refresh();
     } finally {checking.current = false;}
   }, [token, storageKey, onChanged, refresh]);
@@ -73,7 +73,9 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
   }, [loaded, renewal?.can_manage, pending, confirm]);
   const openCheckout = async (saved: PendingProviderCheckout) => {
     if (!saved.checkout_link) throw Error('The previous checkout could not be confirmed. Check payment status or contact Support before starting another payment.');
-    const result = await WebBrowser.openAuthSessionAsync(providerCheckoutLink(saved.checkout_link), 'across://providers/subscription');
+    // Android defaults to NO_HISTORY when the tab is hidden from Recents.
+    // Preserve the browser task while the provider switches to their bank app.
+    const result = await WebBrowser.openAuthSessionAsync(providerCheckoutLink(saved.checkout_link), 'across://providers/subscription', {createTask: true, showInRecents: true});
     if (!alive.current) return;
     setNotice(result.type === 'cancel' || result.type === 'dismiss' ? 'Checkout closed. This does not cancel a payment already sent. Checking its status…' : 'Verifying your payment…');
     await confirm(saved, result.type === 'success' ? result.url : '');
@@ -87,7 +89,7 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
     await SecureStore.setItemAsync(storageKey, JSON.stringify(marker)); if (alive.current) setPending(marker);
     const result = await providerRequest(token, '/providers/me/subscription-checkout', {method: 'POST', body: JSON.stringify(payload)});
     if (!result.tx_ref || !result.checkout_link) throw Error('The checkout response was incomplete. Check payment status before paying again.');
-    const saved = pendingProviderCheckout(JSON.stringify({...marker, tx_ref: result.tx_ref, checkout_link: result.checkout_link}), provider.id)!;
+    const saved = pendingProviderCheckout(JSON.stringify({...marker, tx_ref: result.tx_ref, checkout_link: result.checkout_link, payment_method: method}), provider.id)!;
     await SecureStore.setItemAsync(storageKey, JSON.stringify(saved)); if (alive.current) setPending(saved);
     if (alive.current) await openCheckout(saved);
   })}]);
@@ -112,6 +114,7 @@ export function DirectProviderSubscription({token, provider, onChanged, manageme
     <Text>{renewal?.renewal_status === 'uncertain' ? 'Cancellation is not confirmed. Automatic billing may still be active.' : renewal?.renewal_status === 'stopped' ? 'Automatic renewal stopped.' : provider.subscription?.billing_mode === 'one_time' ? 'Prepaid access does not renew automatically.' : 'Monthly card renewals continue until cancelled.'}</Text>
     {!!renewal?.next_plan_name && <Text>Next-period choice: {renewal.next_plan_name}{renewal.change_at ? `, after ${new Date(renewal.change_at).toLocaleString()}` : ''}. Complete its checkout after your current paid period ends.</Text>}
     {busy && <ActivityIndicator/>}{!!error && <Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>}{!!notice && <Text accessibilityLiveRegion="polite">{notice}</Text>}
+    {pending?.payment_method === 'banktransfer' && <Text>Pay on this phone: switch to your bank app, then use Recent Apps to return to Flutterwave. You can also return here and choose Reopen saved checkout or Check payment status. Closing the checkout does not cancel a transfer already sent. Do not pay twice.</Text>}
     <ProviderTierUsage usage={usage}/><Text style={{fontWeight:'700'}}>Compare all plans</Text><Text>{tierExplanation}</Text>
     {button('Refresh billing status', () => void run(async () => {await onChanged(); await refresh();}))}
     {checkoutEnabled && renewal?.can_manage && pending && !paid && button('Cancel unpaid checkout',cancelUnpaid)}

@@ -14,6 +14,9 @@ const marker={provider_id:id,created_at:'2026-10-23T10:00:00Z'},saved={...marker
 assert.equal(policy.pendingProviderCheckout(JSON.stringify(marker),id).provider_id,id,'uncertain checkout marker must survive restart');
 assert.throws(()=>policy.pendingProviderCheckout(JSON.stringify(saved),other),'a different provider cannot resume this checkout');
 assert.throws(()=>policy.pendingProviderCheckout('invalid',id));
+assert.equal(policy.pendingProviderCheckout(JSON.stringify({...saved,payment_method:'banktransfer'}),id).payment_method,'banktransfer');
+assert.equal(policy.pendingProviderCheckout(JSON.stringify(saved),id).payment_method,undefined,'older saved checkouts remain recoverable');
+assert.throws(()=>policy.pendingProviderCheckout(JSON.stringify({...saved,payment_method:'cash'}),id));
 assert.equal(policy.providerPaymentReturn(redirect+'?status=successful&transaction_id=123',saved).tx_ref,saved.tx_ref);
 assert.equal(policy.providerPaymentReturn(redirect+'?status=failed',saved).transaction_id,'','callback status does not grant or revoke access');
 for(const url of [redirect+'?tx_ref=PROVIDER-'+other,redirect+'?transaction_id=bad','across://user@providers/subscription','https://providers/subscription','across://providers/subscription/other'])assert.throws(()=>policy.providerPaymentReturn(url,saved));
