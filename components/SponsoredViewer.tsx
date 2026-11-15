@@ -1,5 +1,6 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Alert,AppState,FlatList,Modal,Pressable,StyleSheet,View} from 'react-native';
+import {StatusBar} from 'expo-status-bar';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Ionicons} from '@expo/vector-icons';
 import {useVideoPlayer,VideoView,setVideoCacheSizeAsync} from 'expo-video';
@@ -97,6 +98,7 @@ export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,m
  }
  return <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={close}>
   <View style={{flex:1,backgroundColor:'#050A08'}} onLayout={event=>setSize(event.nativeEvent.layout)}>
+   <StatusBar style="light"/>
    {size.height>0&&<FlatList key={`${size.width}:${size.height}`} data={feed} scrollEnabled={!opening&&!chat} keyExtractor={item=>item.kind+item.id} pagingEnabled showsVerticalScrollIndicator={false} initialScrollIndex={index} getItemLayout={(_data,i)=>({length:size.height,offset:size.height*i,index:i})} onEndReached={()=>void more()} onEndReachedThreshold={0.5} windowSize={3} initialNumToRender={1} maxToRenderPerBatch={2} extraData={[playing,index,muted,failed]} onScroll={event=>{
     const y=event.nativeEvent.contentOffset.y;setSettled(false);setSound(previous=>previous.id?{id:'',muted:true}:previous);
     if(scrollTimer.current)clearTimeout(scrollTimer.current);
@@ -108,7 +110,7 @@ export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,m
      <View style={{flex:1,gap:7}}>
       <Text style={styles.badge}>Sponsored</Text>
       <Text style={styles.copy}>{item.provider_identity?.name||item.provider_name||'Provider'}</Text>
-      <Text style={styles.title}>{item.title}</Text>
+      <Text numberOfLines={3} style={styles.title}>{item.title}</Text>
       <Text style={styles.copy}>{item.city}{item.city?' · ':''}{item.price===null||item.price_mode==='quote'?'Ask for a quote':`${item.price_mode==='from'?'From ':''}${item.currency} ${Number(item.price).toLocaleString('en-NG')}`}</Text>
       {failed.has(item.id)&&<Text style={styles.copy}>Video unavailable. Photo shown.</Text>}
       <Text style={[styles.copy,{fontSize:12,marginTop:12}]}>{row<feed.length-1?'Swipe up for more':pageLoading?'Loading more?':hasMore?'More sponsored listings':"You're up to date with these sponsored listings"}</Text>
