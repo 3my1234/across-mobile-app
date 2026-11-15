@@ -69,7 +69,6 @@ export function validatePostDraft(kind: 'listings' | 'products', draft: Provider
     if (!Array.isArray(draft.category_path) || !draft.category_path.length || draft.category_path.some((part: unknown) => typeof part !== 'string' || !part.trim())) throw new PostDraftValidationError('category_path', 'Enter a product category.');
     if (!Array.isArray(draft.delivery_methods) || !draft.delivery_methods.length || draft.delivery_methods.some((method: string) => !['delivery', 'pickup'].includes(method))) throw new PostDraftValidationError('delivery_methods', 'Choose delivery, pickup, or both.');
     if (draft.compare_at_price !== null && (!Number.isFinite(draft.compare_at_price) || draft.compare_at_price <= draft.local_selling_price)) throw new PostDraftValidationError('compare_at_price', 'Crossed-out price must be higher than the selling price.');
-    if (draft.is_flash_sale && (!Number.isFinite(draft.flash_sale_price) || draft.flash_sale_price <= 0 || draft.flash_sale_price >= draft.local_selling_price)) throw new PostDraftValidationError('flash_sale_price', 'Flash sale price must be positive and lower than the selling price.');
     if (!Number.isFinite(draft.local_selling_price) || draft.local_selling_price <= 0 || !Number.isInteger(draft.inventory_count) || draft.inventory_count < 0) throw new PostDraftValidationError(!Number.isFinite(draft.local_selling_price) || draft.local_selling_price <= 0 ? 'local_selling_price' : 'inventory_count', 'Enter a positive price and a whole-number stock quantity.');
     if (!Array.isArray(draft.delivery_areas) || !draft.delivery_areas.length) throw new PostDraftValidationError('delivery_areas', 'Add at least one delivery area.');
     if (!/^[A-Z]{2}$/.test(draft.inventory_country_code) || !String(draft.inventory_city || '').trim()) throw new PostDraftValidationError(!/^[A-Z]{2}$/.test(draft.inventory_country_code) ? 'inventory_country_code' : 'inventory_city', 'Enter a two-letter stock country and stock city.');
@@ -86,6 +85,6 @@ export function postPayload(kind: 'listings' | 'products', draft: ProviderPost):
   const payload = JSON.parse(JSON.stringify(draft));
   delete payload._retained_images; delete payload._retained_videos;
   if (kind === 'listings' && payload.attributes.price_mode === 'quote') payload.price = null;
-  if (kind === 'products') {payload.payment_mode = 'contact'; payload.atlantic_last_mile = false;}
+  if (kind === 'products') {payload.is_flash_sale=false;payload.flash_sale_price=null;payload.payment_mode = 'contact'; payload.atlantic_last_mile = false;}
   return payload;
 }

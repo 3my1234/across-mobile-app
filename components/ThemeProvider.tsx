@@ -45,6 +45,6 @@ export const ThemedTextInput=React.forwardRef<NativeTextInput,TextInputProps>(fu
   onFocus={event=>{props.onFocus?.(event);reveal?.(input.current);}}
   onBlur={event=>{props.onBlur?.(event);reveal?.(null);}}
   onLayout={event=>{props.onLayout?.(event);if(input.current?.isFocused())reveal?.(input.current);}}
-  onSelectionChange={event=>{props.onSelectionChange?.(event);if(input.current?.isFocused())reveal?.(input.current);}}
-  onContentSizeChange={event=>{props.onContentSizeChange?.(event);const height=event.nativeEvent.contentSize.height;if(grow&&Number.isFinite(height)&&height>0)setContentHeight(Math.ceil(height)+2);if(input.current?.isFocused())reveal?.(input.current);}}/>;
+  onSelectionChange={event=>{props.onSelectionChange?.(event);}}
+  onContentSizeChange={event=>{props.onContentSizeChange?.(event);const height=event.nativeEvent.contentSize.height;if(grow&&Number.isFinite(height)&&height>0)setContentHeight(previous=>{const next=Math.min(maximum,Math.ceil(height)+2);return Math.abs(previous-next)>1?next:previous;});}}/>;
 });

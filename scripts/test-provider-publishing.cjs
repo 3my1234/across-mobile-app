@@ -48,9 +48,10 @@ function compile(code, globals = {}) {
   const independent = policy.deliveryAreaPayload({...offer, currency: 'GHS', primary: false, confirmed: true, itemPrice: '150', fee: '10'}, product);
   assert.equal(independent.delivered_price, 160); assert.equal(independent.independent_price_confirmed, true);
   for (const changes of [{currency: 'GHS'}, {state: '', city: 'Accra'}, {country: 'Ghana'}, {fee: '-1'}, {primary: false, itemPrice: '150', confirmed: false}]) assert.throws(() => policy.deliveryAreaPayload({...offer, ...changes}, product));
-  for (const changes of [{compare_at_price: 900}, {is_flash_sale: true, flash_sale_price: 1100}, {delivery_methods: []}, {delivery_methods: ['untrusted']}, {category_path: ['']}, {inventory_location: ''}, {fulfillment_mode: 'unknown'}, {stock_state: 'foreign_stock'}]) assert.throws(() => policy.validatePostDraft('products', {...product, ...changes}, limits, true));
+  for (const changes of [{compare_at_price: 900}, {delivery_methods: []}, {delivery_methods: ['untrusted']}, {category_path: ['']}, {inventory_location: ''}, {fulfillment_mode: 'unknown'}, {stock_state: 'foreign_stock'}]) assert.throws(() => policy.validatePostDraft('products', {...product, ...changes}, limits, true));
   const patch = policy.postPayload('products', {...product, title: 'New title'});
-  for (const key of ['delivery_areas', 'category_path', 'video_urls', 'compare_at_price', 'is_flash_sale', 'flash_sale_price', 'sku', 'inventory_latitude', 'delivery_methods', 'stock_state']) assert.deepEqual(JSON.parse(JSON.stringify(patch[key])), JSON.parse(JSON.stringify(product[key])), key+' preserved by full PATCH');
+  for (const key of ['delivery_areas', 'category_path', 'video_urls', 'compare_at_price', 'sku', 'inventory_latitude', 'delivery_methods', 'stock_state']) assert.deepEqual(JSON.parse(JSON.stringify(patch[key])), JSON.parse(JSON.stringify(product[key])), key+' preserved by full PATCH');
+  const retired=policy.postPayload('products',{...product,is_flash_sale:true,flash_sale_price:100});assert.equal(retired.is_flash_sale,false);assert.equal(retired.flash_sale_price,null);
   assert.throws(() => policy.validatePostDraft('products', {...product, delivery_max_days: -1}, limits, true), /delivery times/);
   // Exercise the real shared timeout reader against 204 rather than mocking a JSON body.
   const utils = fs.readFileSync('components/utils.ts', 'utf8');

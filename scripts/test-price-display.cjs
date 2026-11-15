@@ -3,6 +3,7 @@ const compile = code => ts.transpileModule(code, {compilerOptions: {module: ts.M
 const utils = {exports: {}, Intl, URL, require: () => ({API_URL: 'https://api.example.test'})}; vm.runInNewContext(compile(fs.readFileSync('components/utils.ts', 'utf8')), utils);
 const react = {createElement: (type, props, ...children) => ({type, props: props || {}, children: children.flat(Infinity)})};
 const context = {exports: {}, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};
+  if(name==='./CrossedPrice') return {CrossedPrice:'Text'};
   if (name === 'react') return react;
   if (name === 'react-native') return {View: 'View', Pressable: 'Button', StyleSheet: {create: value => value}};
   if (name === './ThemeProvider') return {ThemedText: 'Text', useTheme: () => ({color: value => value}), useThemedStyles: value => value};
@@ -29,6 +30,7 @@ function visit(node) {
   if (ts.isPropertyAssignment(node) && ['detailPriceRow', 'detailPrice', 'detailComparePrice'].includes(node.name.getText(ast))) styles[node.name.getText(ast)] = vm.runInNewContext('(' + node.initializer.getText(ast) + ')');
   ts.forEachChild(node, visit);
 } visit(ast); assert.ok(jsx);
-const detail = {exports: {}, React: react, product, styles, View: 'View', Text: 'Text', priceMoney: utils.exports.priceMoney}; vm.runInNewContext(compile('exports.render=()=>(' + jsx + ');'), detail); tree = detail.exports.render();
+const detail = {exports: {}, React: react,CrossedPrice:'Text', product, styles, View: 'View', Text: 'Text', priceMoney: utils.exports.priceMoney}; vm.runInNewContext(compile('exports.render=()=>(' + jsx + ');'), detail); tree = detail.exports.render();
 assert.equal(styles.detailPriceRow.flexDirection, undefined); assert.equal(text(tree.children[0]), price); assert.equal(text(tree.children[1]), compare); assert.equal(styles.detailComparePrice.color, '#C62828'); assert.equal(styles.detailComparePrice.textDecorationLine, 'line-through');
+const thick={exports:{},require:name=>name==='react'?react:name==='react-native'?{View:'View'}:{ThemedText:'Text'}};vm.runInNewContext(compile(fs.readFileSync('components/CrossedPrice.tsx','utf8')),thick);const thickPrice=thick.exports.CrossedPrice({children:'1000'});assert.equal(thickPrice.children[1].props.style.height,2,'visible two-pixel strike');
 console.log('Actual product prices passed: red crossed price directly below main price, compact exact large amounts, numeric API mapping and no inactive flash override.');

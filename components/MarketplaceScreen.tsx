@@ -4,7 +4,7 @@ import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
 import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
 import type {Product} from './types';
-import {PostVideos} from "./PostVideos";
+import {ListingMediaGallery} from "./ListingMediaGallery";
 import {NearbyDrivers} from './NearbyDrivers';
 import type {ChatLocation} from './chatLocation';
 import {ProviderProfileHeader, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
@@ -682,14 +682,9 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
             </Pressable>
             <Text style={styles.detailHeaderTitle} numberOfLines={1}>{selected.title}</Text>
           </View>
-          <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false} contentContainerStyle={styles.galleryRow}>
-            {(selected.media_urls?.length ? selected.media_urls : [""]).map((uri, index) => (
-              <ResilientImage key={`${selected.id}:photo:${index}`} uri={uri} style={[styles.hero, { width: viewportWidth }]} resizeMode="contain" />
-            ))}
-          </ScrollView>
-          {(selected.media_urls?.length || 0) > 1 && <Text style={styles.meta}>Swipe to view all {selected.media_urls.length} photos</Text>}
+          <ListingMediaGallery key={selected.id} images={selected.media_urls||[]} videos={selected.attributes?.video_urls} width={viewportWidth} height={320}/>
           <View style={styles.section}>
-            <PostVideos urls={selected.attributes?.video_urls}/><Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
+            <Text style={styles.kicker}>{selected.listing_type.replaceAll("_", " ")} · verified provider</Text>
             <Text style={styles.title}>{selected.title}</Text>
             <ProviderProfileHeader identity={selected.provider_identity} animate/>
             <Text style={styles.price}>{servicePriceLabel(selected)}{selected.price != null && selected.pricing_unit ? ` / ${selected.pricing_unit}` : ""}</Text>

@@ -1,3 +1,4 @@
+import {CrossedPrice} from './CrossedPrice';
 import {ProviderIdentity} from "./ProviderIdentity";
 import { useTheme, useThemedStyles, ThemedText as Text } from "./ThemeProvider";
 import React from "react";
@@ -46,7 +47,7 @@ export function ProductCard({ product, cartQuantity, onPress, onAdd }: Props) {
         <View style={styles.footer}>
           <View style={styles.priceCopy}>
             <Text style={styles.price} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(currentPrice, product.currency)}</Text>
-            {comparePrice > currentPrice && <Text style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(comparePrice, product.currency)}</Text>}
+            {comparePrice > currentPrice && <CrossedPrice style={styles.compare} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(comparePrice, product.currency)}</CrossedPrice>}
             {!!product.delivery_fee && <Text style={styles.metaText}>Delivered price</Text>}
           </View>
           <Pressable hitSlop={6} accessibilityLabel={`Message seller about ${product.title}`} onPress={event=>{event.stopPropagation();onPress();}} style={styles.cartButton}><Ionicons name="chatbubble-outline" size={19} color={theme.color("#191919")}/></Pressable>

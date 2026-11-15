@@ -10,6 +10,8 @@ const react = {
   useCallback: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) hooks[i] = {deps, fn}; return hooks[i].fn;},
 };
 const modules = {
+ './providerDraftStorage':{readListingDraft:async()=>null,saveListingDraft:async()=>{},clearListingDraft:async()=>{}},
+ './prepareListingPhoto':{prepareListingPhoto:async asset=>({...asset,cleanup(){}})},'./CachedListingVideo':{ListingVideoPreview:'VideoPreview'},
   './prepareProviderVideo': {prepareProviderVideo: async()=>{throw Error('not selected');}},
   './providerVideoProcessing': {waitForProviderVideo: async value => value},
   './mediaLibraryPicker': {chooseLibraryMedia: async()=>({canceled:true,assets:null})},
@@ -32,7 +34,7 @@ const modules = {
   './ProviderPostImages': {ProviderPostImages: 'Gallery'},
 };
 function load(path) {
-  const context = {exports: {}, URLSearchParams, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};assert.ok(name in modules, name); return modules[name];}};
+  const context = {exports: {}, URLSearchParams,setTimeout,clearTimeout, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};assert.ok(name in modules, name); return modules[name];}};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path, 'utf8'), {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.React, esModuleInterop: true}}).outputText, context);
   return context.exports;
 }

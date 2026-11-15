@@ -39,9 +39,7 @@ function checkPhotoSlots(file,startMarker,multiline){
  const draw=(id,url)=>{scope.item=scope.selected=scope.product={id,media_urls:[url]};scope.images=[url];return scope.exports.render()[0].props.key;};
  const old=draw('same-listing','https://images.test/old.jpg');assert.equal(draw('same-listing','https://images.test/new.jpg'),old,'URL update retains native image slot');assert.notEqual(draw('other-listing','https://images.test/new.jpg'),old,'different listing cannot inherit image slot');
 }
-checkPhotoSlots('components/MarketplaceScreen.tsx','{(selected.media_urls?.length ? selected.media_urls',true);
 checkPhotoSlots('components/MarketplaceScreen.tsx','{(item.media_urls?.length ? item.media_urls.slice',false);
-checkPhotoSlots('components/Screens.tsx','{images.map((uri, index)',true);
 checkPhotoSlots('components/Screens.tsx','{(showAllPhotos ? images : images.slice',false);
 hooks.forEach(h=>h?.cleanup?.());assert.equal(timers.size,0,'unmount clears all timers');
 console.log('Image recovery passed: original retries, fallback, foreground recovery, stale callbacks, stable candidate arrays and cleanup.');

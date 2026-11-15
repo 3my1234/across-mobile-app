@@ -85,3 +85,14 @@ export async function chooseUploadDocument(options: DocumentPicker.DocumentPicke
     return cancelled;
   } finally {choosing=false;}
 }
+
+// Camera shares the picker lock, so repeated taps never launch overlapping activities.
+export async function captureListingMedia(video=false,seconds=180):Promise<ImagePicker.ImagePickerResult> {
+ if(choosing)return cancelled;choosing=true;
+ try {
+  const permission=await ImagePicker.requestCameraPermissionsAsync();
+  if(!permission.granted){Alert.alert('Camera permission needed','Allow camera access in your phone settings to take a photo or record a video. Gallery and Files remain available.');return cancelled;}
+  return await ImagePicker.launchCameraAsync({mediaTypes:video?['videos']:['images'],allowsEditing:false,quality:1,videoMaxDuration:Math.min(180,seconds),videoQuality:ImagePicker.UIImagePickerControllerQualityType.High});
+ }catch{Alert.alert('Camera unavailable','Please record in your camera app, then choose the file from Gallery. Your saved listing can be resumed.');return cancelled;}
+ finally{choosing=false;}
+}

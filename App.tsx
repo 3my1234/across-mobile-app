@@ -50,7 +50,6 @@ import {readPublicCatalog, writePublicCatalog} from './components/publicCatalogC
 import {publicImageCachePolicy} from './components/publicImageCache';
 import {Image as CachedImage} from 'expo-image';
 import { ALERT_CHANNEL_ID, ensureAndroidNotificationChannels } from "./components/notificationChannels";
-import { FlashSaleBanner } from "./components/FlashSaleBanner";
 import { ProductCard } from "./components/ProductCard";
 import { ResilientImage } from "./components/ResilientImage";
 import { NAV_ITEMS } from "./components/NavItems";
@@ -343,15 +342,6 @@ function AcrossApp() {
   const catalogState = String(profile?.state || detectedRegionName || "").trim();
   const catalogCity = String(profile?.city || detectedCityName || "").trim();
 	const previousCatalogCountry = useRef(catalogCountry);
-	const [showFlashSale, setShowFlashSale] = useState(false);
-	const [flashSaleProducts, setFlashSaleProducts] = useState<Product[]>([]);
-	const [flashSaleCursor, setFlashSaleCursor] = useState("");
-	const [flashSaleHasMore, setFlashSaleHasMore] = useState(false);
-	const [flashSaleLoading, setFlashSaleLoading] = useState(false);
-  const [flashSaleSearch, setFlashSaleSearch] = useState("");
-  const flashSaleRequest = useRef(0);
-  const flashSaleContext = useRef({ visible: showFlashSale, search: flashSaleSearch });
-  flashSaleContext.current = { visible: showFlashSale, search: flashSaleSearch };
   const productLoadInFlight = useRef<Promise<void> | null>(null);
   const productLoadContext = useRef({ key: "", fresh: false });
   const productSnapshots = useRef(new Map<string, Product>());
@@ -368,13 +358,11 @@ function AcrossApp() {
   const catalogRequestKeyRef = useRef("");
   const [serviceChatVisible,setServiceChatVisible]=useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [showDiscountOffer, setShowDiscountOffer] = useState(false);
-  const discountPromptSeen = useRef(false);
 
   const categories = useMemo(() => {
     const names = new Set<string>();
     names.add("All");
-    (stockView === "international" ? internationalProducts : products).forEach(p => { if (!p.is_flash_sale && p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
+    (stockView === "international" ? internationalProducts : products).forEach(p => { if (p.category_path?.[0]?.trim()) names.add(p.category_path[0].trim()); });
     return Array.from(names);
   }, [products, internationalProducts, stockView]);
 
@@ -390,8 +378,7 @@ function AcrossApp() {
   }
 
   const visibleProducts = useMemo(() => {
-    // Deals belong to the dedicated Flash Sale experience, not the ordinary feed.
-    let filtered = (stockView === "international" ? internationalProducts : products).filter(product => !product.is_flash_sale);
+    let filtered = (stockView === "international" ? internationalProducts : products);
     if (stockView === "local") filtered = filtered.filter(product => product.inventory_country_code === catalogCountry);
     if (selectedCategory !== "All") {
       filtered = filtered.filter(p => p.category_path?.some(c => c.toLowerCase() === selectedCategory.toLowerCase()));
@@ -415,14 +402,6 @@ function AcrossApp() {
   }, [cart, checkoutItems]);
   const xpPreview = xpEnabled && useXP && checkoutItems[0]?.product.currency === "NGN" ? Math.min(xpBalance, Math.floor(totals.platformFee)) : 0;
   const displayedXPDiscount = quote ? quote.xp_discount || 0 : xpPreview;
-
-  const bestFlashDiscount = useMemo(() => flashSaleProducts.reduce((best, product) => {
-    const current = product.flash_sale_price || product.price;
-    const compare = product.compare_at_price || 0;
-    if (compare <= current || compare <= 0) return best;
-    return Math.max(best, Math.round(((compare - current) / compare) * 100));
-  }, 0), [flashSaleProducts]);
-
 
   useEffect(() => {
     void fetch(`${API_URL}/api/v1/buyer-markets`).then(r => r.ok ? r.json() : null).then(data => {
@@ -454,7 +433,6 @@ function AcrossApp() {
     setProducts([]);
     productSnapshots.current.clear();
     setInternationalProducts([]);
-    setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
   }, [catalogCountry]);
 
@@ -469,7 +447,6 @@ function AcrossApp() {
     setProducts([]);
     productSnapshots.current.clear();
     setInternationalProducts([]);
-    setFlashSaleProducts([]);
     void SecureStore.deleteItemAsync(PENDING_PAYMENT_KEY);
     void (async () => {
       if (productLoadInFlight.current) await productLoadInFlight.current;
@@ -569,30 +546,6 @@ function AcrossApp() {
 	if (privyReady && privyUser && oauthBusy && stage === "auth" && !googleSessionClearing) finishPrivyLogin();
 	if (privyReady && !privyUser && googleSessionClearing) setGoogleSessionClearing(false);
 	}, [privyReady, privyUser, oauthBusy, googleSessionClearing, stage]);
-
-	useEffect(() => {
-		if (!showFlashSale) return;
-		const timer = setTimeout(() => { void loadFlashSales(true, flashSaleSearch); }, 300);
-		return () => clearTimeout(timer);
-	}, [showFlashSale, flashSaleSearch]);
-
-  useEffect(() => {
-    if (stage !== "app" || providerWorkspaceVisible || activeTab !== "home" || showFlashSale) return;
-    void loadFlashSales(true, "");
-    // Request ordering is guarded by flashSaleRequest inside the loader.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stage, activeTab, providerWorkspaceVisible, showFlashSale]);
-
-  useEffect(() => {
-    if (stage !== "app" || workspaceEntryToken !== token || providerWorkspaceVisible || activeTab !== "home" || showFlashSale || selectedProduct || discountPromptSeen.current || flashSaleProducts.length === 0) return;
-    const hasRealDiscount = flashSaleProducts.some(product => (product.compare_at_price ?? 0) > (product.flash_sale_price || product.price));
-    if (!hasRealDiscount) return;
-    discountPromptSeen.current = true;
-    const timer = setTimeout(() => setShowDiscountOffer(true), 700);
-    return () => clearTimeout(timer);
-  }, [stage, token, workspaceEntryToken, providerWorkspaceVisible, activeTab, showFlashSale, selectedProduct, flashSaleProducts]);
-
-
 
   useEffect(() => {
     if (stage !== "app" || !token || locationBootstrapTokenRef.current === token) return;
@@ -1097,7 +1050,6 @@ function AcrossApp() {
             const normalized = normalizeMediaUrl(uri || '');
             if (normalized && publicImageCachePolicy(normalized) === 'memory-disk') void CachedImage.prefetch(normalized, {cachePolicy: 'memory-disk'}).catch(() => false);
           });
-          void loadFlashSales(true, flashSaleContext.current.visible ? flashSaleContext.current.search : "");
           return;
         } catch {
           if (attempt < 2) await sleep(350 * (attempt + 1));
@@ -1114,49 +1066,6 @@ function AcrossApp() {
       if (productLoadInFlight.current === task) productLoadInFlight.current = null;
     }
   }
-
-	async function loadFlashSales(reset = false, query = flashSaleSearch) {
-		if (flashSaleLoading && !reset) return;
-		const requestID = ++flashSaleRequest.current;
-		setFlashSaleLoading(true);
-		try {
-			const cursor = reset ? "" : flashSaleCursor;
-			const params = new URLSearchParams({ limit: "24", country_code: catalogCountry });
-			if (catalogState) params.set("state", catalogState);
-			if (catalogCity) params.set("city", catalogCity);
-			if (query.trim()) params.set("search", query.trim());
-			if (cursor) params.set("cursor", cursor);
-			const response = await fetch(freshCatalogURL(`${API_URL}/api/v1/products/flash-sale?${params.toString()}`), { headers: { "Cache-Control": "no-cache" } });
-			if (!response.ok) throw new Error("Flash sales are temporarily unavailable");
-			const data = await response.json();
-			if (requestID !== flashSaleRequest.current) return;
-			const page = data.page ?? {};
-			const incoming = (data.products ?? []).map(mapProduct);
-			setFlashSaleProducts(current => reset ? incoming : [...current, ...incoming]);
-            applyProductSnapshots(incoming);
-			setFlashSaleCursor(page.next_cursor ?? "");
-			setFlashSaleHasMore(Boolean(page.has_more));
-		} catch (error: any) {
-			if (requestID === flashSaleRequest.current && showFlashSale) Alert.alert("Flash Sale", error?.message || "Please try again");
-		} finally {
-			if (requestID === flashSaleRequest.current) setFlashSaleLoading(false);
-		}
-	}
-
-	async function openFlashSale() {
-		setShowFlashSale(true);
-		setFlashSaleSearch("");
-		await loadFlashSales(true, "");
-	}
-
-	function openFlashSaleProduct(product: Product) {
-		// Keep the dedicated Flash Sale catalogue as the navigation context. The
-		// detail sheet opens on top, so closing it returns the buyer to the rest of
-		// the verified deals instead of dropping them back on the general home feed.
-		setShowFlashSale(true);
-		setFlashSaleSearch("");
-		setSelectedProduct(product);
-	}
 
   useEffect(() => {
     if (stage !== "app" || !token || providerWorkspaceVisible) return;
@@ -1586,7 +1495,6 @@ function AcrossApp() {
     const reconcile = (items: Product[]) => items.filter(item => !unavailable.includes(item.id)).map(item => snapshots.get(item.id) || item);
     setProducts(reconcile);
     setInternationalProducts(reconcile);
-    setFlashSaleProducts(items => reconcile(items).filter(item => item.is_flash_sale));
     setSelectedProduct(item => item ? unavailable.includes(item.id) ? null : snapshots.get(item.id) || item : null);
     const previous = cartRef.current;
     const next = reconcileCart(previous, snapshots, new Set(unavailable));
@@ -2064,7 +1972,7 @@ function AcrossApp() {
       )}
 
       {/* Home header */}
-      {activeTab !== "home" && !showFlashSale && (
+      {activeTab !== "home" && (
         <View style={{ height: 40, paddingHorizontal: 14, justifyContent: "center", backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
           <Image source={LOGO} style={{ width: 28, height: 28 }} resizeMode="contain" />
         </View>
@@ -2113,36 +2021,18 @@ function AcrossApp() {
         </View>
       )}
 
-	  {showFlashSale ? (
-		<View style={{ backgroundColor: theme.color("#FFFFFF", "backgroundColor"), paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderColor: theme.color("#EDEDED", "borderColor"), flexDirection: "row", alignItems: "center", gap: 10 }}>
-		  <Pressable onPress={() => setShowFlashSale(false)} accessibilityLabel="Back to shop"><Ionicons name="arrow-back" size={24} color={theme.color("#191919")} /></Pressable>
-		  <View><Text style={{ color: theme.color("#191919", "color"), fontSize: 22, fontWeight: "900" }}>Flash Sale</Text><Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>Limited-time verified deals</Text></View>
-		</View>
-	  ) : null}
-
       <View style={s.content}>
-		{showFlashSale ? (
-		  <View style={{ flex: 1 }}>
-			<View style={{ margin: 12, backgroundColor: theme.color("#F5F5F5", "backgroundColor"), borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center" }}><Ionicons name="search" size={18} color={theme.color("#8C8C8C")} /><TextInput value={flashSaleSearch} onChangeText={setFlashSaleSearch} placeholder="Search flash-sale products" style={s.searchInput} /></View>
-			<Animated.FlatList data={flashSaleProducts} keyExtractor={item => item.id} numColumns={homeColumns}
-			  contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
-			  renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} />}
-			  onEndReached={() => { if (flashSaleHasMore && !flashSaleLoading) void loadFlashSales(false); }} onEndReachedThreshold={0.4}
-			  refreshControl={<RefreshControl refreshing={flashSaleLoading && flashSaleProducts.length > 0} onRefresh={() => { void loadFlashSales(true); }} tintColor="#FF4747" />}
-			  ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="flash-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{flashSaleLoading ? "Loading deals..." : "No flash-sale products right now"}</Text></View>} />
-		  </View>
-		) : null}
-        <RetainedFeedTab key={`products:${token || 'guest'}`} active={activeTab === "home" && !showFlashSale}>
+        <RetainedFeedTab key={`products:${token || 'guest'}`} active={activeTab === "home"}>
           <Animated.FlatList data={visibleProducts} keyExtractor={item => item.id} numColumns={homeColumns} initialNumToRender={6} maxToRenderPerBatch={6} windowSize={5}
             contentContainerStyle={[s.productList, { paddingBottom: bottomInset + BOTTOM_NAV_HEIGHT + 16 }]} columnWrapperStyle={s.productRow}
             onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })} scrollEventThrottle={16}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { void refreshAppData(); }} tintColor="#FF4747" />}
-            ListHeaderComponent={<>{stockView !== 'international' && savedCatalogKey === `${catalogCountry}|${catalogState}|${catalogCity}` && <Text accessibilityLiveRegion="polite" style={{paddingHorizontal:14,paddingVertical:8,color:theme.color('#66736F')}}>Saved listings. Connect to refresh prices and availability.</Text>}<DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={activeTab === "home"&&!showFlashSale&&!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
+            ListHeaderComponent={<>{stockView !== 'international' && savedCatalogKey === `${catalogCountry}|${catalogState}|${catalogCity}` && <Text accessibilityLiveRegion="polite" style={{paddingHorizontal:14,paddingVertical:8,color:theme.color('#66736F')}}>Saved listings. Connect to refresh prices and availability.</Text>}<DiscoverySections kind="product" owner={token} country={catalogCountry} state={catalogState} city={catalogCity} search={searchQuery || (selectedCategory === 'All' ? '' : selectedCategory)} active={activeTab === "home"&&!selectedProduct&&!providerWorkspaceVisible&&!showSettings&&!showNotifications&&!showReferrals} onOpen={openDiscoveryCard}/><View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 6, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                 <Text style={{ color: theme.color("#191919", "color"), fontSize: 13, fontWeight: "800" }}>{stockView === "international" ? "Ships from abroad" : stockView === "local" ? "In your country" : "All products"}</Text>
                 <Text style={{ color: theme.color("#8C8C8C", "color"), fontSize: 12, fontWeight: "700" }}>{internationalLoading && stockView === "international" ? "Loading..." : `${visibleProducts.length} items`}</Text>
               </View>
-			</View>{stockView === "all" && <FlashSaleBanner flashSales={flashSaleProducts} onSelectProduct={openFlashSaleProduct} onViewAll={() => { void openFlashSale(); }} />}</>}
+			</View></>}
             ListEmptyComponent={<View style={s.emptyPanel}><Ionicons name="cube-outline" size={42} color={theme.color("#BFBFBF")} /><Text style={s.emptyPanelTitle}>{stockView === "international" ? (internationalFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || internationalFeed.status === "loading" ? "Loading products..." : internationalFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area") : productFeed.key !== `${catalogCountry}|${catalogState}|${catalogCity}` || productFeed.status === "loading" ? "Loading products..." : productFeed.status === "error" ? "Could not load products. Please try again." : "No products available for this delivery area"}</Text>{(stockView === "international" ? internationalFeed.status === "error" : productFeed.status === "error") && <Pressable onPress={() => stockView === "international" ? setInternationalRefreshVersion(value=>value+1) : void loadProducts(true)}><Text style={{color: theme.color("#FF4747", "color"), padding: 12}}>Try again</Text></Pressable>}</View>}
             renderItem={({ item }) => <ProductCard product={item} cartQuantity={getCartQuantity(item.sku)} onPress={() => setSelectedProduct(item)} onAdd={() => addToCart(item)} />} />
         </RetainedFeedTab>
@@ -2340,7 +2230,7 @@ function AcrossApp() {
       {!keyboardVisible && <View style={[s.bottomNavWrap, { paddingBottom: bottomInset }]}>
         <View style={s.bottomNav}>
           {NAV_ITEMS.map(item => { const active = activeTab === item.key; const badge = item.key === "cart" && totals.items > 0 ? totals.items : 0; return (
-			<Pressable key={item.key} style={s.bottomNavItem} onPress={() => { setShowFlashSale(false); setActiveTab(item.key); }}>
+			<Pressable key={item.key} style={s.bottomNavItem} onPress={() => { setActiveTab(item.key); }}>
               <View style={s.bottomNavIconWrap}>{item.key === "account" && profileAvatar ? <Image source={{ uri: profileAvatar }} style={{ width: 24, height: 24, borderRadius: 12, borderWidth: active ? 2 : 0, borderColor: theme.color("#FF4747", "borderColor"), backgroundColor: theme.color("#F0F0F0", "backgroundColor") }} /> : <Ionicons name={active ? item.activeIcon : item.icon} size={22} color={(active?accountColors.accent:accountColors.muted)} />}{badge > 0 && <View style={s.bottomNavBadge}><Text style={s.bottomNavBadgeText}>{badge > 99 ? "99+" : badge}</Text></View>}</View>
               <Text style={[s.bottomNavLabel, active && [s.bottomNavLabelActive,{color:accountColors.accent}]]}>{item.label}</Text>
             </Pressable>
@@ -2383,17 +2273,7 @@ function AcrossApp() {
         </View>
       )}
 
-      <Modal visible={showDiscountOffer && !providerWorkspaceVisible} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowDiscountOffer(false)}>
-        <View style={{ flex: 1, padding: 22, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("rgba(0,0,0,0.58)", "backgroundColor") }}>
-          <View style={{ width: "100%", maxWidth: 360, borderRadius: 22, padding: 24, backgroundColor: theme.color("#FFFFFF", "backgroundColor") }}>
-            <Pressable style={{ position: "absolute", top: 12, right: 12, width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center", zIndex: 2 }} onPress={() => setShowDiscountOffer(false)} accessibilityLabel="Close discount offer"><Ionicons name="close" size={24} color={theme.color("#595959")} /></Pressable>
-            <View style={{ width: 52, height: 52, borderRadius: 26, alignItems: "center", justifyContent: "center", backgroundColor: theme.color("#FFF1F1", "backgroundColor") }}><Ionicons name="flash" size={28} color={theme.color("#FF4747")} /></View>
-            <Text style={{ marginTop: 18, color: theme.color("#191919", "color"), fontSize: 26, lineHeight: 32, fontWeight: "900" }}>Today’s super discount</Text>
-            <Text style={{ marginTop: 10, color: theme.color("#595959", "color"), fontSize: 15, lineHeight: 22 }}>Save up to {bestFlashDiscount}% on live Flash Sale products while stock lasts.</Text>
-            <Pressable style={[s.primaryButton, { marginTop: 22 }]} onPress={() => { setShowDiscountOffer(false); void openFlashSale(); }}><Text style={s.primaryButtonText}>Shop verified deals</Text></Pressable>
-          </View>
-        </View>
-      </Modal>
+
 
       </>}
       {!providerWorkspaceVisible && selectedProduct && <ProductDetailScreen key={selectedProduct.id + (token || '')} getCartQuantity={getCartQuantity} product={selectedProduct} destination={{ country_code: catalogCountry, state: catalogState, city: catalogCity }} token={token} cartQuantity={getCartQuantity(selectedProduct.sku)} onClose={() => setSelectedProduct(null)} onAdd={addToCart} onRemove={removeFromCart} onProductChange={updateProductSnapshot} onSelectProduct={setSelectedProduct} onOpenService={openDiscoveryService} onManageListing={manageOwnListing} />}
