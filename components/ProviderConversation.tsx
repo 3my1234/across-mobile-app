@@ -19,7 +19,7 @@ import { uploadChatImage } from "./chatImages";
 import { Ionicons } from "@expo/vector-icons";
 
 export type MessageReply={id:string;sender_name:string;body:string;has_media?:boolean;has_location?:boolean};
-export type ProviderMessage = { id: string; context?:{title?:string;listing_id?:string;product_id?:string}; reply_to?:MessageReply|null; sender_type: "buyer" | "provider"; sender_name?:string; is_mine?:boolean; body: string; location?:ChatLocation|null; media_urls?:string[]; created_at: string };
+export type ProviderMessage = { id: string; context?:{title?:string;listing_id?:string;product_id?:string;job_id?:string}; reply_to?:MessageReply|null; sender_type: "buyer" | "provider"; sender_name?:string; is_mine?:boolean; body: string; location?:ChatLocation|null; media_urls?:string[]; created_at: string };
 type Props = { townHallOrigin?:boolean; receiptContext?:ReceiptContext; roomStyle?:boolean; avatarURL?:string; token:string; title: string; provider: string; identity?:ProviderIdentityData; messages: ProviderMessage[]; toolbar?:React.ReactNode; pausedLabel?:string; busy: boolean; loading: boolean; paused: boolean; error: string; hasEarlier: boolean; bottomInset: number; onClose: () => void; onSend: (text: string,mediaKeys?:string[],clientID?:string,location?:ChatLocation,replyToID?:string) => Promise<void>; onEarlier: () => void; onRefresh: () => void };
 export function ProviderConversation(props: Props) {
   const [visibleMessages,setVisibleMessages]=useState<string[]>([]);

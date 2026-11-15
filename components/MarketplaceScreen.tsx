@@ -1,3 +1,4 @@
+import {JobsScreen} from './JobsScreen';
 import {KeyboardScrollView as ScrollView,KeyboardFlatList as FlatList} from './KeyboardScroll';
 import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
@@ -133,11 +134,13 @@ function bookingQuantityCopy(listingType: string) {
   return { label: "Number of people receiving this service", help: "Enter 1 when booking only for yourself. This is not the number of days.", unit: "person" };
 }
 
-export function MarketplaceScreen({ token, active=true, bottomInset = 0, initialMode = "explore",initialConversationId="",initialListingId="",country="NG",destinationState="",destinationCity="",discoveryActive=true,onOpenProduct,onManageListing,onConversationVisibilityChange }: { token: string | null; active?:boolean; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;initialListingId?:string;country?:string;destinationState?:string;destinationCity?:string;discoveryActive?:boolean;onOpenProduct?:(product:Product)=>void;onManageListing?:(kind:'product'|'service',id:string)=>void;onConversationVisibilityChange?:(visible:boolean)=>void }) {
+export function MarketplaceScreen({ token, active=true, bottomInset = 0, initialMode = "explore",initialConversationId="",initialListingId="",country="NG",destinationState="",destinationCity="",discoveryActive=true,onOpenProduct,onManageListing,onConversationVisibilityChange,initialJobId="",onJobLinkHandled }: { token: string | null; active?:boolean; bottomInset?: number; initialMode?: "explore" | "requests" | "messages";initialConversationId?:string;initialListingId?:string;country?:string;destinationState?:string;destinationCity?:string;discoveryActive?:boolean;initialJobId?:string;onJobLinkHandled?:()=>void;onOpenProduct?:(product:Product)=>void;onManageListing?:(kind:'product'|'service',id:string)=>void;onConversationVisibilityChange?:(visible:boolean)=>void }) {
   const theme = useTheme();
   const styles = useThemedStyles(baseStyles);
   const { width: viewportWidth } = useWindowDimensions();
   const [showDrivers,setShowDrivers]=useState(false);
+  const [showJobs,setShowJobs]=useState(!!initialJobId),[jobLinkTarget,setJobLinkTarget]=useState(initialJobId),[jobConversation,setJobConversation]=useState('');
+  useEffect(()=>{if(initialJobId){setJobLinkTarget(initialJobId);setShowJobs(true);onJobLinkHandled?.();}},[initialJobId]);
   const [mode, setMode] = useState<"explore" | "requests" | "messages">(initialMode);
   const [items, setItems] = useState<Listing[]>([]);
   const [requests, setRequests] = useState<BuyerRequest[]>([]);
@@ -528,21 +531,21 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
     providerChatHistory.clear();threadETags.current.clear();threadRequest.current++;threadInFlight.current=false;chatBusy.current=false;setConversationCursor("");setSelectedConversation(null);conversationRef.current=null;setConversationMessages([]);setConversations([]);conversationsRef.current=[];setConversationListCursor("");setChatError("");setChatSending(false);setChatLoading(false);
   },[token]);
   useEffect(()=>{
-    if(!active || !token || !initialConversationId || initialConversationHandled.current===initialConversationId)return;
-    initialConversationHandled.current=initialConversationId;
+    if(!active || !token || !(jobConversation||initialConversationId) || initialConversationHandled.current===(jobConversation||initialConversationId))return;
+    initialConversationHandled.current=jobConversation||initialConversationId;
     const actor=token;let cancelled=false;
     setMode("messages");setChatLoading(true);
     void (async()=>{
       try{
-        const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?conversation_id=${encodeURIComponent(initialConversationId)}&limit=1`,{headers:authHeaders});
+        const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?conversation_id=${encodeURIComponent(jobConversation||initialConversationId)}&limit=1`,{headers:authHeaders});
         if(cancelled || actor!==chatActor.current)return;
-        const conversation=(body.items || []).find((item:Conversation)=>item.id===initialConversationId);
+        const conversation=(body.items || []).find((item:Conversation)=>item.id===(jobConversation||initialConversationId));
         if(!response.ok || !conversation)throw Error("This conversation is unavailable. Refresh your provider chats or contact Support.");
         await openConversation(conversation);
       }catch(error){if(!cancelled && actor===chatActor.current){setError(error instanceof Error?error.message:"Conversation could not open. Please retry.");setChatLoading(false);}}
     })();
     return()=>{cancelled=true;threadRequest.current++;};
-  },[active,token,initialConversationId]);
+  },[active,token,initialConversationId,jobConversation]);
   useEffect(()=>{
     if (!active) return;
     let stopped=false, busy=false;
@@ -737,11 +740,13 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
     );
   }
 
+  if(showJobs)return <JobsScreen token={token||''} active={active&&discoveryActive} initialJobId={jobLinkTarget} onClose={()=>{setShowJobs(false);setJobLinkTarget('');}} onConversation={id=>{setShowJobs(false);setJobConversation(id);}}/>;
   if(showDrivers)return <NearbyDrivers active={active&&discoveryActive} token={token||''} onClose={()=>setShowDrivers(false)} onOpen={id=>{setShowDrivers(false);void (async()=>{try{const response=await fetchWithTimeout(API_URL+'/api/v1/marketplace/listings/'+id);if(!response.ok)throw Error('This driver service is no longer available.');await openListing(await response.json());}catch(error){Alert.alert('Driver unavailable',error instanceof Error?error.message:'Please refresh.');}})();}}/>;
   return (
     <View style={styles.fill}>
       <View style={styles.modeBar}>
         <Pressable style={[styles.modeButton, mode === "explore" && styles.modeButtonActive]} onPress={() => setMode("explore")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "explore" && styles.modeTextActive]}>Explore</Text></Pressable>
+        <Pressable accessibilityRole="button" style={styles.modeButton} onPress={()=>setShowJobs(true)}><Text style={styles.modeText}>Jobs</Text></Pressable>
 
         <Pressable style={[styles.modeButton, mode === "messages" && styles.modeButtonActive]} onPress={() => setMode("messages")}><Text maxFontSizeMultiplier={1.2} style={[styles.modeText, mode === "messages" && styles.modeTextActive]}>Provider chat</Text></Pressable>
       </View>

@@ -1,3 +1,4 @@
+import {jobLinkID} from './components/jobsApi';
 import {googleSessionRequest} from './components/googleSessionRequest';
 import {chooseLibraryMedia} from './components/mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './components/KeyboardScroll';
@@ -241,10 +242,11 @@ function AcrossApp() {
   const chatCacheOwner=useRef(token);useEffect(()=>{const previous=chatCacheOwner.current;if(previous&&previous!==token){void privateChatStore.clear(previous);setShowSettings(false);}chatCacheOwner.current=token;},[token]);
   const manageOwnListing=(kind:'product'|'service',id:string)=>{setSelectedProduct(null);setProviderWorkspaceRoute(`view=${kind==='product'?'products':'listings'}&listing=${encodeURIComponent(id)}`);setProviderWorkspaceVisible(true);};
   const [providerWorkspaceVisible,setProviderWorkspaceVisible]=useState(false),[providerWorkspaceRoute,setProviderWorkspaceRoute]=useState('');
+  const [jobsLink,setJobsLink]=useState('');
   const [pendingProviderRoute,setPendingProviderRoute]=useState<string|null>(null);
   useEffect(()=>{
     let mounted=true;
-    const receive=(url:string|null)=>{if(!mounted||!url)return;const route=isProviderSubscriptionReturn(url)?'view=subscription':providerAppRoute(url);if(route!==null)setPendingProviderRoute(route);};
+    const receive=(url:string|null)=>{if(!mounted||!url)return;const job=jobLinkID(url);if(job){setJobsLink(job);setSelectedProduct(null);setProviderWorkspaceVisible(false);setActiveTab('services');setNotificationNavigationKey(n=>n+1);return;}const route=isProviderSubscriptionReturn(url)?'view=subscription':providerAppRoute(url);if(route!==null)setPendingProviderRoute(route);};
     void Linking.getInitialURL().then(receive).catch(()=>{});
     const listener=Linking.addEventListener('url',event=>receive(event.url));
     return ()=>{mounted=false;listener.remove();};
@@ -2146,7 +2148,7 @@ function AcrossApp() {
         </RetainedFeedTab>
 
         <RetainedFeedTab key={`services:${token || 'guest'}`} active={activeTab === "services"}>
-          <MarketplaceScreen key={notificationNavigationKey} token={token} active={activeTab === "services" && !providerWorkspaceVisible} bottomInset={bottomInset} initialMode={serviceInitialMode} initialListingId={discoveryServiceID} onManageListing={manageOwnListing} discoveryActive={activeTab === "services"&&!providerWorkspaceVisible&&!selectedProduct&&!showSettings&&!showNotifications&&!showReferrals} country={catalogCountry} destinationState={catalogState} destinationCity={catalogCity} onOpenProduct={setSelectedProduct} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />
+          <MarketplaceScreen onJobLinkHandled={()=>setJobsLink('')} initialJobId={jobsLink} key={notificationNavigationKey} token={token} active={activeTab === "services" && !providerWorkspaceVisible} bottomInset={bottomInset} initialMode={serviceInitialMode} initialListingId={discoveryServiceID} onManageListing={manageOwnListing} discoveryActive={activeTab === "services"&&!providerWorkspaceVisible&&!selectedProduct&&!showSettings&&!showNotifications&&!showReferrals} country={catalogCountry} destinationState={catalogState} destinationCity={catalogCity} onOpenProduct={setSelectedProduct} initialConversationId={serviceConversationId} onConversationVisibilityChange={setServiceChatVisible} />
         </RetainedFeedTab>
         {activeTab === "messages" && !providerWorkspaceVisible && token && <CommunityScreen key={`${token}:${notificationNavigationKey}`} token={token} bottomInset={0} initialMode={communityMode} initialConversationId={communityConversationId} initialHallRoomId={communityHallRoomId}/>}
 
