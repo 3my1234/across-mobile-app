@@ -1,7 +1,19 @@
-# Provider tier comparison (unreleased)
+# Provider tier comparison
 
-This UI displays server-supplied plan limits, Town Hall capacity, search, messaging, recommendation eligibility, promotional exposure and current usage. It does not grant entitlements or infer benefits from prices. Existing payments/renewals and distribution guards remain authoritative. Older APIs omit new benefits, which the UI does not invent.
+Current backend rules (migrations 107, 111, 117 and pending119/120/121):
 
-Existing paid subscriptions keep their periods. Downgraded posts can retain or reduce saved media; adding new media still requires the server allowance. Drafts reserve a shared product/service listing place. Free remains1 listing/1 image, no videos/provider Town Hall participation. Diamond at NGN2000 retains2 videos; Gold at NGN5000 retains5 (60seconds each).
+| Tier | Monthly NGN | Product/service places | Images/listing | New videos | Concurrent Town Hall requests | Exposure |
+| --- | ---: | ---: | ---: | --- | ---: | --- |
+| Free | 0 | 1 | 1 | None | 0 | Limited; no paid sponsorship |
+| Bronze | 500 | 3 | 3 | None | 3 | Basic |
+| Silver | 1000 | 10 | 5 | None | 5 | Standard |
+| Diamond | 2000 | 25 | 8 | None | 8 | Enhanced |
+| Gold | 5000 | 60 | 12 | 1/listing, 5/business, 180 seconds after119 | 10 | Premium |
 
-Depends on backend provider-tier-entitlements / migration107 for the complete new matrix. Do not merge web code into auto-deployed admin main or deploy provider PWA before approved backend qualification. No EAS build or production release is authorized by this implementation task. Native purchase actions, payment verification and Play product IDs are unchanged. Real Play transactions and physical-device acceptance remain pending.
+The UI uses server-supplied plan limits, prices and usage; administrator changes remain authoritative. The older internal code `provider-diamond` now means Gold.
+
+Pending migrations120/121: Free, Bronze and Silver get 1 active job, Diamond 5 and Gold 10, separate from product/service places. These are simultaneous active limits, not monthly publication quotas. Unarchived product/service drafts still count toward their existing allowance; job drafts do not consume a place. Closing, filling, expiry or admin removal releases the dedicated job place immediately, without cleanup. Republishing requires that place to be free. Existing published jobs and history are preserved; a historical overage blocks new jobs and deadline extensions until it falls below the current tier limit. Production retains the shared rule until migrations120/121 are deployed. Existing paid publications/media are preserved when rules become stricter; this does not grant new uploads beyond the current policy. Three-minute duration is pending release of migration119 and compatible API/worker code; live remains30 seconds until that release. The new mobile build compresses locally before upload; actual reduction and HDR compatibility require phone acceptance. Gold video uploads are limited to 50 MiB each, 250 MiB stored per provider, 10 upload reservations/day and 2 pending reservations (migration111 defaults); uploads can be paused by the server.
+
+All tiers support direct customer messaging and relevant recommendations after verification. Paid Town Hall search/filter access and participation require active paid eligibility. Promotion is subject to verification, relevance, availability, opt-out and fair rotation; exposure weights are Bronze1, Silver2, Diamond3 and Gold5, not guaranteed views, sales or positions. Browsing/applying to Jobs is free.
+
+Sponsored viewing does not change entitlements. Published videos follow existing backend public-media policy; private verification documents never belong in ads. New viewer builds and physical-device acceptance are separate from production deployment and store publication.

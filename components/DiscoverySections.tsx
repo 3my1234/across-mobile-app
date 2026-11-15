@@ -5,6 +5,7 @@ import {ProviderIdentity} from './ProviderIdentity';
 import {ThemedText as Text} from './ThemeProvider';
 import {useAccountDesign} from './AccountDesign';
 import {ResilientImage} from './ResilientImage';
+import {SponsoredViewer,sponsoredVideo} from './SponsoredViewer';
 import {useCatalogFreshness} from './catalogFreshness';
 import {cachedDiscoveryFeed,discoveryFeed,DiscoveryCard,recordDiscovery,rememberDiscoveryTopics} from './discoveryClient';
 
@@ -63,7 +64,7 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
    {cards.map((card,cardIndex)=><View key={card.kind+card.id} ref={node=>{if(node)refs.current.set(card.kind+card.id,node);else refs.current.delete(card.kind+card.id);}} collapsable={false} style={{width:compact?tileWidth:180,borderWidth:1,borderColor:compact?c.accent:c.line,borderRadius:14,overflow:'hidden',backgroundColor:c.surface}}>
     <Pressable accessibilityRole="button" accessibilityLabel={`${compact?'Promoted: ':''}${card.title}`} onPress={()=>onOpen(card)}>
      {compact?<View style={{width:tileWidth-2,height:bannerHeight,borderRadius:14,overflow:'hidden',backgroundColor:c.surface,flexDirection:'row',padding:8,gap:10}}>
-      <ResilientImage uri={card.image_urls[0]||''} style={{height:imageHeight,width:imageWidth,borderRadius:10}} priority={cardIndex===position.index?"high":"low"} resizeMode="cover"/>
+      <View><ResilientImage uri={card.image_urls[0]||''} style={{height:imageHeight,width:imageWidth,borderRadius:10}} priority={cardIndex===position.index?"high":"low"} resizeMode="cover"/>{sponsoredVideo(card)&&<View pointerEvents="none" style={{position:'absolute',left:0,right:0,top:0,bottom:0,alignItems:'center',justifyContent:'center'}}><Ionicons name="play-circle" size={32} color="#FFFFFF"/></View>}</View>
       <View style={{flex:1,minWidth:0,justifyContent:'space-between',paddingVertical:1}}>
        <View style={{flexDirection:'row',alignItems:'center',gap:5,minWidth:0}}>
         <Text style={{fontSize:10,lineHeight:14,fontWeight:'800',color:c.dark?'#08261D':'#FFFFFF',backgroundColor:c.accent,paddingHorizontal:5,paddingVertical:2,borderRadius:5}}>Sponsored</Text>
@@ -75,7 +76,7 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
         {!!card.city&&<Ionicons name="location-outline" size={12} color={c.muted}/>}
         <Text numberOfLines={1} adjustsFontSizeToFit style={{fontSize:11,lineHeight:15,color:c.text,flexShrink:1}}>{card.city?card.city+' \u00b7 ':''}{card.price===null||card.price_mode==='quote'?'Ask for a quote':`${card.price_mode==='from'?'From ':''}${card.currency} ${Number(card.price).toLocaleString('en-NG')}`}{card.price!==null&&Number(card.compare_at_price)>Number(card.price)&&<Text style={{fontSize:10,color:c.muted,textDecorationLine:'line-through'}}> {card.currency} {Number(card.compare_at_price).toLocaleString('en-NG')}</Text>}</Text>
        </View>
-       <Text style={{fontSize:12,lineHeight:16,fontWeight:'700',textDecorationLine:'underline',color:c.accent}}>View {card.kind==='product'?'product':'service'} {'\u2192'}</Text>
+       <Text style={{fontSize:12,lineHeight:16,fontWeight:'700',textDecorationLine:'underline',color:c.accent}}>Watch ad {'\u2192'}</Text>
       </View>
      </View>:<>
       <ResilientImage uri={card.image_urls[0]||''} style={{height:140,width:180}} resizeMode="cover"/>
@@ -90,6 +91,8 @@ function Rail({title,cards,active,onOpen,compact=false}:{title:string;cards:Disc
 }
 export function DiscoverySections({owner,country='NG',state='',city='',search='',kind,sourceKind,sourceID,topics=[],active=true,onOpen}:{owner:string|null;country?:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string;topics?:string[];active?:boolean;onOpen:(card:DiscoveryCard)=>void}) {
  const listingKind=sourceID?sourceKind:kind, noun=listingKind==='product'?'Products':listingKind==='service'?'Services':'Listings';
+ const [ad,setAd]=useState<{cards:DiscoveryCard[];selected:DiscoveryCard}|null>(null);
+ useEffect(()=>setAd(null),[owner,country,state,city,search,kind,sourceID,active]);
  const c=useAccountDesign(),[data,setData]=useState<{similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]}|null>(null),[error,setError]=useState(''),[retry,setRetry]=useState(0),sequence=useRef(0),dataContext=useRef(''),topicsRef=useRef(topics);topicsRef.current=topics;
  useCatalogFreshness(()=>setRetry(n=>n+1),active);
  useEffect(()=>{
@@ -104,5 +107,5 @@ export function DiscoverySections({owner,country='NG',state='',city='',search=''
   return()=>{alive=false;clearTimeout(delay);clearInterval(timer);foreground.remove();};
  },[owner,country,state,city,search,kind,sourceKind,sourceID,active,retry]);
  const cards=data?(sourceID?data.similar:data.promoted):[];
- return <View>{!data&&!error&&<ActivityIndicator accessibilityLabel="Loading listing discovery" style={{padding:12}}/>}{!!error&&<Pressable accessibilityRole="button" onPress={()=>setRetry(n=>n+1)}><Text style={{color:c.danger,padding:12}}>{error}</Text></Pressable>}{data&&<Rail title={sourceID?`Recommended ${noun}`:`Sponsored ${noun.toLowerCase()}`} cards={cards} compact={!sourceID} active={active} onOpen={onOpen}/>}</View>;
+ return <View>{!data&&!error&&<ActivityIndicator accessibilityLabel="Loading listing discovery" style={{padding:12}}/>}{!!error&&<Pressable accessibilityRole="button" onPress={()=>setRetry(n=>n+1)}><Text style={{color:c.danger,padding:12}}>{error}</Text></Pressable>}{data&&<Rail title={sourceID?`Recommended ${noun}`:`Sponsored ${noun.toLowerCase()}`} cards={cards} compact={!sourceID} active={active&&!ad} onOpen={card=>{if(sourceID)onOpen(card);else{recordDiscovery(card,'click');setAd({cards,selected:card});}}}/>}{ad&&active&&<SponsoredViewer market={{country,state,city,search}} cards={ad.cards} selected={ad.selected} token={owner} active={active} onClose={()=>setAd(null)} onDetails={onOpen}/>}</View>;
 }

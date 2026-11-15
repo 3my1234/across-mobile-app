@@ -9,17 +9,17 @@ import {Product} from "./types";
 import {mergeChatMessages} from "./chatImages";
 import {ProviderConversation,ProviderMessage} from "./ProviderConversation";
 
-export function ProductSellerChat({product,token,onClose}:{product:Product;token:string;onClose:()=>void}) {
+export function ProductSellerChat({product,token,onClose,service=false}:{product:Pick<Product,'id'|'title'|'provider_name'|'provider_identity'>;token:string;onClose:()=>void;service?:boolean}) {
  const inset=useSafeAreaInsets();
  const [messages,setMessages]=useState<ProviderMessage[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(""),[cursor,setCursor]=useState(""),[paused,setPaused]=useState(false);
  const etag=useRef("");
- const cached=useRef(providerChatHistory.get(token,`product:${product.id}`));
+ const cached=useRef(providerChatHistory.get(token,`${service?'service':'product'}:${product.id}`));
  const alive=useRef(true),conversation=useRef(""),flight=useRef(false),sending=useRef(false),sequence=useRef(0);
  const invalidate=()=>{sequence.current++;};
  const headers={Authorization:`Bearer ${token}`};
  function merge(incoming:ProviderMessage[]) {setMessages(current=>{
   if(!alive.current)return current;
-  const merged=mergeChatMessages(current,incoming);providerChatHistory.put(token,`product:${product.id}`,merged,cached.current?.cursor || "");return merged;
+  const merged=mergeChatMessages(current,incoming);providerChatHistory.put(token,`${service?'service':'product'}:${product.id}`,merged,cached.current?.cursor || "");return merged;
  });}
  async function load(earlier="",quiet=false) {
   if(flight.current)return;
@@ -27,7 +27,7 @@ export function ProductSellerChat({product,token,onClose}:{product:Product;token
   if(!quiet)setLoading(true);
   try {
    if(!conversation.current) {
-    const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?product_id=${encodeURIComponent(product.id)}`,{headers});
+    const {response,body}=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations?${service?'listing_id':'product_id'}=${encodeURIComponent(product.id)}`,{headers});
     if(!response.ok)throw new Error(body.message || "Conversation could not be loaded");
     if(!alive.current || version!==sequence.current)return;
     const thread=body.items?.[0];
@@ -62,7 +62,7 @@ export function ProductSellerChat({product,token,onClose}:{product:Product;token
   sending.current=true;setBusy(true);setError("");
   try {
    const existing=conversation.current;
-   const endpoint=existing?`/marketplace/conversations/${existing}/messages`:`/marketplace/products/${product.id}/conversations`;
+   const endpoint=existing?`/marketplace/conversations/${existing}/messages`:`/marketplace/${service?'listings':'products'}/${product.id}/conversations`;
    const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1${endpoint}`,{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({message:text,media_keys:mediaKeys,location,client_message_id:clientID})});
    if(!response.ok)throw new Error(body.message || "Message could not be sent");
    if(!alive.current)return;

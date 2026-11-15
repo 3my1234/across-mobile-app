@@ -1,0 +1,43 @@
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
+const compile=source=>ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React,esModuleInterop:true}}).outputText;
+let cells=[],effects=[],pending=[],index=0,foreground,own=false,loading=false,accessError='',fetches=0,closed=0,details=null,alerts=[],pages=0;
+const timers=new Map();let clock=0;const events=[];
+const react={useCallback:fn=>{index++;return fn;},createElement:(type,props,...children)=>({type,props:props||{},children:children.flat(Infinity)}),useState:initial=>{const i=index++;if(!(i in cells))cells[i]=typeof initial==='function'?initial():initial;return[cells[i],value=>{cells[i]=typeof value==='function'?value(cells[i]):value;}];},useRef:initial=>{const i=index++;return cells[i]||(cells[i]={current:initial});},useEffect:(fn,deps)=>{const i=index++;if(!effects[i]||deps.some((value,k)=>!Object.is(value,effects[i].deps[k]))){const old=effects[i];effects[i]={deps};pending.push(()=>{old?.cleanup?.();effects[i].cleanup=fn();});}}};
+const rn={View:'View',Pressable:'Button',FlatList:'List',Modal:'Modal',ActivityIndicator:'Loading',StyleSheet:{absoluteFill:{position:'absolute'},create:x=>x},Alert:{alert:(...args)=>alerts.push(args)},AppState:{currentState:'active',addEventListener:(_event,fn)=>{foreground=fn;return{remove(){foreground=null;}};}}};
+const card=(id,kind='product',video=true)=>({id,kind,provider_id:'provider-'+id,provider_name:'Seller',placement:'promoted',title:'Ad '+id,image_urls:['https://media.test/'+id+'.jpg'],video_urls:video?['https://media.test/'+id+'.mp4']:[],price:100,currency:'NGN',city:'Abuja',receipt:'receipt-'+id});
+const a=card('a'),b=card('b'),c=card('c','service');
+let videoPlayer={muted:false,loop:false,staysActiveInBackground:true,release(){this.released=true;this.releases=(this.releases||0)+1;},play(){if(this.released)throw Error('released player');this.played=(this.played||0)+1;},pause(){if(this.released)throw Error('released player');this.paused=(this.paused||0)+1;},addListener:()=>({remove(){}})};
+const scope={exports:{},Set,Map,URL,URLSearchParams,Error,Math,Number,Date,setTimeout:(fn,ms)=>{timers.set(++clock,{fn,ms});return clock;},clearTimeout:key=>timers.delete(key),require:name=>name==='react'?react:name==='react-native'?rn:name==='react-native-safe-area-context'?{useSafeAreaInsets:()=>({top:20,bottom:16})}:name==='expo-video'?{VideoView:'Video',setVideoCacheSizeAsync:async bytes=>assert.equal(bytes,128*1024*1024),useVideoPlayer:(_source,setup)=>{react.useRef(null);react.useEffect(()=>()=>videoPlayer.release(),[]);if(!videoPlayer.setup){setup(videoPlayer);videoPlayer.setup=true;}return videoPlayer;}}:name==='@expo/vector-icons'?{Ionicons:'Icon'}:name==='./ThemeProvider'?{ThemedText:'Text'}:name==='./ResilientImage'?{ResilientImage:'Image'}:name==='./ProductSellerChat'?{ProductSellerChat:'Chat'}:name==='./useBusinessContact'?{useBusinessContact:()=>({own,checking:loading,error:accessError,retry(){accessError='';}})}:name==='./discoveryClient'?{recordDiscovery:(...args)=>events.push(args),discoverySponsoredPage:async()=>{pages++;return{cards:[b,card('d')],next:''};}}:name==='./config'?{API_URL:'https://api.test'}:{fetchJSONWithTimeout:async()=>{fetches++;return{response:{ok:true},body:{id:current.id,provider_id:current.provider_id}};}}};
+vm.runInNewContext(compile(fs.readFileSync('components/SponsoredViewer.tsx','utf8')+';exports.AdVideo=AdVideo;'),scope);
+const api=scope.exports,nodes=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flatMap(nodes)];
+const text=n=>typeof n==='string'?n:n?.children?.map(text).join('')||'';
+let tree,current=a,selected=a,owner='buyer',active=true;
+const args=()=>({cards:[a,b,c,a],selected,token:owner,active,market:{country:'NG'},onClose:()=>closed++,onDetails:card=>details=card});
+function draw(){index=0;pending=[];tree=api.SponsoredViewer(args());pending.forEach(fn=>fn());return tree;}
+function list(){return nodes(tree).find(n=>n.type==='List');}
+function page(i){return list().props.renderItem({item:list().props.data[i],index:i});}
+function button(label,root=tree){return nodes(root).find(n=>n.type==='Button'&&(n.props.accessibilityLabel===label||text(n)===label));}
+const tick=ms=>{for(const[key,timer]of [...timers])if(timer.ms===ms){timers.delete(key);timer.fn();}};
+const settle=async()=>{for(let i=0;i<12;i++)await Promise.resolve();};
+function reset(){effects.forEach(e=>e?.cleanup?.());cells=[];effects=[];timers.clear();index=0;}
+(async()=>{
+ assert.deepEqual(Array.from(api.sponsoredCards([a,b,c,a],b),x=>x.id),['b','a'],'tapped ad opens first; kind isolation and duplicates');
+ assert.equal(api.sponsoredVideo({...a,video_urls:['file://private','http://media.test/v','https://media.test/good']}),'https://media.test/good');
+ draw();await settle();nodes(tree).find(n=>n.props.onLayout).props.onLayout({nativeEvent:{layout:{width:400,height:800}}});draw();
+ assert.equal(list().props.data.length,3);assert.equal(list().props.data[0].id,'a');assert.equal(list().props.getItemLayout(null,1).offset,800);
+ let video=nodes(page(0)).find(n=>n.type===api.AdVideo);assert.ok(video);assert.equal(video.props.muted,true);assert.ok(!nodes(page(1)).some(n=>n.type===api.AdVideo),'offscreen video never mounted');
+ button('Unmute video').props.onPress();draw();assert.equal(nodes(page(0)).find(n=>n.type===api.AdVideo).props.muted,false);
+ tick(1000);assert.equal(events.filter(e=>e[1]==='impression').length,1);
+ list().props.onScroll({nativeEvent:{contentOffset:{y:800}}});draw();assert.ok(!nodes(page(0)).some(n=>n.type===api.AdVideo),'scroll stops current decoder immediately');tick(120);current=b;draw();assert.equal(nodes(page(1)).find(n=>n.type===api.AdVideo).props.muted,true,'each new ad starts muted');
+ foreground('background');draw();assert.ok(!nodes(page(1)).some(n=>n.type===api.AdVideo),'background stops playback');foreground('active');draw();
+ button('Pause video').props.onPress();draw();assert.equal(nodes(page(1)).find(n=>n.type===api.AdVideo).props.playing,false);button('Play video').props.onPress();draw();
+ own=true;draw();assert.equal(button('Your listing',page(1)).props.disabled,true);await button('Your listing',page(1)).props.onPress();assert.equal(fetches,0,'cannot contact own business');own=false;
+ owner=null;draw();await button('Message provider',page(1)).props.onPress();assert.equal(alerts.length,1);assert.equal(fetches,0);owner='buyer';draw();
+ await button('Message provider',page(1)).props.onPress();await settle();draw();let chat=nodes(tree).find(n=>n.type==='Chat');assert.equal(chat.props.product.id,'b');assert.equal(chat.props.service,false);assert.ok(!nodes(page(1)).some(n=>n.type===api.AdVideo),'chat pauses viewer');tree.props.onRequestClose();draw();assert.ok(!nodes(tree).some(n=>n.type==='Chat'),'hardware back closes chat first');assert.equal(closed,0);
+ button('See details',page(1)).props.onPress();assert.equal(details.id,'b');assert.equal(closed,1);
+ await settle();draw();assert.equal(pages,1);assert.equal(list().props.data.filter(x=>x.id==='b').length,1);assert.ok(list().props.data.some(x=>x.id==='d'),'continuation appends unseen ads');
+ reset();selected=c;current=c;draw();await settle();nodes(tree).find(n=>n.props.onLayout).props.onLayout({nativeEvent:{layout:{width:400,height:800}}});draw();await button('Message provider',page(0)).props.onPress();await settle();draw();chat=nodes(tree).find(n=>n.type==='Chat');assert.equal(chat.props.service,true);assert.equal(chat.props.product.id,'c');reset();
+ // Real player setup and cleanup, rather than a markup-only playback assertion.
+ index=0;pending=[];api.AdVideo({uri:'https://media.test/a.mp4',muted:true,onError(){}});pending.forEach(fn=>fn());assert.equal(videoPlayer.muted,true);assert.equal(videoPlayer.staysActiveInBackground,false);assert.equal(videoPlayer.played,1);reset();assert.equal(videoPlayer.releases,1);assert.equal(videoPlayer.paused,undefined,'never call native player after its hook has released it');
+ console.log('Sponsored viewer passed: exact ad/kind, paging, single muted decoder, swipe/background/chat/back cleanup, self-contact guard and listing context.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
