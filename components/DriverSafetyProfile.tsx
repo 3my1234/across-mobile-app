@@ -7,13 +7,15 @@ import {API_URL} from './config';
 import {fetchJSONWithTimeout} from './utils';
 import {TransportSafetyNotice} from './TransportSafetyNotice';
 
-type Profile = {driver_name: string; face_photo_url: string; vehicle_photo_url: string; plate_photo_url: string; expires_in: number};
+type Profile = {driver_name: string; face_photo_url: string; vehicle_photo_url: string; plate_photo_url: string; expires_in: number;legacy_screening?:boolean;screening_notice?:string};
 export function validDriverSafetyProfile(value: unknown): value is Profile {
   if (!value || typeof value !== 'object') return false;
   const profile = value as Profile;
   if (typeof profile.driver_name !== 'string' || !profile.driver_name.trim()) return false;
   if (!Number.isFinite(profile.expires_in) || profile.expires_in <= 0 || profile.expires_in > 300) return false;
-  return [profile.face_photo_url, profile.vehicle_photo_url, profile.plate_photo_url].every(raw => {
+  const legacyMissingFace=profile.legacy_screening===true&&profile.face_photo_url===''&&typeof profile.screening_notice==='string'&&!!profile.screening_notice.trim();
+  return [profile.face_photo_url, profile.vehicle_photo_url, profile.plate_photo_url].every((raw,index) => {
+    if(index===0&&legacyMissingFace)return true;
     try {const url = new URL(raw); return typeof raw === 'string' && url.protocol === 'https:' && !url.username && !url.password;} catch {return false;}
   });
 }
@@ -42,9 +44,9 @@ export function DriverSafetyProfile({token, listingID, onClose, onOpenService}: 
     <TransportSafetyNotice audience="customer"/>
     {loading && <ActivityIndicator accessibilityLabel="Loading reviewed driver photos"/>}
     {!!error && <><Text accessibilityRole="alert">{error}</Text>{button('Retry driver photos', () => setRetry(value => value + 1))}</>}
-    {profile && <><Text style={{fontSize:18,fontWeight:'700'}}>{profile.driver_name}</Text>{([
+    {profile && <>{profile.legacy_screening&&<Text accessibilityRole="alert">{profile.screening_notice}</Text>}<Text style={{fontSize:18,fontWeight:'700'}}>{profile.driver_name}</Text>{([
       ['Face to compare at pickup', profile.face_photo_url], ['Exact vehicle / bike', profile.vehicle_photo_url], ['Number plate', profile.plate_photo_url]
-    ] as const).map(([label, uri]) => <View key={label} style={{gap:6}}><Text>{label}</Text><ResilientImage uri={uri} fallbackUri="" accessibilityLabel={label} contentFit="contain" cachePolicy="memory" style={{width:'100%',height:260}}/></View>)}</>}
+    ] as const).map(([label, uri]) => <View key={label} style={{gap:6}}><Text>{label}</Text>{uri?<ResilientImage uri={uri} fallbackUri="" accessibilityLabel={label} contentFit="contain" cachePolicy="memory" style={{width:'100%',height:260}}/>:<Text>No reviewed face photo is available for this earlier-approved driver. Ask for clarification before pickup.</Text>}</View>)}</>}
     {button('View service and chat', onOpenService)}
   </ScrollView></SafeAreaView></Modal>;
 }
