@@ -67,7 +67,8 @@
         }
       ],
       "@maplibre/maplibre-react-native",
-      "expo-iap"
+      "expo-iap",
+      ["expo-video", {"supportsBackgroundPlayback": false, "supportsPictureInPicture": false}]
     ],
     "extra": {
       "eas": {

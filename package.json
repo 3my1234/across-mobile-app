@@ -23,7 +23,7 @@
     "test:theme": "node scripts/test-theme.cjs",
     "check:provider-staging": "node scripts/check-provider-staging.cjs",
     "eas-build-pre-install": "node scripts/check-release-distribution.cjs",
-    "test:media-promotions": "node scripts/test-media-library-picker.cjs && node scripts/test-promoted-carousel.cjs",
+    "test:media-promotions": "node scripts/test-media-library-picker.cjs && node scripts/test-promoted-carousel.cjs && node scripts/test-sponsored-viewer.cjs",
     "test:google-auth": "node scripts/test-google-session-request.cjs && node scripts/test-login-screen-integration.cjs && node scripts/test-auth-workspace.cjs"
   },
   "dependencies": {
@@ -55,6 +55,7 @@
     "expo-status-bar": "~3.0.8",
     "expo-system-ui": "~6.0.9",
     "expo-task-manager": "~14.0.9",
+    "expo-video": "~3.0.16",
     "expo-web-browser": "~15.0.9",
     "fast-text-encoding": "^1.0.6",
     "react": "19.1.0",

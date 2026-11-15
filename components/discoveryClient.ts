@@ -3,7 +3,7 @@ import {API_URL} from './config';
 import {fetchJSONWithTimeout, mapProduct} from './utils';
 import type {Product} from './types';
 import type {ProviderIdentityData} from './ProviderIdentity';
-export type DiscoveryCard = {kind:'product'|'service';id:string;provider_id:string;provider_name?:string;provider_identity?:ProviderIdentityData;title:string;categories:string[];city:string;image_urls:string[];price:number|null;price_mode?:string;compare_at_price?:number;currency:string;placement:'similar'|'recommended'|'promoted';label?:string;receipt:string};
+export type DiscoveryCard = {kind:'product'|'service';id:string;provider_id:string;provider_name?:string;provider_identity?:ProviderIdentityData;title:string;categories:string[];city:string;image_urls:string[];video_urls?:string[];price:number|null;price_mode?:string;compare_at_price?:number;currency:string;placement:'similar'|'recommended'|'promoted';label?:string;receipt:string};
 type Context = {owner:string|null;country:string;state?:string;city?:string;search?:string;kind?:'product'|'service';sourceKind?:'product'|'service';sourceID?:string};
 type Feed = {similar:DiscoveryCard[];recommended:DiscoveryCard[];promoted:DiscoveryCard[]};
 const feeds=new Map<string,{at:number;value:Feed}>(), flights=new Map<string,Promise<Feed>>();
@@ -73,3 +73,18 @@ export async function openDiscovery(card:DiscoveryCard,destination:{country:stri
 
 export function recordDiscoveryDetail(owner:string|null,kind:'product'|'service',id:string,categories:string[]=[]) {rememberDiscoveryTopics(owner,categories);const card=attribution.get(kind+':'+id);if(card)recordDiscovery(card,'detail_open');}
 export function recordDiscoveryContact(owner:string|null,kind:'product'|'service',id:string) {discoverySession(owner);const card=attribution.get(kind+':'+id);if(card)recordDiscovery(card,'contact_tap');}
+
+// Bounded continuation for the sponsored viewer, with the same market/search scope.
+export async function discoverySponsoredPage(context:Context,after='') {
+ discoverySession(context.owner);const version=epoch;
+ const query=new URLSearchParams({country_code:context.country,state:context.state||'',city:context.city||'',kind:context.kind||'',session:discoverySession(context.owner),sponsored_viewer:'1'});
+ if(after)query.set('sponsored_after',after);
+ if(context.search?.trim())query.set('search',context.search.trim().slice(0,100));
+ const {response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/discovery?${query}`,{cache:'no-store'},10000);
+ if(!response.ok)throw Error('Could not load more sponsored listings.');
+ if(version!==epoch)throw Error('Your session changed. Reopen sponsored listings.');
+ // A backend predating viewer pagination has no cursor; retain the existing row.
+ if(typeof body.sponsored_next!=='string')return {cards:[] as DiscoveryCard[],next:''};
+ const cards=(Array.isArray(body.promoted)?body.promoted:[]).filter((item:any)=>item?.kind===context.kind&&item.placement==='promoted'&&typeof item.id==='string'&&typeof item.receipt==='string'&&Array.isArray(item.image_urls)) as DiscoveryCard[];
+ return {cards,next:body.sponsored_next};
+}
