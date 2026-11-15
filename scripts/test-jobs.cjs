@@ -29,7 +29,7 @@ function nodes(n){return !n||typeof n!=='object'?[]:[n,...(n.children||[]).flatM
 function button(label){const n=nodes(tree).find(n=>n.type==='Button'&&text(n)===label);assert.ok(n,'missing '+label);return n;}
 const input=(label,value)=>{const n=nodes(tree).find(n=>n.type==='Input'&&n.props.accessibilityLabel===label);assert.ok(n,'missing '+label);n.props.onChangeText(value);render();};
 (async()=>{
- render();await settle();assert.match(text(tree),/0 of 1 free active job places/);button('Post a job').props.onPress();render();
+ render();await settle();assert.match(text(tree),/0 of 1 active job places/);button('Post a job').props.onPress();render();
  for(const [label,value]of [['Job title','Synthetic rider'],['City / area','Abuja'],['Application deadline (YYYY-MM-DD)','2099-01-01'],['Description','Deliver parcels'],['Requirements','Licence']])input(label,value);
  button('Save changes').props.onPress();await settle();assert.equal(saved.status,'draft');assert.equal(saved.revision,2);assert.ok(button('Load server copy'),'first-save loss has a recovery action');failSave=false;button('Load server copy').props.onPress();await settle();button('Preview').props.onPress();render();assert.equal(button('Publish job').props.disabled,true,'full allowance blocks publishing in UI');assert.equal(calls.filter(c=>c.path.endsWith('/status')).length,0);
  remaining=1;button('Load server copy').props.onPress();await settle();button('Preview').props.onPress();render();failPublish=true;

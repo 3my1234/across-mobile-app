@@ -6,7 +6,7 @@ export function tierBenefitLines(plan: {listing_limit?: number; post_policy?: Ti
  const lines: string[]=[];
  if(Number.isInteger(plan.listing_limit)) lines.push(`${plan.listing_limit} shared listing places for products and services`);
  if(!policy) return lines;
- if(policy.active_job_limit !== undefined) lines.push(`${policy.active_job_limit} free active job place, separate from product and service places`);
+ if(policy.active_job_limit !== undefined) lines.push(`${policy.active_job_limit} active job place${policy.active_job_limit === 1 ? "" : "s"}, separate from product and service places`);
  lines.push(`${policy.max_images} images per listing`);
  lines.push(policy.max_videos ? `Up to ${policy.max_videos} video${policy.max_videos===1?'':'s'} per listing, ${policy.max_video_seconds} seconds each${policy.max_provider_videos?`; ${policy.max_provider_videos} total across your business`:''}` : 'No new video uploads');
  if(policy.town_hall) lines.push(policy.town_hall_room_limit === undefined ? 'Town Hall included' : `Join up to ${policy.town_hall_room_limit} Town Hall requests at once`);
@@ -18,5 +18,5 @@ export function tierBenefitLines(plan: {listing_limit?: number; post_policy?: Ti
  return lines;
 }
 export function tierUsageLines(usage: TierUsage) {
- return [`${usage.tier_label}: ${usage.active_listings_used} / ${usage.benefits.post_limit} listing places used; ${usage.remaining_active_listings} available.`,`${usage.town_hall_rooms_used} / ${usage.benefits.town_hall_room_limit} Town Hall requests joined; ${usage.remaining_town_hall_rooms} available.`,...(usage.listing_over_limit || usage.room_over_limit ? ['Your existing listings, media and joined requests are kept. Archive listings or leave requests, or upgrade, before adding more.'] : []),'Products and services share their plan allowance, including unarchived drafts. Verified providers have one separate free active job place. Job drafts use no place; closing, filling, expiry or removal frees the job place. Each Town Hall request still has its own provider capacity.'];
+ return [`${usage.tier_label}: ${usage.active_listings_used} / ${usage.benefits.post_limit} listing places used; ${usage.remaining_active_listings} available.`,`${usage.town_hall_rooms_used} / ${usage.benefits.town_hall_room_limit} Town Hall requests joined; ${usage.remaining_town_hall_rooms} available.`,...(usage.listing_over_limit || usage.room_over_limit ? ['Your existing listings, media and joined requests are kept. Archive listings or leave requests, or upgrade, before adding more.'] : []),'Products and services share their plan allowance, including unarchived drafts. Active jobs have a separate allowance: Free/Bronze/Silver 1, Diamond 5, Gold 10. Job drafts use no place; closing, filling, expiry or removal frees the job place. Each Town Hall request still has its own provider capacity.'];
 }
