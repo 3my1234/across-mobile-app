@@ -68,6 +68,7 @@
       ],
       "@maplibre/maplibre-react-native",
       "expo-iap",
+      "react-native-compressor",
       ["expo-video", {"supportsBackgroundPlayback": false, "supportsPictureInPicture": false}]
     ],
     "extra": {

@@ -1,0 +1,27 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const compile=s=>ts.transpileModule(s,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+let calls=[],deleted=[],held=null,outputSize=30*1024*1024,outputDuration=180,sourceDuration=180;
+const original={uri:'file:///camera/original.mov',duration:180000,fileSize:500*1024*1024,mimeType:'video/quicktime'};
+const encoded='file:///cache/prepared.mp4',limits={max_video_seconds:180,max_video_bytes:50*1024*1024};
+const scope={exports:{},Number,Math,Promise,Error,RegExp,setTimeout,clearTimeout,require:name=>name==='expo-file-system'?{File:class{constructor(uri){this.uri=uri;this.exists=true;}delete(){deleted.push(this.uri);}}}:{Video:{compress:async(uri,options,progress)=>{calls.push({uri,options});options.getCancellationId('cancel-id');progress(.5);if(held)await held;return encoded;},cancelCompression:id=>calls.push({cancel:id})},getVideoMetaData:async uri=>uri===original.uri?{size:original.fileSize,duration:sourceDuration,width:3840,height:2160,extension:'mov'}:{size:String(outputSize),duration:outputDuration,width:1280,height:720,extension:'mp4'}}};
+vm.runInNewContext(compile(fs.readFileSync('components/prepareProviderVideo.ts','utf8')),scope);const prepare=scope.exports.prepareProviderVideo;
+const settle=async()=>{for(let i=0;i<16;i++)await Promise.resolve();};
+(async()=>{
+ let progress=[];const prepared=await prepare(original,limits,new AbortController().signal,p=>progress.push(p));
+ assert.equal(calls[0].uri,original.uri);assert.equal(calls[0].options.compressionMethod,'manual');assert.equal(calls[0].options.maxSize,1280);assert.equal(calls[0].options.bitrate,1200000);assert.equal(calls[0].options.minimumFileSizeForCompress,0);
+ assert.equal(prepared.fileSize,outputSize);assert.equal(prepared.mimeType,'video/mp4');assert.equal(prepared.uri,encoded);assert.ok(progress.includes(50));assert.equal(deleted.length,0);prepared.cleanup();assert.deepEqual(deleted,[encoded]);assert.ok(!deleted.includes(original.uri));
+ await assert.rejects(prepare({...original,duration:180001},limits,new AbortController().signal),/180 seconds/);assert.equal(calls.length,1,'over-duration source rejected before encoding');
+ sourceDuration=181;await assert.rejects(prepare({...original,duration:null},limits,new AbortController().signal),/180 seconds/);sourceDuration=180;
+ outputSize=51*1024*1024;await assert.rejects(prepare(original,limits,new AbortController().signal),/larger than 50 MiB/);assert.equal(deleted.at(-1),encoded);outputSize=30*1024*1024;
+ outputDuration=181;await assert.rejects(prepare(original,limits,new AbortController().signal),/up to 180/);outputDuration=180;
+ let release;held=new Promise(resolve=>release=resolve);const controller=new AbortController();const pending=prepare(original,limits,controller.signal);await settle();controller.abort();await assert.rejects(pending,/cancelled/);assert.equal(calls.at(-1).cancel,'cancel-id');await assert.rejects(prepare(original,limits,new AbortController().signal),/still being prepared/);release();await settle();held=null;assert.equal(deleted.at(-1),encoded,'late cancelled output is removed');
+ const recovered=await prepare(original,limits,new AbortController().signal);recovered.cleanup();
+ // Execute the actual catalogue upload handler: no original bytes or size go to presign/PUT.
+ const source=fs.readFileSync('components/NativeProviderCatalog.tsx','utf8');const code=source.slice(source.indexOf('  const addMedia ='),source.indexOf('  const locate ='))+';exports.addMedia=addMedia;';
+ let requests=[],puts=[],videos=[],cleanupCount=0,compressFail=false;
+ const ui={exports:{},AbortController,Error,JSON,Math,run:fn=>{ui.action=fn();},mounted:{current:true},AppState:{currentState:'active'},videoPreparation:{current:null},kind:'products',token:'provider',draft:{id:'owned'},images:[],videos:[],setVideos:next=>videos=next,setImages(){},setPolicy(){},setVideoProgress(){},verificationImageError:()=>'',chooseLibraryMedia:async()=>({assets:[original]}),prepareProviderVideo:async()=>{if(compressFail)throw Error('cancelled');return{...prepared,cleanup:()=>cleanupCount++};},providerRequest:async(_token,path,options)=>{requests.push({path,options});if(path.endsWith('post-policy'))return{...limits,max_videos:1,max_images:12};if(path.endsWith('presign'))return{upload_url:'https://synthetic.test/put',key:'pending'};return{url:'https://synthetic.test/verified.mp4'};},putProviderPhoto:async(...args)=>{puts.push(args);},waitForProviderVideo:async value=>value};
+ vm.runInNewContext(compile(code),ui);ui.exports.addMedia(true);await ui.action;
+ const presign=JSON.parse(requests.find(r=>r.path.endsWith('presign')).options.body);assert.equal(presign.file_size,outputSize);assert.equal(presign.mime_type,'video/mp4');assert.equal(puts[0][1],encoded);assert.equal(videos[0],'https://synthetic.test/verified.mp4');assert.equal(cleanupCount,1);
+ requests=[];compressFail=true;ui.exports.addMedia(true);await assert.rejects(ui.action,/cancelled/);assert.ok(!requests.some(r=>r.options?.method==='POST'),'cancelled preparation does not reserve/upload a file');
+ console.log('Phone video preparation passed: 500MiB MOV→bounded MP4, 180s gates, output-size recheck, progress/cancel, single encoder, late cleanup, original preservation and compressed-only upload.');
+})().catch(error=>{console.error(error);process.exitCode=1;});
