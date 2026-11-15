@@ -41,7 +41,9 @@ function AdVideo({uri,muted,onError,cached=false,playing=true}:{uri:string;muted
   });
   return()=>subscription.remove();
  },[player]);
- useEffect(()=>{if(playing)player.play();else player.pause();return()=>player.pause();},[player,playing]);
+ // useVideoPlayer releases/stops the native object on unmount, before later effect cleanups.
+ // Do not call pause from cleanup on an already released native shared object.
+ useEffect(()=>{if(playing)player.play();else player.pause();},[player,playing]);
  return <><VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false}/>{loading&&<ActivityIndicator color="#75FFCB" style={StyleSheet.absoluteFill}/>}</>;
 }
 export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,market}:{market:{country:string;state?:string;city?:string;search?:string};cards:DiscoveryCard[];selected:DiscoveryCard;token:string|null;active:boolean;onClose:()=>void;onDetails:(card:DiscoveryCard)=>void}) {
