@@ -7,7 +7,7 @@ const scope={exports:{},require:name=>name==='react'?react:name==='react-native'
 vm.runInNewContext(compile('components/ProviderVerificationDocuments.tsx'),scope);
 const nodes=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flatMap(nodes)];
 const text=n=>typeof n==='string'||typeof n==='number'?String(n):n?.children?.map(text).join('')||'';
-const draw=(driver,documents=[],busy=false)=>scope.exports.ProviderVerificationDocuments({driver,documents,busy,onSelect:kind=>selected.push(kind),onView:id=>viewed.push(id)});
+const draw=(driver,documents=[],busy=false,legacy=false)=>scope.exports.ProviderVerificationDocuments({driver,legacy,documents,busy,onSelect:kind=>selected.push(kind),onView:id=>viewed.push(id)});
 const button=(tree,label)=>{const node=nodes(tree).find(n=>n.type==='Button'&&n.props.accessibilityLabel===label);assert.ok(node,'missing '+label);return node;};
 const doc=(kind,status='approved',extra={})=>({id:kind,document_type:kind,status,created_at:'2026-11-13T10:00:00Z',...extra});
 for(dark of [false,true]){
@@ -32,3 +32,12 @@ for(dark of [false,true]){
 }
 assert.equal(p.verificationChecklist(false).length,1);assert.equal(p.verificationChecklist(true).length,5);
 console.log('Verification checklist passed: role-specific requirements, licence-as-ID, latest rejection/expiry, progress, review feedback, source actions, busy protection, private previews and preserved history in both themes.');
+
+const oldDocuments=[doc('drivers_license'),doc('driver_vehicle'),doc('driver_plate')];
+let oldTree=draw(true,oldDocuments,false,true);
+assert.match(text(oldTree),/3 of 3 required documents submitted/);
+assert.ok(!p.verificationChecklist(true,true).some(row=>['driver_face','vehicle_registration'].includes(row.kind)));
+assert.equal(p.verificationExpiryError('drivers_license','',Date.now(),true),'');
+assert.ok(p.verificationExpiryError('drivers_license','',Date.now(),false));
+assert.equal(p.verificationDocumentStatus(doc('drivers_license','approved',{expires_on:'2020-01-01'}),'drivers_license',Date.now(),true).label,'Approved');
+assert.equal(p.verificationDocumentStatus(doc('drivers_license','rejected'),'drivers_license',Date.now(),true).label,'Needs replacement');

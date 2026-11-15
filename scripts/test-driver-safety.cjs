@@ -38,7 +38,11 @@ const profile={driver_name:'Actual driver',face_photo_url:'https://bucket.s3.tes
   pending[2].resolve({response:{ok:false,status:404},body:{}});await settle();assert.ok(text(tree).includes('Reviewed photos are unavailable'));assert.equal(nodes(tree).filter(n=>n.type==='Photo').length,0);
   nodes(tree).find(n=>n.type==='Button'&&text(n)==='Retry driver photos').props.onPress();render();assert.equal(pending.length,4);pending[3].resolve({response:{ok:true},body:profile});await settle();assert.equal(nodes(tree).filter(n=>n.type==='Photo').length,3);
   for(const url of ['http://unsafe/photo','javascript:bad','https://user:password@test/photo']) assert.equal(context.exports.validDriverSafetyProfile({...profile,face_photo_url:url}),false);
+  assert.equal(context.exports.validDriverSafetyProfile({...profile,face_photo_url:''}),false);
+  const legacyProfile={...profile,face_photo_url:'',legacy_screening:true,screening_notice:'Earlier checklist; face photo not reviewed.'};
+  assert.equal(context.exports.validDriverSafetyProfile(legacyProfile),true);
   expiration();await settle();assert.equal(nodes(tree).filter(n=>n.type==='Photo').length,0,'expired links never leave stale reviewed photos displayed');
+  nodes(tree).find(n=>n.type==='Button'&&text(n)==='Retry driver photos').props.onPress();render();pending[4].resolve({response:{ok:true},body:legacyProfile});await settle();assert.equal(nodes(tree).filter(n=>n.type==='Photo').length,2);assert.ok(text(tree).includes('No reviewed face photo'));
   hooks.forEach(h=>h?.cleanup?.());assert.ok(pending[3].options.signal.aborted);
   console.log('Driver safety passed: five required documents, legacy expiry compatibility, reviewed-photo projection, private cache, token/navigation races, retry and cancellation.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

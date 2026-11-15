@@ -58,6 +58,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [documents, setDocuments] = useState<Document[]>([]);
   const [documentDriver,setDocumentDriver]=useState(false);
+  const [documentLegacy,setDocumentLegacy]=useState(false);
   const [documentRevision,refreshDocumentReview]=useState(0);
   const [kind, setKind] = useState<string>('');
   const verificationScroll=useRef<React.ElementRef<typeof ScrollView>|null>(null);
@@ -96,8 +97,8 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   useEffect(() => {void load(); return invalidate;}, [load, invalidate]);
   useEffect(() => {
     if (view !== 'verification' || !provider?.id) return;
-    let current = true;
-    void providerRequest(token, '/providers/me/verification-documents').then(data => {if (current) {setDocuments(data.items || []);setDocumentDriver(data.is_driver===true);}}).catch(failure => {if (current) setError(failure instanceof Error ? failure.message : 'Documents could not load. Retry.');});
+    let current = true;setDocumentLegacy(false);
+    void providerRequest(token, '/providers/me/verification-documents').then(data => {if (current) {setDocuments(data.items || []);setDocumentDriver(data.is_driver===true);setDocumentLegacy(data.legacy_driver_screening===true);}}).catch(failure => {if (current) setError(failure instanceof Error ? failure.message : 'Documents could not load. Retry.');});
     return () => {current = false;};
   }, [token, view, provider?.id,documentRevision]);
 
@@ -113,7 +114,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   const uploadDocument = (source: 'camera' | 'library' | 'file') => void run(async () => {
     const documentKind = kind;
     const expiry = expiresOn.trim();
-    const expiryError = verificationExpiryError(documentKind, expiry);
+    const expiryError = verificationExpiryError(documentKind, expiry,Date.now(),documentLegacy);
     if (expiryError) throw new Error(expiryError);
     let file: {uri: string; mime: string; bytes: number; name: string};
     if (source === 'file') {
@@ -173,11 +174,11 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
         {row('Switch to customer', 'swap-horizontal-outline', onClose)}<Text>Browse and buy with the same account. Open Account to return to your provider workspace.</Text>
       </>}
 {provider && view === 'verification' && <View style={{gap:12}}>
- <ProviderVerificationDocuments driver={!!provider.is_driver||documentDriver} documents={documents} busy={busy||loading||provider.is_active===false} onSelect={setKind} onView={id=>previewDocument(id)}/>
+ <ProviderVerificationDocuments legacy={documentLegacy} driver={!!provider.is_driver||documentDriver} documents={documents} busy={busy||loading||provider.is_active===false} onSelect={setKind} onView={id=>previewDocument(id)}/>
  {(provider.is_driver||documentDriver)&&<TransportSafetyNotice audience="driver"/>}
  {!!kind&&<View key={kind} onLayout={()=>verificationScroll.current?.scrollToEnd({animated:true})} style={[s.card,{backgroundColor:c.surface,borderColor:c.accent,gap:10}]}>
   <Text style={{fontSize:17,fontWeight:'700'}}>Upload {verificationKinds.find(([value])=>value===kind)?.[1]||'ID'}</Text>
-  {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if printed (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
+  {driverPhotoKinds.includes(kind) && !['driver_face','driver_vehicle','driver_plate'].includes(kind) && <><Text>{!documentLegacy&&driverExpiryKinds.includes(kind) ? 'Expiry date printed on the document (required)' : 'Expiry date, if printed (optional)'}</Text><Input accessibilityLabel="Document expiry date" placeholder="YYYY-MM-DD" value={expiresOn} onChangeText={setExpiresOn} editable={!busy} autoCapitalize="none" style={{borderWidth:1,borderColor:c.line,padding:12,borderRadius:10}}/></>}
   {button('Take and submit photo',()=>uploadDocument('camera'),provider.is_active===false||loading)}
   {button('Choose and submit photo',()=>uploadDocument('library'),provider.is_active===false||loading)}
   {button('Choose document or photo',()=>uploadDocument('file'),provider.is_active===false||loading)}
