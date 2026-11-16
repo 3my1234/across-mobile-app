@@ -8,7 +8,10 @@ export function providerInboxItems(provider: any, account: any): ProviderInboxIt
     const kind = String(item.event_type || ''), metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
     const mirror = mirrored.get(item.id);
     const view = kind === 'conversation_message' ? 'messages' : kind === 'request_created' ? 'requests' : kind.startsWith('listing_') ? 'listings' : kind.startsWith('product_') ? 'products' : kind.includes('order') ? 'merchant-orders' : kind.includes('subscription') ? 'subscription' : 'overview';
-    return {id: item.id, source: 'provider', title: item.title || kind.replace(/_/g, ' '), body: item.body || item.message || '', created_at: item.created_at, is_read: !!item.read_at && (!mirror || !!mirror.is_read),
+    const fallbackTitle=kind.replace(/_/g,' ').replace(/(^|\s)\S/g,value=>value.toUpperCase())||'Business update';
+    // The account mirror carries the same safe, readable copy used by customer
+    // notifications. Never turn raw event metadata or chat text into a preview.
+    return {id: item.id, source: 'provider', title: mirror?.title || item.title || fallbackTitle, body: mirror?.body || item.body || item.message || 'Open this notification to view the business update.', created_at: item.created_at, is_read: !!item.read_at && (!mirror || !!mirror.is_read),
       // Avoid treating provider event IDs as ordinary notification IDs. The
       // existing provider route acknowledges its own ledger after navigation.
       notification: {...metadata, id: mirror?.id || '', notification_id: mirror?.id || '', provider_event_id: item.id, provider_view: view, notification_type: kind}};
