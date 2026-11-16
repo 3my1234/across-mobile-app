@@ -25,10 +25,10 @@ function reset(){effects.forEach(e=>e?.cleanup?.());cells=[];effects=[];timers.c
  assert.equal(api.sponsoredVideo({...a,video_urls:['file://private','http://media.test/v','https://media.test/good']}),'https://media.test/good');
  draw();await settle();nodes(tree).find(n=>n.props.onLayout).props.onLayout({nativeEvent:{layout:{width:400,height:800}}});draw();
  assert.equal(list().props.data.length,3);assert.equal(list().props.data[0].id,'a');assert.equal(list().props.getItemLayout(null,1).offset,800);
- let video=nodes(page(0)).find(n=>n.type===api.AdVideo);assert.ok(video);assert.equal(video.props.muted,true);assert.ok(!nodes(page(1)).some(n=>n.type===api.AdVideo),'offscreen video never mounted');
- button('Unmute video').props.onPress();draw();assert.equal(nodes(page(0)).find(n=>n.type===api.AdVideo).props.muted,false);
+ let video=nodes(page(0)).find(n=>n.type===api.AdVideo);assert.ok(video);assert.equal(video.props.muted,false);assert.ok(!nodes(page(1)).some(n=>n.type===api.AdVideo),'offscreen video never mounted');
+ button('Mute video').props.onPress();draw();assert.equal(nodes(page(0)).find(n=>n.type===api.AdVideo).props.muted,true);button('Unmute video').props.onPress();draw();assert.equal(nodes(page(0)).find(n=>n.type===api.AdVideo).props.muted,false);
  tick(1000);assert.equal(events.filter(e=>e[1]==='impression').length,1);
- list().props.onScroll({nativeEvent:{contentOffset:{y:800}}});draw();assert.ok(!nodes(page(0)).some(n=>n.type===api.AdVideo),'scroll stops current decoder immediately');tick(120);current=b;draw();assert.equal(nodes(page(1)).find(n=>n.type===api.AdVideo).props.muted,true,'each new ad starts muted');
+ list().props.onScroll({nativeEvent:{contentOffset:{y:800}}});draw();assert.ok(!nodes(page(0)).some(n=>n.type===api.AdVideo),'scroll stops current decoder immediately');tick(120);current=b;draw();assert.equal(nodes(page(1)).find(n=>n.type===api.AdVideo).props.muted,false,'each new ad starts with audio');
  foreground('background');draw();assert.ok(!nodes(page(1)).some(n=>n.type===api.AdVideo),'background stops playback');foreground('active');draw();
  button('Pause video').props.onPress();draw();assert.equal(nodes(page(1)).find(n=>n.type===api.AdVideo).props.playing,false);button('Play video').props.onPress();draw();
  own=true;draw();assert.equal(button('Your listing',page(1)).props.disabled,true);await button('Your listing',page(1)).props.onPress();assert.equal(fetches,0,'cannot contact own business');own=false;
@@ -39,5 +39,5 @@ function reset(){effects.forEach(e=>e?.cleanup?.());cells=[];effects=[];timers.c
  reset();selected=c;current=c;draw();await settle();nodes(tree).find(n=>n.props.onLayout).props.onLayout({nativeEvent:{layout:{width:400,height:800}}});draw();await button('Message provider',page(0)).props.onPress();await settle();draw();chat=nodes(tree).find(n=>n.type==='Chat');assert.equal(chat.props.service,true);assert.equal(chat.props.product.id,'c');reset();
  // Real player setup and cleanup, rather than a markup-only playback assertion.
  index=0;pending=[];api.AdVideo({uri:'https://media.test/a.mp4',muted:true,onError(){}});pending.forEach(fn=>fn());assert.equal(videoPlayer.muted,true);assert.equal(videoPlayer.staysActiveInBackground,false);assert.equal(videoPlayer.played,1);reset();assert.equal(videoPlayer.releases,1);assert.equal(videoPlayer.paused,undefined,'never call native player after its hook has released it');
- console.log('Sponsored viewer passed: exact ad/kind, paging, single muted decoder, swipe/background/chat/back cleanup, self-contact guard and listing context.');
+ console.log('Sponsored viewer passed: exact ad/kind, paging, single audible decoder, swipe/background/chat/back cleanup, self-contact guard and listing context.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

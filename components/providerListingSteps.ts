@@ -1,4 +1,4 @@
-import {postMediaError, type PostPolicy, type ProviderPost} from './providerPublishingPolicy';
+import {defaultNigeriaDelivery, postMediaError, type PostPolicy, type ProviderPost} from './providerPublishingPolicy';
 
 export function listingStepForField(kind: 'products' | 'listings', field: string) {
   if (['images', 'videos'].includes(field)) return 2;
@@ -27,7 +27,7 @@ export function listingStepErrors(kind: 'products' | 'listings', draft: Provider
     if (kind === 'products') {
       required('inventory_location', 'Enter the stock address or area.'); required('inventory_city', 'Enter the stock city.');
       if (!draft.delivery_methods?.length) errors.delivery_methods = 'Choose delivery, pickup, or both.';
-      if (!draft.delivery_areas?.length) errors.delivery_areas = 'Add at least one delivery area.';
+      if (!draft.delivery_areas?.length && !defaultNigeriaDelivery(draft)) errors.delivery_areas = 'Add a delivery area and price for this market.';
     } else {required('city', 'Enter the service city.'); required('state', 'Enter the state / region.');}
     const lat = kind === 'products' ? draft.inventory_latitude : draft.latitude, lon = kind === 'products' ? draft.inventory_longitude : draft.longitude;
     if ((kind === 'listings' || draft.fulfillment_mode === 'merchant_local') && (!confirmed || !Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180)) errors.location = 'Capture and confirm the actual service or stock location.';

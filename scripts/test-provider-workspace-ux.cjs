@@ -98,7 +98,7 @@ const stepPolicy=load('components/providerListingSteps.ts',{'./providerPublishin
     const product={...recoverable,local_selling_price:1500};
     const service={...policy.makeServiceDraft({}),title:'House painting',description:'Paint your home',category:'Painting',city:'City',state:'State',latitude:9,longitude:7,media_urls:['https://media.test/photo']};
     const full=newKind==='products'?product:service;
-    const flowImports={...restoreImports,react:flow.react,'./providerDraftStorage':{readListingDraft:async()=>({draft:full,numericText:{},step:0,at:Date.now()}),saveListingDraft:async(...args)=>persisted.push(args),clearListingDraft:async()=>{}},'./nativeProviderApi':{providerRequest:async(_token,path,options)=>{
+    const flowImports={...restoreImports,react:flow.react,'./providerDraftStorage':{readListingDraft:async()=>({draft:newKind==='products'?{...full,delivery_areas:[]}:full,numericText:{},step:0,at:Date.now()}),saveListingDraft:async(...args)=>persisted.push(args),clearListingDraft:async()=>{}},'./nativeProviderApi':{providerRequest:async(_token,path,options)=>{
       requests.push({path,options});if(path.endsWith('post-policy'))return limits;
       if(path.endsWith('/submit')){if(!submitFailed){submitFailed=true;throw Error('Submission interrupted');}return {};}
       if(options?.method==='POST')return{id:'created-once',status:'draft'};if(options?.method==='PATCH')return {};return{items:[]};
