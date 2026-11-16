@@ -1,9 +1,10 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Alert,AppState,FlatList,Modal,Pressable,StyleSheet,View} from 'react-native';
+import {prepareVideoCache,videoBufferOptions} from './listingVideoCache';
 import {StatusBar} from 'expo-status-bar';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {Ionicons} from '@expo/vector-icons';
-import {useVideoPlayer,VideoView,setVideoCacheSizeAsync} from 'expo-video';
+import {useVideoPlayer,VideoView} from 'expo-video';
 import {ThemedText as Text} from './ThemeProvider';
 import {ResilientImage} from './ResilientImage';
 import {DiscoveryCard,recordDiscovery,discoverySponsoredPage} from './discoveryClient';
@@ -23,13 +24,8 @@ export function sponsoredVideo(card:DiscoveryCard) {
  // The API's public-media policy is authoritative, including preserved paid media.
  return card.video_urls?.find(url=>typeof url==='string'&&/^https:\/\//i.test(url))||'';
 }
-let cacheSetup:Promise<boolean>|undefined;
-function prepareVideoCache() {
- // This is the only native video consumer; configure before creating a player.
- return cacheSetup??=(setVideoCacheSizeAsync(128*1024*1024).then(()=>true).catch(()=>false));
-}
 function AdVideo({uri,muted,onError,cached=false,playing=true}:{uri:string;muted:boolean;onError:()=>void;cached?:boolean;playing?:boolean}) {
- const player=useVideoPlayer({uri,useCaching:cached},player=>{player.loop=true;player.muted=true;player.staysActiveInBackground=false;player.bufferOptions={preferredForwardBufferDuration:5,maxBufferBytes:5*1024*1024};});
+ const player=useVideoPlayer({uri,useCaching:cached},player=>{player.loop=true;player.muted=true;player.staysActiveInBackground=false;player.bufferOptions=videoBufferOptions;});
  const [loading,setLoading]=useState(true),errorHandler=useRef(onError);errorHandler.current=onError;
  useEffect(()=>{player.muted=muted;},[player,muted]);
  useEffect(()=>{

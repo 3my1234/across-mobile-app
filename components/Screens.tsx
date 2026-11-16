@@ -1,9 +1,10 @@
+import {CrossedPrice} from './CrossedPrice';
 import {chooseLibraryMedia} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {useBusinessContact} from './useBusinessContact';
 import {DiscoverySections} from './DiscoverySections';
 import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './discoveryClient';
-import {PostVideos} from "./PostVideos";
+import {ListingMediaGallery} from "./ListingMediaGallery";
 import {ProviderProfileHeader, ProviderIdentity} from "./ProviderIdentity";
 import { KeyboardFrame } from "./KeyboardFrame";
 import { useTheme, useThemedStyles, ThemedText as Text, ThemedTextInput as TextInput } from "./ThemeProvider";
@@ -265,7 +266,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   const [reviewError, setReviewError] = useState("");
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryIndex, setGalleryIndex] = useState(0);
-  const [heroIndex, setHeroIndex] = useState(0);
+
   const [galleryPhotos, setGalleryPhotos] = useState<string[] | null>(null);
   const [showAllPhotos, setShowAllPhotos] = useState(false);
   const [activeSection, setActiveSection] = useState<"overview" | "reviews" | "recommended">("overview");
@@ -291,7 +292,7 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
   useEffect(() => {
     setProduct(initialProduct);
     setGalleryIndex(0);
-    setHeroIndex(0);
+
     setGalleryOpen(false);
     setGalleryPhotos(null);
     setShowAllPhotos(false);
@@ -472,29 +473,15 @@ export function ProductDetailScreen({ product: initialProduct, destination, toke
           <Pressable style={styles.detailBackButton} accessibilityLabel="Share product" onPress={()=>void Share.share({message:`${product.title} — ${money(product.price,product.currency)}. Find it in Atlantic Express: https://atlxpres.com`}).catch(()=>{})}><Ionicons name="share-outline" size={21} color={theme.color("#191919")} /></Pressable>
         </View>
         <ScrollView ref={detailScrollRef} scrollEventThrottle={100} onScrollBeginDrag={()=>{sectionJump.current=false;}} onScroll={event=>{if(sectionJump.current)return;const y=event.nativeEvent.contentOffset.y+48-sectionOffsets.current.overview;const section=y>=sectionOffsets.current.recommended && sectionOffsets.current.recommended>0 ? "recommended" : y>=sectionOffsets.current.reviews && sectionOffsets.current.reviews>0 ? "reviews" : "overview";setActiveSection(section);}} contentContainerStyle={[styles.detailScroll, { paddingBottom: keyboardVisible ? 180 : actionBarHeight + 24 }]} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"} automaticallyAdjustKeyboardInsets refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { void loadDetail(true); }} tintColor="#FF4747" />}>
-          <ScrollView
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={[styles.detailGallery,{height:windowWidth}]}
-            onMomentumScrollEnd={event => setHeroIndex(Math.round(event.nativeEvent.contentOffset.x / windowWidth))}
-          >
-            {images.map((uri, index) => (
-              <Pressable key={`${product.id}:photo:${index}`} onPress={() => { setGalleryIndex(index); setGalleryPhotos(null); setGalleryOpen(true); }} accessibilityLabel={`Open product image ${index + 1} of ${images.length}`}>
-                <ResilientImage uri={uri} style={[styles.detailImage, { width: windowWidth, height:windowWidth }]} resizeMode="contain" />
-              </Pressable>
-            ))}
-          </ScrollView>
-          <View style={[styles.galleryCount,{top:windowWidth-40}]}><Text style={styles.galleryCountText}>{Math.min(heroIndex,images.length-1) + 1}/{images.length}</Text></View>
-          <PostVideos urls={product.video_urls}/><View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
-            {product.is_flash_sale && <View style={styles.flashTag}><Text style={styles.flashTagText}>FLASH SALE</Text></View>}
+          <ListingMediaGallery images={images} videos={product.video_urls} active={!sellerChat&&!galleryOpen} width={windowWidth} onImage={index=>{setGalleryIndex(index);setGalleryPhotos(null);setGalleryOpen(true);}}/>
+          <View style={styles.detailBody} onLayout={event => { sectionOffsets.current.overview = event.nativeEvent.layout.y; }}>
             <Text style={styles.productHub}>{isLocalMerchantProduct ? "Available locally from seller" : isCrossBorderMerchantProduct ? "International seller" : "Seller fulfilment unavailable"}</Text>
             <Text style={styles.detailTitle}>{product.title}</Text>
               <ProviderProfileHeader identity={product.provider_identity} animate/>
             <View style={styles.productSocialRow}><Text style={styles.productSocialText}>{Number(product.sold_count || 0).toLocaleString()} sold</Text><Pressable accessibilityLabel="Read customer reviews" onPress={()=>scrollToSection("reviews")} style={styles.productRating}><Text style={styles.productSocialText}>{product.review_count>0 ? product.average_rating.toFixed(1) : "New"}</Text><ReviewStars rating={product.average_rating} size={13}/><Text style={styles.productSocialText}>({product.review_count})</Text></Pressable></View>
             <View style={styles.detailPriceRow}>
               <Text style={styles.detailPrice} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(product.price, product.currency)}</Text>
-              {!!product.compare_at_price && product.compare_at_price > (product.price) && <Text style={styles.detailComparePrice} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(product.compare_at_price, product.currency)}</Text>}
+              {!!product.compare_at_price && product.compare_at_price > (product.price) && <CrossedPrice style={styles.detailComparePrice} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.65}>{priceMoney(product.compare_at_price, product.currency)}</CrossedPrice>}
             </View>
             {!!product.delivery_fee && <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Price breakdown</Text><Text style={styles.detailMetaValue}>{money((product.price) - product.delivery_fee, product.currency)} product + {money(product.delivery_fee, product.currency)} delivery</Text></View>}
             <View style={styles.detailMetaRow}><Text style={styles.detailMetaLabel}>Ships from</Text><Text style={styles.detailMetaValue}>{originLabel}</Text></View>

@@ -1,7 +1,8 @@
 /* global __dirname */
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),ts=require('typescript');
 const source=fs.readFileSync(path.join(__dirname,'../App.tsx'),'utf8');
-const code=source.slice(source.indexOf('  async function loadProducts('),source.indexOf('\n\tasync function loadFlashSales'));
+const ast=ts.createSourceFile('App.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);let code;
+function find(node){if(ts.isFunctionDeclaration(node)&&node.name?.text==='loadProducts')code=node.getText(ast);ts.forEachChild(node,find);}find(ast);assert.ok(code,'actual catalogue loader exists');
 async function main(){
  let feed={key:'',status:'loading'},products=[],resolve,failed=false;
  const globals={catalogCountry:'NG',catalogState:'',catalogCity:'',catalogRequestKeyRef:{current:'NG||'},productLoadInFlight:{current:null},productReloadQueued:{current:null},productLoadContext:{current:{}},productSnapshots:{current:new Map()},buyerCoordinatesRef:{current:null},cartRef:{current:[]},selectedProductRef:{current:null},flashSaleContext:{current:{visible:false}},PRODUCT_REQUEST_TIMEOUT:1000,API_URL:'https://example.test',URLSearchParams,AbortController,Map,Date,

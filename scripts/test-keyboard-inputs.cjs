@@ -1,4 +1,4 @@
-﻿const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript');
 const compile=s=>ts.transpileModule(s,{compilerOptions:{jsx:ts.JsxEmit.React,module:ts.ModuleKind.CommonJS,esModuleInterop:true,target:ts.ScriptTarget.ES2020}}).outputText;
 const flatten=style=>Array.isArray(style)?Object.assign({},...style.map(flatten)):style||{};
 let slots=[],index=0,effects=[],tasks=new Map(),seq=0,listeners={},focus=true,revealed=[],scrolls=[],mode='input';
@@ -22,8 +22,16 @@ slots=[];index=0;effects=[];RN.TextInput={State:{currentlyFocusedInput:()=>focus
 const scope={exports:{},require:name=>name==='react'?react:RN,setTimeout:fn=>{tasks.set(++seq,fn);return seq;},clearTimeout:id=>tasks.delete(id)};vm.runInNewContext(compile(fs.readFileSync('components/KeyboardScroll.tsx','utf8')),scope);
 function scrollRender(list=false){index=0;effects=[];const tree=(list?scope.exports.KeyboardFlatList:scope.exports.KeyboardScrollView)({children:'form'},null);effects.forEach(f=>f());return tree;}
 const flush=()=>{const batch=[...tasks.values()];tasks.clear();batch.forEach(fn=>fn());};
-let scroll=scrollRender(),provider=scroll.children[0];provider.props.value(input);provider.props.value(input);flush();assert.equal(scrolls.length,1,'coalesce focus/selection/growth without a scrolling storm');assert.deepEqual(scrolls[0],[17,20,true]);
+let scroll=scrollRender(),provider=scroll.children[0];provider.props.value(input);provider.props.value(input);flush();assert.equal(scrolls.length,1,'coalesce focus/selection/growth without a scrolling storm');assert.deepEqual(scrolls[0],[17,12,true]);
 listeners.keyboardDidShow();flush();assert.equal(scrolls.length,2,'reveal again after the keyboard finishes opening');scroll.props.onLayout({});flush();assert.equal(scrolls.length,3,'reveal after native viewport resize');focus=false;provider.props.value(input);flush();assert.equal(scrolls.length,3,'stale or blurred inputs cannot move a new form');
 focus=true;provider.props.value(input);slots.forEach(s=>s?.cleanup?.());assert.equal(tasks.size,0);assert.equal(Object.keys(listeners).length,0,'unmount removes keyboard listeners');
 slots=[];index=0;effects=[];scroll=scrollRender(true);assert.equal(scroll.type,'Context','virtualized list headers inherit the same focus coordinator');scroll.props.value(input);flush();assert.equal(scrolls.length,4);slots.forEach(s=>s?.cleanup?.());
 console.log('Keyboard inputs passed: multiline growth/cap, retained draft, caller events/ref, reset, nearest-scroll reveal, post-keyboard/layout reveal, coalescing, stale focus and cleanup. Physical device acceptance remains required.');
+
+// Reproduce the visible-field jitter: repeated layout/selection while typing must not scroll.
+slots=[];index=0;effects=[];scrolls=[];focus=true;
+let inputY=470;input.measure=cb=>cb(0,0,240,44,20,inputY);
+container.getScrollResponder=()=>({measure:cb=>cb(0,0,360,420,0,100),scrollTo:options=>{scrolls.push(options);inputY-=options.y-300;}});
+scroll=scrollRender();provider=scroll.children[0];scroll.props.onScroll({nativeEvent:{contentOffset:{y:300}}});listeners.keyboardDidShow({endCoordinates:{screenY:500}});provider.props.value(input);flush();assert.equal(scrolls.length,1);assert.equal(scrolls[0].animated,false);
+for(let n=0;n<30;n++){provider.props.value(input);flush();}assert.equal(scrolls.length,1,'an already visible editor never oscillates while typing');
+slots.forEach(s=>s?.cleanup?.());
