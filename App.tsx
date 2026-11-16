@@ -1,3 +1,4 @@
+import {NotificationBell,NotificationPopover} from './components/NotificationPopover';
 import {jobLinkID} from './components/jobsApi';
 import {googleSessionRequest} from './components/googleSessionRequest';
 import {chooseLibraryMedia} from './components/mediaLibraryPicker';
@@ -1939,37 +1940,10 @@ function AcrossApp() {
       <DriverPresenceNotice token={token}/>
       {/* Notification Bell */}
       <View style={{ position: "absolute", top: insets.top + 4, right: 12, zIndex: 100,flexDirection:'row',alignItems:'center' }}>
-        <Pressable onPress={() => setShowNotifications(v => !v)} style={{ padding: 6 }}>
-          <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={24} color={theme.color("#191919")} />
-          {unreadCount > 0 && (
-            <View style={{ position: "absolute", top: 2, right: 2, backgroundColor: theme.color("#FF4747", "backgroundColor"), borderRadius: 10, minWidth: 18, height: 18, alignItems: "center", justifyContent: "center" }}>
-              <Text style={{ color: theme.color("#FFF", "color"), fontSize: 10, fontWeight: "900" }}>{unreadCount > 99 ? "99+" : unreadCount}</Text>
-            </View>
-          )}
-        </Pressable>
+        <NotificationBell count={unreadCount} expanded={showNotifications} onPress={()=>setShowNotifications(value=>!value)}/>
       </View>
+      {showNotifications&&<NotificationPopover top={insets.top+48} items={notifications.slice(0,30).map(n=>({key:String(n.id),title:n.title||'Notification',body:n.body||'',created_at:n.created_at,is_read:!!n.is_read,notification:n}))} unreadCount={unreadCount} onClose={()=>setShowNotifications(false)} onRefresh={()=>void loadNotifications(token)} onMarkAll={()=>void markAllRead()} onOpen={notification=>{void openNotification(notification);}}/>}
 
-      {showNotifications && (
-        <View style={{ position: "absolute", top: insets.top + 48, right: 8, left: 8, backgroundColor: theme.color("#FFFFFF", "backgroundColor"), borderRadius: 12, zIndex: 99, maxHeight: 400, borderWidth: 1, borderColor: theme.color("#EDEDED", "borderColor"), shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 12, elevation: 10 }}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12, borderBottomWidth: 1, borderColor: theme.color("#EDEDED", "borderColor") }}>
-            <View style={{ flex: 1 }} />
-            <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-              {unreadCount > 0 && <Pressable onPress={markAllRead}><Text style={{ color: theme.color("#FF4747", "color"), fontSize: 12, fontWeight: "700" }}>Mark all read</Text></Pressable>}
-              <Pressable onPress={() => setShowNotifications(false)}><Ionicons name="close" size={20} color={theme.color("#8C8C8C")} /></Pressable>
-            </View>
-          </View>
-          <ScrollView style={{ maxHeight: 320 }}>
-            {notifications.length === 0 ? <Text style={{ padding: 20, textAlign: "center", color: theme.color("#8C8C8C", "color") }}>No notifications yet</Text>
-            : notifications.slice(0, 30).map(n => (
-              <Pressable key={n.id} style={{ padding: 12, borderBottomWidth: 1, borderColor: theme.color("#F0F0F0", "borderColor"), backgroundColor: theme.color(n.is_read ? "#FFFFFF" : "#FFF5F5", "backgroundColor") }} onPress={() => { void openNotification(n); }}>
-                <Text style={{ fontWeight: "800", fontSize: 13 }}>{n.title}</Text>
-                <Text style={{ marginTop: 2, fontSize: 12, color: theme.color("#595959", "color") }}>{n.body}</Text>
-                <Text style={{ marginTop: 2, fontSize: 10, color: theme.color("#BFBFBF", "color") }}>{new Date(n.created_at).toLocaleString()}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
 
       {/* Home header */}
       {activeTab !== "home" && (
@@ -2291,7 +2265,7 @@ function AcrossApp() {
           {token && <AccountDeletionRequest key={token} token={token} onOpenSupport={()=>{setProviderToolReturn(null);setShowSettings(false);setSelectedTicket(null);setTicketMessages([]);setSupportCursor('');setActiveTab('support');}}/>}
           <Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{setShowSettings(false);void logout();}}><Ionicons name="log-out-outline" size={21} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Sign out</Text></Pressable>
         </ScrollView></View></Modal>
-      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} route={providerWorkspaceRoute} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderToolReturn({token,route:'view=more'});setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{setProviderToolReturn({token,route:'view=more'});void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} notificationUnreadCount={unreadCount} onNotificationReadAll={()=>{void loadNotifications(token);}} route={providerWorkspaceRoute} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderToolReturn({token,route:'view=more'});setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{setProviderToolReturn({token,route:'view=more'});void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
       {showReferrals&&token&&<NativeReferrals key={token} token={token} onClose={()=>setShowReferrals(false)} onOpenXP={()=>{setShowReferrals(false);void openNotification({notification_type:"xp_earned"});}}/>}
     </View>
   );

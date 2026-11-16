@@ -1,3 +1,4 @@
+import {NotificationBell} from './NotificationPopover';
 import {NativeProviderJobs} from './NativeProviderJobs';
 import {chooseLibraryMedia,chooseUploadDocument} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
@@ -33,14 +34,15 @@ import {NativeProviderOverviewSummary} from './NativeProviderOverviewSummary';
 import {KeyboardFrame} from './KeyboardFrame';
 
 type Document = {id: string; document_type: string; status: string; review_notes?: string; expires_on?: string};
-type Props = {token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenReferrals?: () => void; onOpenSettings?: () => void; onOpenNotification?: (notification: Record<string, unknown>) => void};
+type Props = {notificationUnreadCount?:number;onNotificationReadAll?:()=>void;token: string; route?: string; onClose: () => void; onSignedOut: () => void; onOpenSupport: (ticketId?: string) => void; onOpenReferrals?: () => void; onOpenSettings?: () => void; onOpenNotification?: (notification: Record<string, unknown>) => void};
 
 // Provider tools are native in every build; the web workspace is retired.
 export function ProviderWorkspace(props: Props) {
   return <NativeProviderAccount {...props}/>;
 }
-export function NativeProviderAccount({token, route = '', onClose, onOpenSupport, onOpenSettings, onOpenNotification}: Props) {
+export function NativeProviderAccount({token, route = '', onClose, onOpenSupport, onOpenSettings, onOpenNotification, notificationUnreadCount=0, onNotificationReadAll}: Props) {
   const c = useAccountDesign(), insets = useSafeAreaInsets();
+  const [notificationsOpen,setNotificationsOpen]=useState(false);
   const panelBackHandlers = useRef(new Map<symbol, () => void>());
   const registerPanelBack = useCallback((handler: () => void) => {const key = Symbol(); panelBackHandlers.current.set(key, handler); return () => {panelBackHandlers.current.delete(key);};}, []);
   const [view, setView] = useState<string>(() => nativeProviderView(route)), [legacyRoute, setLegacyRoute] = useState(route);
@@ -158,7 +160,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     view === 'messages' ? <NativeProviderMessages embedded token={token} route={legacyRoute} onClose={back}/> :
     view === 'requests' ? <NativeProviderRequests embedded key={context.request} token={token} requestID={context.request} onClose={back}/> :
     view === 'merchant-orders' ? <NativeProviderOrders embedded token={token} onClose={back}/> :
-    view === 'notifications' && onOpenNotification ? <NativeProviderNotifications embedded token={token} hasProvider onClose={back} onOpen={onOpenNotification}/> :
+    view === 'notifications' && onOpenNotification ? <NativeProviderNotifications embedded token={token} hasProvider onReadAll={onNotificationReadAll} onClose={back} onOpen={onOpenNotification}/> :
     view === 'referrals' ? <NativeReferrals embedded token={token} onClose={back} onOpenXP={() => onOpenNotification?.({notification_type: 'xp_earned'})}/> :
     <ScrollView ref={verificationScroll} keyboardShouldPersistTaps="handled" removeClippedSubviews={false} contentContainerStyle={{padding: 16, gap: 12}} refreshControl={<RefreshControl refreshing={loading && ready} onRefresh={() => {if (!busy) {void load();if(view==='verification')refreshDocumentReview(value=>value+1);}}}/>}>
       {view === 'overview' && <>
@@ -170,7 +172,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
       {view === 'more' && <>
         {card('Business', <>{row('Business profile and images', 'images-outline', () => go('profile'))}{row('Verification documents', 'document-text-outline', () => go('verification'))}{row('Subscription and cancellation', 'card-outline', () => go('subscription'))}{row('Promotions and performance','megaphone-outline',()=>go('promotions'))}{provider.can_sell_products !== false && row('Previous paid orders', 'receipt-outline', () => go('merchant-orders'))}{provider.is_driver && row('Driver availability', 'car-outline', () => go('driver'))}</>)}
         {card('Community', <>{row('Town Hall', 'people-outline', () => go('messages', 'view=messages&mode=town-hall'))}{row('Refer and earn XP', 'gift-outline', () => go('referrals'))}</>)}
-        {card('Preferences and help', <>{row('Notifications', 'notifications-outline', () => go('notifications'))}{onOpenSettings && row('App settings and notifications', 'settings-outline', onOpenSettings)}{row('Support', 'help-circle-outline', () => onOpenSupport())}</>)}
+        {card('Preferences and help', <>{row('Notifications', 'notifications-outline', () => setNotificationsOpen(true))}{onOpenSettings && row('App settings and notifications', 'settings-outline', onOpenSettings)}{row('Support', 'help-circle-outline', () => onOpenSupport())}</>)}
         {row('Switch to customer', 'swap-horizontal-outline', onClose)}<Text>Browse and buy with the same account. Open Account to return to your provider workspace.</Text>
       </>}
 {provider && view === 'verification' && <View style={{gap:12}}>
@@ -193,13 +195,14 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
       {view === 'legacy' && card('Link unavailable', <><Text>This provider page is unavailable.</Text>{button('Open overview', () => tab('overview'))}</>)}
     </ScrollView>}
   </>;
-  return <ProviderPanelBackContext.Provider value={registerPanelBack}><Modal animationType="slide" onRequestClose={() => {const handlers = [...panelBackHandlers.current.values()]; if (handlers.length) {handlers[handlers.length - 1](); return;} if (history.length || !roots.includes(view)) back(); else tab('more');}}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, backgroundColor: c.background, paddingTop: insets.top}}>
-    <View style={[s.header, {backgroundColor: c.surface, borderColor: c.line}]}><Image source={LOGO} resizeMode="contain" style={{width: 32, height: 32}}/><Text style={{fontSize: 10, color: c.muted}}>PROVIDER</Text><Text numberOfLines={1} style={[s.title, {flex: 1, fontSize: 16}]}>{labels[view] || 'Provider workspace'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Provider notifications" onPress={() => go('notifications')} style={{padding: 10}}><Ionicons name="notifications-outline" color={c.accent} size={23}/></Pressable></View>
+  return <ProviderPanelBackContext.Provider value={registerPanelBack}><Modal animationType="slide" onRequestClose={() => {if(notificationsOpen){setNotificationsOpen(false);return;}const handlers = [...panelBackHandlers.current.values()]; if (handlers.length) {handlers[handlers.length - 1](); return;} if (history.length || !roots.includes(view)) back(); else tab('more');}}><KeyboardFrame bottomInset={insets.bottom} style={{flex: 1, backgroundColor: c.background, paddingTop: insets.top}}>
+    <View style={[s.header, {backgroundColor: c.surface, borderColor: c.line}]}><Image source={LOGO} resizeMode="contain" style={{width: 32, height: 32}}/><Text style={{fontSize: 10, color: c.muted}}>PROVIDER</Text><Text numberOfLines={1} style={[s.title, {flex: 1, fontSize: 16}]}>{labels[view] || 'Provider workspace'}</Text><NotificationBell count={notificationUnreadCount} label="Provider notifications" expanded={notificationsOpen} onPress={()=>setNotificationsOpen(value=>!value)}/></View>
     {!roots.includes(view) && !['jobs', 'products', 'listings', 'merchant-orders', 'notifications', 'referrals', 'messages'].includes(view) && <View style={{paddingHorizontal: 16}}>{view==='verification'?<Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={{flexDirection:'row',alignItems:'center',gap:10,minHeight:48}}><Ionicons name="arrow-back" size={24} color={c.accent}/><Text style={{fontSize:18,fontWeight:'700'}}>Verification documents</Text></Pressable>:button('Back', back)}</View>}
     {!!error && <View style={{padding: 12, gap: 8}}><Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>{button('Refresh account', () => void load())}</View>}
     {!!notice && <Text style={{padding: 12, color: c.accent}}>{notice}</Text>}{busy && <ActivityIndicator/>}
     <DriverPresenceNotice token={token} alwaysVisible={!!provider?.is_driver}/>
     <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(''); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
+    {notificationsOpen&&<NativeProviderNotifications key={token} embedded popover top={56} token={token} hasProvider={!!provider} onReadAll={onNotificationReadAll} onClose={()=>setNotificationsOpen(false)} onOpen={notification=>{setNotificationsOpen(false);onOpenNotification?.(notification);}}/>}
     <View accessibilityLabel="Provider navigation" style={[s.tabs, {backgroundColor: c.surface, borderColor: c.line}]}>{([['overview', 'Overview', 'home-outline'], ['catalog', 'Listings', 'list-outline'], ['requests', 'Bookings', 'calendar-outline'], ['messages', 'Chats', 'chatbubbles-outline'], ['more', 'More', 'ellipsis-horizontal']] as const).map(([id, label, icon]) => <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected: selected === id, disabled: busy}} disabled={busy} onPress={() => tab(id)} style={({pressed}) => ({flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 60, gap: 4, backgroundColor: pressed ? c.soft : c.surface})}><Ionicons name={icon} size={22} color={selected === id ? c.accent : c.muted}/><Text style={{fontSize: 11, color: selected === id ? c.accent : c.muted}}>{label}</Text></Pressable>)}</View>
   </KeyboardFrame></Modal></ProviderPanelBackContext.Provider>;
 }

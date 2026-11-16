@@ -3,27 +3,29 @@ const compile = path => ts.transpileModule(fs.readFileSync(path, 'utf8'), {compi
 const policy = {}, destinations = {}; vm.runInNewContext(compile('components/providerInboxPolicy.ts'), {exports: policy}); vm.runInNewContext(compile('components/notificationDestination.ts'), {exports: destinations, URLSearchParams});
 const event = '11111111-1111-4111-8111-111111111111', requestID = '22222222-2222-4222-8222-222222222222', mirrorID = '33333333-3333-4333-8333-333333333333';
 let read = false, hooks = [], index = 0, effects = [], changed = false, tree, held, fail = false, foreground;
-const calls = [], opened = [];
+const calls = [], opened = [];let readAllConfirmed=0,dark=false;const theme={};vm.runInNewContext(compile('components/theme.ts'),{exports:theme});
 const provider = () => ({items: [{id: event, event_type: 'request_created', metadata: {request_id: requestID}, created_at: '2026-10-23T10:00:00Z', read_at: read ? '2026-10-23T10:00:00Z' : null}]});
-const account = () => ({notifications: [{id: mirrorID, type: 'provider_activity', title: 'Mirrored event', data: {provider_event_id: event}, is_read: read, created_at: '2026-10-23T10:00:00Z'}, {id: 'support', type: 'ticket_reply', title: 'Support replied', data: {ticket_id: requestID}, is_read: read, created_at: '2026-10-23T09:00:00Z'}]});
-const merged = policy.providerInboxItems(provider(), account()); assert.equal(merged.length, 2, 'mirrored native event is not listed twice'); assert.equal(merged[0].notification.id, mirrorID, 'only real user-notification ID reaches generic read acknowledgement');
+const account = () => ({notifications: [{id: mirrorID, type: 'provider_activity', title: 'New booking request',body:'Review the request in your bookings.', data: {provider_event_id: event}, is_read: read, created_at: '2026-10-23T10:00:00Z'}, {id: 'support', type: 'ticket_reply', title: 'Support replied', data: {ticket_id: requestID}, is_read: read, created_at: '2026-10-23T09:00:00Z'}]});
+const merged = policy.providerInboxItems(provider(), account());assert.equal(merged[0].title,'New booking request');assert.equal(merged[0].body,'Review the request in your bookings.'); assert.equal(merged.length, 2, 'mirrored native event is not listed twice'); assert.equal(merged[0].notification.id, mirrorID, 'only real user-notification ID reaches generic read acknowledgement');
 const destination = destinations.notificationDestination(merged[0].notification); assert.equal(destination.tab, 'provider'); assert.equal(new URLSearchParams(destination.route).get('request'), requestID); assert.equal(new URLSearchParams(destination.route).get('event'), event);
 assert.equal(destinations.notificationDestination(merged[1].notification).tab, 'support');
-const old = policy.providerInboxItems(provider(), {notifications: []}); assert.equal(old[0].notification.id, '', 'historical provider event is never mistaken for user notification ID');
+const old = policy.providerInboxItems(provider(), {notifications: []});assert.equal(old[0].title,'Request Created');assert.ok(old[0].body);const privateEvent=policy.providerInboxItems({items:[{...provider().items[0],metadata:{message:'Do not show raw private text',secret:'hidden'}}]},{notifications:[]});assert.ok(!JSON.stringify(privateEvent.map(item=>[item.title,item.body])).includes('Do not show')); assert.equal(old[0].notification.id, '', 'historical provider event is never mistaken for user notification ID');
 const same = (a, b) => a && b && a.length === b.length && a.every((v, i) => Object.is(v, b[i]));
 const react = {
-  createElement: (type, props, ...children) => ({type, props: props || {}, children: children.flat(Infinity)}),
+  createElement: (type, props, ...children) => (typeof type==='function'?type({...props,children:children.flat(Infinity)}):{type, props: props || {}, children: children.flat(Infinity)}),
   useState: value => {const i = index++; if (!(i in hooks)) hooks[i] = typeof value === 'function' ? value() : value; return [hooks[i], next => {hooks[i] = typeof next === 'function' ? next(hooks[i]) : next; changed = true;}];},
   useRef: value => {const i = index++; return hooks[i] || (hooks[i] = {current: value});},
   useEffect: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) {const old = hooks[i]; hooks[i] = {deps}; effects.push(() => {old?.cleanup?.(); hooks[i].cleanup = fn();});}},
   useCallback: (fn, deps) => {const i = index++; if (!hooks[i] || !same(hooks[i].deps, deps)) hooks[i] = {deps, fn}; return hooks[i].fn;},
 };
 const context = {exports: {}, require: name => {
+ if(name==='./NotificationPopover')return notificationUI;
+ if(name==='@expo/vector-icons')return {Ionicons:'Icon'};
  if(name==='./ProviderPanel')return {ProviderPanel:'Modal'};
   if (name === 'react') return react;
-  if (name === 'react-native') return {ActivityIndicator: 'Spinner', AppState: {addEventListener: (_event, fn) => {foreground = fn; return {remove() {}};}}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'Scroll', View: 'View'};
+  if (name === 'react-native') return {useWindowDimensions:()=>({width:360,height:800}),ActivityIndicator: 'Spinner', AppState: {addEventListener: (_event, fn) => {foreground = fn; return {remove() {}};}}, Modal: 'Modal', Pressable: 'Button', ScrollView: 'Scroll', View: 'View'};
   if (name === 'react-native-safe-area-context') return {useSafeAreaInsets: () => ({top: 12, bottom: 20})};
-  if (name === './ThemeProvider') return {ThemedText: 'Text'};
+  if (name === './ThemeProvider') return {ThemedText: 'Text',useTheme:()=>({color:(value,role)=>theme.themeColor(value,role,dark)})};
   if (name === './AccountDesign') return {useAccountDesign: () => ({})};
   if (name === './providerInboxPolicy') return policy;
   if (name === './nativeProviderApi') return {providerRequest: async (token, path, options) => {
@@ -33,20 +35,31 @@ const context = {exports: {}, require: name => {
   }};
   throw Error('Unexpected import ' + name);
 }};
+const notificationUI={};vm.runInNewContext(compile('components/NotificationPopover.tsx'),{exports:notificationUI,require:context.require});
 vm.runInNewContext(compile('components/NativeProviderNotifications.tsx'), context);
-function render() {index = 0; effects = []; changed = false; tree = context.exports.NativeProviderNotifications({token: 'synthetic-owner', hasProvider: true, onClose() {}, onOpen: item => opened.push(item)}); effects.forEach(fn => fn());}
+function render() {index = 0; effects = []; changed = false; tree = context.exports.NativeProviderNotifications({token: 'synthetic-owner', hasProvider: true, onReadAll:()=>readAllConfirmed++,onClose() {}, onOpen: item => opened.push(item)}); effects.forEach(fn => fn());}
 const nodes = node => !node || typeof node !== 'object' ? [] : [node, ...(node.children || []).flatMap(nodes)];
 const text = node => typeof node === 'string' || typeof node === 'number' ? String(node) : node?.children?.map(text).join('') || '';
-const button = label => {const value = nodes(tree).find(n => n.type === 'Button' && text(n) === label); assert.ok(value, label); return value;};
+const button = label => {const value = nodes(tree).find(n => n.type === 'Button' && (text(n) === label||n.props.accessibilityLabel===label)); assert.ok(value, label); return value;};
 async function settle() {for (let i = 0; i < 8; i++) {await new Promise(resolve => setImmediate(resolve)); if (changed) render();}}
 (async () => {
   render(); await settle(); assert.match(text(tree), /2 unread/); assert.ok(calls.every(call => call.token === 'synthetic-owner'));
-  nodes(tree).find(n => n.type === 'Button' && text(n).startsWith('request created')).props.onPress(); assert.equal(opened.length, 1); assert.equal(opened[0].provider_event_id, event);
+  nodes(tree).find(n => n.type === 'Button' && text(n).startsWith('New booking request')).props.onPress(); assert.equal(opened.length, 1); assert.equal(opened[0].provider_event_id, event);
   let release; held = new Promise(resolve => {release = resolve;}); button('Mark all as read').props.onPress(); button('Mark all as read').props.onPress(); await settle();
   assert.equal(calls.filter(call => call.options?.method).length, 2, 'single confirmation writes each ledger once despite double taps'); assert.match(text(tree), /2 unread/, 'read status is not cleared before server confirmation');
-  release(); held = null; await settle(); assert.match(text(tree), /0 unread/);
+  release(); held = null; await settle(); assert.match(text(tree), /0 unread/);assert.equal(readAllConfirmed,1,'confirmed mark-all refreshes the workspace badge');
   read = false; foreground('active'); await settle(); fail = true; button('Mark all as read').props.onPress(); await settle(); assert.match(text(tree), /could not be fully confirmed/); assert.match(text(tree), /2 unread/);
-  const before = calls.length; await settle(); assert.equal(calls.length, before, 'uncertain read-status writes are not auto-replayed');
+  assert.equal(readAllConfirmed,1,'uncertain mark-all cannot clear the badge');const before = calls.length; await settle(); assert.equal(calls.length, before, 'uncertain read-status writes are not auto-replayed');
   hooks.forEach(h => h?.cleanup?.());
+  function checkText(n,inside=false){if(n==null||typeof n==='boolean')return;if(typeof n==='string'||typeof n==='number'){assert.ok(inside,'raw text outside Text: '+JSON.stringify(n));return;}for(const child of n.children||[])checkText(child,inside||n.type==='Text');}
+  for(dark of [false,true]){
+    let closed=0,refreshed=0,marked=0,chosen;
+    const displayed=merged.map((item,i)=>({key:item.source+item.id,title:item.title,body:item.body,created_at:item.created_at,is_read:i===1,notification:item.notification}));
+    const panel=notificationUI.NotificationPopover({items:displayed,unreadCount:1,top:56,onClose:()=>closed++,onRefresh:()=>refreshed++,onMarkAll:()=>marked++,onOpen:n=>chosen=n});checkText(panel);assert.equal(panel.props.style.position,'absolute');assert.equal(panel.props.style.maxHeight,400);
+    const rows=nodes(panel).filter(n=>n.type==='Button'&&n.props.accessibilityLabel?.includes('request'));assert.equal(rows.length,1);rows[0].props.onPress();assert.equal(chosen.provider_event_id,event);const readRow=nodes(panel).find(n=>n.type==='Button'&&n.props.accessibilityLabel==='Support replied');assert.notEqual(rows[0].props.style.backgroundColor,readRow.props.style.backgroundColor,'read/unread remain distinct in both themes');
+    const control=label=>nodes(panel).find(n=>n.props.accessibilityLabel===label);control('Close notifications').props.onPress();control('Refresh notifications').props.onPress();control('Mark all as read').props.onPress();assert.equal(closed,1);assert.equal(refreshed,1);assert.equal(marked,1);
+    const busyPanel=notificationUI.NotificationPopover({items:displayed,unreadCount:1,busy:true,onClose(){},onRefresh(){},onMarkAll(){},onOpen(){}});checkText(busyPanel);assert.equal(nodes(busyPanel).find(n=>n.props.accessibilityLabel==='Mark all as read').props.disabled,true);
+    const bell=notificationUI.NotificationBell({count:120,onPress(){},expanded:true});checkText(bell);assert.ok(text(bell).includes('99+'));assert.equal(bell.props.accessibilityState.expanded,true);assert.ok(!text(notificationUI.NotificationBell({count:0,onPress(){}})).includes('99+'));
+  }
   console.log('Provider inbox passed: native/legacy event deduplication, exact routes and ledger IDs, owned reads, single-flight confirmed mark-all, foreground refresh and uncertain-error handling.');
 })().catch(error => {console.error(error); process.exitCode = 1;});
