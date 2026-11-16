@@ -19,9 +19,9 @@ props={...props,value:''};render();tree=render();assert.equal(flatten(tree.props
 props={...props,multiline:false,style:{height:50}};tree=render();assert.equal(flatten(tree.props.style).height,50,'preserve explicit and single-line dimensions');
 // Exercise actual nearest-scroll coordinator and native keyboard/layout events.
 slots=[];index=0;effects=[];RN.TextInput={State:{currentlyFocusedInput:()=>focus?input:null}};
-const scope={exports:{},require:name=>name==='react'?react:RN,setTimeout:fn=>{tasks.set(++seq,fn);return seq;},clearTimeout:id=>tasks.delete(id)};vm.runInNewContext(compile(fs.readFileSync('components/KeyboardScroll.tsx','utf8')),scope);
+const scope={exports:{},require:name=>name==='react'?react:RN,setTimeout:(fn,ms)=>{tasks.set(++seq,{fn,ms});return seq;},clearTimeout:id=>tasks.delete(id)};vm.runInNewContext(compile(fs.readFileSync('components/KeyboardScroll.tsx','utf8')),scope);
 function scrollRender(list=false){index=0;effects=[];const tree=(list?scope.exports.KeyboardFlatList:scope.exports.KeyboardScrollView)({children:'form'},null);effects.forEach(f=>f());return tree;}
-const flush=()=>{const batch=[...tasks.values()];tasks.clear();batch.forEach(fn=>fn());};
+const flush=(ms=60)=>{const batch=[...tasks].filter(([,task])=>task.ms===ms);batch.forEach(([id,task])=>{tasks.delete(id);task.fn();});};
 let scroll=scrollRender(),provider=scroll.children[0];provider.props.value(input);provider.props.value(input);flush();assert.equal(scrolls.length,1,'coalesce focus/selection/growth without a scrolling storm');assert.deepEqual(scrolls[0],[17,12,true]);
 listeners.keyboardDidShow();flush();assert.equal(scrolls.length,2,'reveal again after the keyboard finishes opening');scroll.props.onLayout({});flush();assert.equal(scrolls.length,3,'reveal after native viewport resize');focus=false;provider.props.value(input);flush();assert.equal(scrolls.length,3,'stale or blurred inputs cannot move a new form');
 focus=true;provider.props.value(input);slots.forEach(s=>s?.cleanup?.());assert.equal(tasks.size,0);assert.equal(Object.keys(listeners).length,0,'unmount removes keyboard listeners');
@@ -35,3 +35,9 @@ container.getScrollResponder=()=>({measure:cb=>cb(0,0,360,420,0,100),scrollTo:op
 scroll=scrollRender();provider=scroll.children[0];scroll.props.onScroll({nativeEvent:{contentOffset:{y:300}}});listeners.keyboardDidShow({endCoordinates:{screenY:500}});provider.props.value(input);flush();assert.equal(scrolls.length,1);assert.equal(scrolls[0].animated,false);
 for(let n=0;n<30;n++){provider.props.value(input);flush();}assert.equal(scrolls.length,1,'an already visible editor never oscillates while typing');
 slots.forEach(s=>s?.cleanup?.());
+
+// Focus precedes Android's final viewport resize. No typing or keyboard event is needed.
+slots=[];index=0;effects=[];scrolls=[];focus=true;let viewportHeight=800;inputY=600;
+input.measure=cb=>cb(0,0,240,44,20,inputY);
+container.getScrollResponder=()=>({measure:cb=>cb(0,0,360,viewportHeight,0,0),scrollTo:options=>{scrolls.push(options);inputY-=options.y;}});
+scroll=scrollRender();provider=scroll.children[0];provider.props.value(input);flush();assert.equal(scrolls.length,0,'input is visible before keyboard opens');viewportHeight=420;flush(280);flush();assert.equal(scrolls.length,1,'post-focus settle reveals input before the first keystroke');flush(280);flush();assert.equal(scrolls.length,1,'settlement is bounded, not recurring polling');slots.forEach(s=>s?.cleanup?.());assert.equal(tasks.size,0);

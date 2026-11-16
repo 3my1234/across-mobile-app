@@ -37,7 +37,7 @@ async function main(){
  for(const kind of ['products','listings']){
   let draft=null,last,path='';const ref={current:false},snapshot={id:'wanted',description:'Private original description',contact_email:'owned@example.invalid',image_urls:['saved-photo']};
   const state={kind,initialItemID:'wanted',loading:false,policy:{},initialEdit:ref,mounted:{current:true},endpoint:`/providers/me/${kind}`,token:'owner',useRef:()=>ref,useEffect:fn=>fn(),encodeURIComponent,
-   providerRequest:async(_token,url)=>{path=url;return kind==='products'?{items:[{id:'wrong'},snapshot]}:snapshot;},editablePostSnapshot:(_kind,value,id)=>{assert.equal(id,'wanted');return value;},setDraft:value=>{draft=value;},setConfirmed:()=>{},run:fn=>{last=fn();return last;}};
+   providerRequest:async(_token,url)=>{path=url;return kind==='products'?{items:[{id:'wrong'},snapshot]}:snapshot;},editablePostSnapshot:(_kind,value,id)=>{assert.equal(id,'wanted');return value;},setDraft:value=>{draft=value;},setConfirmed:()=>{},goStep:()=>{},run:fn=>{last=fn();return last;}};
   vm.runInNewContext(compile(catalog.slice(from,to)),state);await last;assert.equal(draft.id,'wanted');assert.equal(draft.description,'Private original description');assert.equal(draft.image_urls[0],'saved-photo');assert.match(path,kind==='products'?/product_id=wanted/:/listings\/wanted$/);
  }
  console.log('Business contact passed: own/staff actions, unrelated customer contact, account switches, stale lookup, error retry and analytics exclusion.');

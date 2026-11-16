@@ -25,6 +25,7 @@ function reset(){hooks.forEach(h=>h?.cleanup?.());hooks=[];resolved.length=0;cal
 const nodes=n=>!n||typeof n!=='object'?[]:[n,...(n.children||[]).flatMap(nodes)],text=n=>typeof n==='string'?n:n?.children?.map(text).join('')||'';
 function button(label){const n=nodes(tree).find(n=>n.type==='Button'&&text(n)===label);assert.ok(n,label);return n;}
 (async()=>{
+ render();const opening=nodes(tree).find(n=>n.type==='Text'&&text(n)==='Opening your workspace');assert.equal(opening.props.style.textAlign,'center');assert.equal(opening.props.style.alignSelf,'center');reset();
  render();await settle();assert.deepEqual(resolved,[true]);assert.equal(calls[0].path,'/providers/me');assert.equal(calls[0].actor,'owner');
  reset();account={id:'provider',is_active:false,subscription:{status:'expired'}};render();await settle();assert.deepEqual(resolved,[true],'restricted/expired providers still get their workspace; API enforces restrictions');
  reset();status=404;render();await settle();assert.deepEqual(resolved,[false],'only definitive no-provider response chooses customer automatically');

@@ -6,9 +6,14 @@ import {Keyboard,Platform,ScrollView,FlatList,findNodeHandle,type ScrollViewProp
 export const InputScrollContext=createContext<((input:TextInput|null)=>void)|null>(null);
 function useInputReveal(scroll:React.RefObject<ScrollView|FlatList<unknown>|null>){
  const offset=useRef(0),keyboardTop=useRef<number|undefined>(Keyboard.metrics?.()?.screenY);
- const focused=useRef<TextInput|null>(null),task=useRef<ReturnType<typeof setTimeout>|null>(null);
+ const focused=useRef<TextInput|null>(null),task=useRef<ReturnType<typeof setTimeout>|null>(null),settle=useRef<ReturnType<typeof setTimeout>|null>(null);
  const reveal=useCallback((input:TextInput|null)=>{
+  const changed=focused.current!==input;
   focused.current=input;
+  if(changed||!input){if(settle.current)clearTimeout(settle.current);settle.current=null;}
+  // Android can resize the viewport after the focus/keyboard callbacks. Check
+  // once more after that animation, without waiting for a keystroke.
+  if(changed&&input)settle.current=setTimeout(()=>{settle.current=null;if(focused.current===input)reveal(input);},280);
   if(task.current)clearTimeout(task.current);
   if(!input)return;
   task.current=setTimeout(()=>{
@@ -37,7 +42,7 @@ function useInputReveal(scroll:React.RefObject<ScrollView|FlatList<unknown>|null
  useEffect(()=>{
   const events=[Keyboard.addListener('keyboardDidShow',event=>{keyboardTop.current=event?.endCoordinates?.screenY??Keyboard.metrics?.()?.screenY;reveal(focused.current);}),Keyboard.addListener('keyboardDidHide',()=>{keyboardTop.current=undefined;})];
   if(Platform.OS==='ios')events.push(Keyboard.addListener('keyboardDidChangeFrame',event=>{keyboardTop.current=event.endCoordinates.screenY;reveal(focused.current);}));
-  return()=>{events.forEach(event=>event.remove());if(task.current)clearTimeout(task.current);focused.current=null;};
+  return()=>{events.forEach(event=>event.remove());if(task.current)clearTimeout(task.current);if(settle.current)clearTimeout(settle.current);focused.current=null;};
  },[reveal]);
  return {reveal,layout:()=>reveal(focused.current),onScroll:(event:{nativeEvent:{contentOffset:{y:number}}})=>{offset.current=event.nativeEvent.contentOffset.y;}};
 }

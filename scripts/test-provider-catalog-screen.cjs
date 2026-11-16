@@ -31,7 +31,7 @@ const modules = {
   './providerPublishingPolicy': {}, './providerAddressSearch': {}, './nativeProviderPolicy': {}, './foregroundLocation': {},
   './NativeProviderLocationPicker': {}, './NativeProviderAvailability': {}, './NativeProviderProductOptions': {}, './NativeProviderDeliveryOffer': {},
   './ResilientImage': {ResilientImage: 'Photo'}, './KeyboardFrame': {KeyboardFrame: 'Frame'},
-  './ProviderPostImages': {ProviderPostImages: 'Gallery'},
+  './ProviderPostImages': {ProviderPostImages: 'Gallery'},'./ProviderPostGrid':{ProviderPostGrid:'Grid'},'./providerListingSteps':{},
 };
 function load(path) {
   const context = {exports: {}, URLSearchParams,setTimeout,clearTimeout, require: name => {if(name==='./KeyboardScroll')return {KeyboardScrollView:'Scroll',KeyboardFlatList:'List'};assert.ok(name in modules, name); return modules[name];}};
@@ -49,9 +49,7 @@ async function settle() {for (let i = 0; i < 6; i++) {await new Promise(resolve 
 (async () => {
   for (kind of ['products', 'listings']) {
     reset(); render(); await settle();
-    const gallery = nodes(tree).find(n => n.type === 'Gallery'); assert.ok(gallery, 'existing posts show a gallery');
-    assert.deepEqual(gallery.props.urls, kind === 'products' ? photos : photos.slice(0, 2));
-    assert.equal(gallery.props.title, 'Existing business post');
+    const grid=nodes(tree).find(n=>n.type==='Grid');assert.ok(grid,'existing posts use the provider grid');assert.deepEqual(kind==='products'?grid.props.items[0].image_urls:grid.props.items[0].media_urls,kind==='products'?photos:photos.slice(0,2));assert.equal(grid.props.items[0].title,'Existing business post');
     assert.ok(calls.some(call => call.path.startsWith(`/providers/me/${kind}?`)));
     assert.ok(calls.every(call => call.token === 'synthetic-owner' && !call.options?.method), 'image previews only read the existing owner catalogue');
   }
