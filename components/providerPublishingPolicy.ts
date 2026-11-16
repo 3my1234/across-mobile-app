@@ -1,5 +1,11 @@
 export type PostPolicy = {post_limit: number; max_images: number; max_videos: number; max_video_seconds: number; max_provider_videos?: number; max_video_bytes?: number; video_uploads_paused?: boolean; town_hall: boolean; visibility: string};
 export type ProviderPost = Record<string, any>;
+// Empty Nigerian delivery coverage preserves the original country-wide offer.
+// Other markets must still supply explicit destination prices.
+export function defaultNigeriaDelivery(draft: ProviderPost) {
+  return !(draft.delivery_areas || []).length && draft.currency_code === 'NGN' &&
+    (draft.fulfillment_mode === 'merchant_cross_border' || draft.inventory_country_code === 'NG');
+}
 export function providerVideoPreviewURL(raw: string) {
   const url = new URL(raw);
   if (url.protocol !== 'https:' || url.username || url.password) throw Error('This video preview is unavailable. Refresh the post before trying again.');
@@ -70,7 +76,7 @@ export function validatePostDraft(kind: 'listings' | 'products', draft: Provider
     if (!Array.isArray(draft.delivery_methods) || !draft.delivery_methods.length || draft.delivery_methods.some((method: string) => !['delivery', 'pickup'].includes(method))) throw new PostDraftValidationError('delivery_methods', 'Choose delivery, pickup, or both.');
     if (draft.compare_at_price !== null && (!Number.isFinite(draft.compare_at_price) || draft.compare_at_price <= draft.local_selling_price)) throw new PostDraftValidationError('compare_at_price', 'Crossed-out price must be higher than the selling price.');
     if (!Number.isFinite(draft.local_selling_price) || draft.local_selling_price <= 0 || !Number.isInteger(draft.inventory_count) || draft.inventory_count < 0) throw new PostDraftValidationError(!Number.isFinite(draft.local_selling_price) || draft.local_selling_price <= 0 ? 'local_selling_price' : 'inventory_count', 'Enter a positive price and a whole-number stock quantity.');
-    if (!Array.isArray(draft.delivery_areas) || !draft.delivery_areas.length) throw new PostDraftValidationError('delivery_areas', 'Add at least one delivery area.');
+    if (!(draft.delivery_areas || []).length && !defaultNigeriaDelivery(draft)) throw new PostDraftValidationError('delivery_areas', 'Add a delivery area and price for this market.');
     if (!/^[A-Z]{2}$/.test(draft.inventory_country_code) || !String(draft.inventory_city || '').trim()) throw new PostDraftValidationError(!/^[A-Z]{2}$/.test(draft.inventory_country_code) ? 'inventory_country_code' : 'inventory_city', 'Enter a two-letter stock country and stock city.');
     if (![draft.handling_time_hours, draft.delivery_min_days, draft.delivery_max_days].every(Number.isInteger) || draft.handling_time_hours < 0 || draft.delivery_min_days < 0 || draft.delivery_max_days < draft.delivery_min_days) throw new PostDraftValidationError('delivery_times', 'Enter valid whole-number handling and delivery times.');
   }
@@ -85,6 +91,9 @@ export function postPayload(kind: 'listings' | 'products', draft: ProviderPost):
   const payload = JSON.parse(JSON.stringify(draft));
   delete payload._retained_images; delete payload._retained_videos;
   if (kind === 'listings' && payload.attributes.price_mode === 'quote') payload.price = null;
-  if (kind === 'products') {payload.is_flash_sale=false;payload.flash_sale_price=null;payload.payment_mode = 'contact'; payload.atlantic_last_mile = false;}
+  if (kind === 'products') {payload.is_flash_sale=false;payload.flash_sale_price=null;payload.payment_mode = 'contact'; payload.atlantic_last_mile = false;
+    // Send the existing server's country-wide default explicitly; [] is rejected.
+    if (defaultNigeriaDelivery(draft)) payload.delivery_areas = [{country_code:'NG',state:'',city:'',currency_code:'NGN',delivered_price:draft.local_selling_price,delivery_fee:0,uses_primary_price:true}];
+  }
   return payload;
 }

@@ -39,6 +39,14 @@ assert.ok(steps.listingStepErrors('products',{...product,title:''},limits,false,
 assert.ok(steps.listingStepErrors('products',product,limits,false,1).location);
 assert.ok(steps.listingStepErrors('products',product,limits,false,2).images);
 assert.equal(steps.listingStepForField('products','delivery_areas'),1);assert.equal(steps.listingStepForField('products','videos'),2);
+const located={...product,inventory_city:'Abuja',inventory_location:'Jigo',inventory_latitude:9.2,inventory_longitude:7.3,image_urls:['https://media.test/photo.jpg']};
+assert.equal(Object.keys(steps.listingStepErrors('products',located,limits,true,1)).length,0,'Nigeria-wide delivery does not block step 2');
+policy.validatePostDraft('products',located,limits,true);
+const fallback=policy.postPayload('products',located).delivery_areas;
+assert.equal(fallback.length,1);assert.equal(fallback[0].country_code,'NG');assert.equal(fallback[0].state,'');assert.equal(fallback[0].city,'');assert.equal(fallback[0].uses_primary_price,true);assert.equal(fallback[0].delivered_price,1500);
+assert.equal(located.delivery_areas.length,0,'payload default never mutates the phone draft');
+assert.ok(steps.listingStepErrors('products',{...located,inventory_country_code:'US',currency_code:'USD'},limits,true,1).delivery_areas,'non-Nigerian markets retain explicit pricing');
+assert.throws(()=>policy.validatePostDraft('products',{...located,inventory_country_code:'US',currency_code:'USD'},limits,true),/delivery area/);
 const service={...policy.makeServiceDraft({}),title:'Painting',description:'Paint rooms',category:'Painting'};
 assert.equal(Object.keys(steps.listingStepErrors('listings',service,limits,false,0)).length,0,'quote service does not require a fixed price');assert.ok(steps.listingStepErrors('listings',{...service,price:null,attributes:{price_mode:'fixed'}},limits,false,0).price);
 // Optional delivery settings retain the same authoritative payload calculation.

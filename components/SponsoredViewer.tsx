@@ -25,7 +25,7 @@ export function sponsoredVideo(card:DiscoveryCard) {
  return card.video_urls?.find(url=>typeof url==='string'&&/^https:\/\//i.test(url))||'';
 }
 function AdVideo({uri,muted,onError,cached=false,playing=true}:{uri:string;muted:boolean;onError:()=>void;cached?:boolean;playing?:boolean}) {
- const player=useVideoPlayer({uri,useCaching:cached},player=>{player.loop=true;player.muted=true;player.staysActiveInBackground=false;player.bufferOptions=videoBufferOptions;});
+ const player=useVideoPlayer({uri,useCaching:cached},player=>{player.loop=true;player.muted=muted;player.staysActiveInBackground=false;player.bufferOptions=videoBufferOptions;});
  const [loading,setLoading]=useState(true),errorHandler=useRef(onError);errorHandler.current=onError;
  useEffect(()=>{player.muted=muted;},[player,muted]);
  useEffect(()=>{
@@ -50,15 +50,15 @@ export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,m
  const [hasMore,setHasMore]=useState(true),[pageError,setPageError]=useState(''),[pageLoading,setPageLoading]=useState(false);
  const cursor=useRef(''),paging=useRef(false);
  const [index,setIndex]=useState(0),[size,setSize]=useState({width:0,height:0}),[settled,setSettled]=useState(true);
- const [foreground,setForeground]=useState(AppState.currentState==='active'),[sound,setSound]=useState({id:selected.id,muted:true}),[paused,setPaused]=useState(false);
+ const [foreground,setForeground]=useState(AppState.currentState==='active'),[sound,setSound]=useState({id:selected.id,muted:false}),[paused,setPaused]=useState(false);
  const [failed,setFailed]=useState(new Set<string>()),[chat,setChat]=useState<DiscoveryCard|null>(null),[opening,setOpening]=useState(false);
  const alive=useRef(true),busy=useRef(false),scrollTimer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const inset=useSafeAreaInsets(),card=feed[index]||selected;
- const muted=sound.id===card.id?sound.muted:true;
+ const muted=sound.id===card.id?sound.muted:false;
  const access=useBusinessContact(token,card.provider_id);
  const visible=active&&foreground&&settled&&!chat&&!opening;
  const playing=visible&&!paused;
- useEffect(()=>{alive.current=true;const subscription=AppState.addEventListener('change',state=>{setForeground(state==='active');if(state!=='active')setSound({id:'',muted:true});});return()=>{alive.current=false;subscription.remove();if(scrollTimer.current)clearTimeout(scrollTimer.current);};},[]);
+ useEffect(()=>{alive.current=true;const subscription=AppState.addEventListener('change',state=>{setForeground(state==='active');if(state!=='active')setSound({id:'',muted:false});});return()=>{alive.current=false;subscription.remove();if(scrollTimer.current)clearTimeout(scrollTimer.current);};},[]);
  useEffect(()=>{setPaused(false);},[card.id]);
  useEffect(()=>{
   if(!playing)return;
@@ -98,7 +98,7 @@ export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,m
   <View style={{flex:1,backgroundColor:'#050A08'}} onLayout={event=>setSize(event.nativeEvent.layout)}>
    <StatusBar style="light"/>
    {size.height>0&&<FlatList key={`${size.width}:${size.height}`} data={feed} scrollEnabled={!opening&&!chat} keyExtractor={item=>item.kind+item.id} pagingEnabled showsVerticalScrollIndicator={false} initialScrollIndex={index} getItemLayout={(_data,i)=>({length:size.height,offset:size.height*i,index:i})} onEndReached={()=>void more()} onEndReachedThreshold={0.5} windowSize={3} initialNumToRender={1} maxToRenderPerBatch={2} extraData={[playing,index,muted,failed]} onScroll={event=>{
-    const y=event.nativeEvent.contentOffset.y;setSettled(false);setSound(previous=>previous.id?{id:'',muted:true}:previous);
+    const y=event.nativeEvent.contentOffset.y;setSettled(false);setSound(previous=>previous.id?{id:'',muted:false}:previous);
     if(scrollTimer.current)clearTimeout(scrollTimer.current);
     scrollTimer.current=setTimeout(()=>{setIndex(Math.max(0,Math.min(feed.length-1,Math.round(y/size.height))));setSettled(true);},120);
    }} scrollEventThrottle={32} renderItem={({item,index:row})=><View style={{width:size.width,height:size.height}}>

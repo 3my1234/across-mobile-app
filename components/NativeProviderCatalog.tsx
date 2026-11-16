@@ -31,13 +31,13 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
   const [items, setItems] = useState<ProviderPost[]>([]), [cursor, setCursor] = useState(''), [policy, setPolicy] = useState<PostPolicy | null>(null);
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [step,setStep]=useState(0),[limitsOpen,setLimitsOpen]=useState(false),[deliveryOpen,setDeliveryOpen]=useState(false);
-  const goStep=(next:number)=>{Keyboard?.dismiss?.();if(next!==step)positions.current={};setStep(Math.max(0,Math.min(3,next)));scroll.current?.scrollTo({y:0,animated:false});};
+  const goStep=(next:number)=>{Keyboard?.dismiss?.();if(next!==step){positions.current={};setFieldErrors({});}setStep(Math.max(0,Math.min(3,next)));scroll.current?.scrollTo({y:0,animated:false});};
   const [draft, setDraft] = useState<ProviderPost | null>(null), [confirmed, setConfirmed] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({}), [numericText, setNumericText] = useState<Record<string, string>>({});
   const [advanced, setAdvanced] = useState(false), [showTypes, setShowTypes] = useState(false), [manualLocation, setManualLocation] = useState(false), [activeAction, setActiveAction] = useState('');
   const scroll = useRef<ScrollView>(null), positions = useRef<Record<string, number>>({}), pendingField=useRef<string|null>(null);
   const errorAt = (key: string) => fieldErrors[key] ? <Text accessibilityRole="alert" style={{color: c.danger}}>{fieldErrors[key]}</Text> : null;
-  const focusError = (errors: Record<string, string>) => {setFieldErrors(errors); const key=Object.keys(errors)[0];pendingField.current=key;goStep(listingStepForField(kind,key));if(['capacity','country_code','currency_code','service_radius_km','delivery_times','inventory_country_code'].includes(key))setAdvanced(true);};
+  const focusError = (errors: Record<string, string>) => {const key=Object.keys(errors)[0];pendingField.current=key;goStep(listingStepForField(kind,key));setFieldErrors(errors);if(['capacity','country_code','currency_code','service_radius_km','delivery_times','inventory_country_code'].includes(key))setAdvanced(true);};
   useEffect(()=>{if(!pendingField.current)return;const timer=setTimeout(()=>{const key=pendingField.current;pendingField.current=null;if(key)scroll.current?.scrollTo({y:Math.max(0,(positions.current[key]??0)-16),animated:false});},100);return()=>clearTimeout(timer);},[step,fieldErrors]);
   const [mapOpen, setMapOpen] = useState(false);
   const [recovery,setRecovery]=useState<SavedListingDraft|null>(null),[videoPreview,setVideoPreview]=useState(''),[videoSize,setVideoSize]=useState<{original:number;prepared:number}|null>(null);
@@ -212,7 +212,7 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
           </>:<>
             <NativeProviderProductOptions section="location" draft={draft} patch={patch} busy={busy} errors={fieldErrors}/>
             {field('inventory_city','Stock city')}{field('inventory_location','Stock address or area')}
-            <Text style={s.title}>Delivery areas</Text><Text>Add where you can deliver or arrange pickup. The customer agrees delivery and payment with you in chat.</Text>{errorAt('delivery_areas')}
+            <Text style={s.title}>Delivery areas (optional in Nigeria)</Text><Text>Leave blank to offer delivery across Nigeria at your listed item price. Agree any delivery charge with the customer in chat. Add areas to limit coverage or set specific delivery fees.</Text>{errorAt('delivery_areas')}
             {(draft.delivery_areas||[]).map((area:ProviderPost,index:number)=><View key={index} style={[s.card,{borderColor:c.line}]}><Text>{[area.city,area.state,area.country_code].filter(Boolean).join(', ')} | {area.currency_code} {area.delivery_fee??0} delivery</Text>{button('Remove delivery area',()=>patch('delivery_areas',draft.delivery_areas.filter((_:unknown,i:number)=>i!==index)))}</View>)}
             {button(deliveryOpen?'Cancel delivery area':'+ Add delivery area',()=>setDeliveryOpen(!deliveryOpen))}{deliveryOpen&&<NativeProviderDeliveryOffer draft={draft} patch={(key,value)=>{patch(key,value);if(key==='delivery_areas')setDeliveryOpen(false);}} busy={busy}/>}
         {button(advanced ? 'Hide extra product details' : 'Extra product details (optional)', () => setAdvanced(!advanced))}
@@ -240,7 +240,7 @@ export function NativeProviderCatalog({embedded = false, token, kind, provider, 
         </>}
       </>}
     </ScrollView>
-    {draft&&<View style={{padding:12,borderTopWidth:1,borderColor:c.line,backgroundColor:c.surface}}>{primary(step===3?'Submit for review':step===2?`Preview ${noun}`:step===0?(kind==='products'?'Next: Location & delivery':'Next: Location & service area'):'Next: Photos & video',step===3?()=>save(true):next)}</View>}
+    {draft&&<View style={{padding:12,borderTopWidth:1,borderColor:c.line,backgroundColor:c.surface}}>{Object.keys(fieldErrors).length>0&&<Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={{color:c.danger,marginBottom:8}}>{Object.values(fieldErrors).join('\n')}</Text>}{primary(step===3?'Submit for review':step===2?`Preview ${noun}`:step===0?(kind==='products'?'Next: Location & delivery':'Next: Location & service area'):'Next: Photos & video',step===3?()=>save(true):next)}</View>}
     {!!videoPreview&&<ListingVideoPreview uri={videoPreview} onClose={()=>setVideoPreview('')}/>}{mapOpen&&draft&&<NativeProviderLocationPicker initial={latitude==null||longitude==null?undefined:{latitude,longitude}} onClose={()=>setMapOpen(false)} onChoose={point=>{chooseAddress(point);if(kind==='listings')setDraft(old=>old?{...old,attributes:{...old.attributes,location_source:'map'}}:old);setMapOpen(false);}}/>}
   </KeyboardFrame></ProviderPanel>;
 
