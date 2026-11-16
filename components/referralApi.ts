@@ -4,17 +4,27 @@ import {fetchJSONWithTimeout} from './utils';
 export async function validateSignupReferral(raw: string) {
   const code = raw.trim().toUpperCase();
   if (!code) return;
-  if (!/^[A-Z0-9]{12}$/.test(code)) throw Error('Enter the 12-character referral code, or leave it blank.');
+  if (!/^[A-Z0-9]{4,20}$/.test(code)) throw Error('Enter 4 to 20 letters or numbers, or leave the referral code blank.');
   const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/referrals/validate?code=${encodeURIComponent(code)}`, {cache: 'no-store'}, 12000);
   if (!response.ok) throw Error('Referral registration is not available right now. Retry later, or remove the code to continue without a referral.');
   if (body?.valid !== true) throw Error('This referral code is unavailable. Check it or leave it blank.');
 }
 
-export type ReferralSummary = {code: string; pending_signups: number; verified_signups: number; paid_providers: number; earned_xp: number; signup_xp: number; paid_provider_total_xp: number; paid_provider_additional_xp: number; minimum_withdrawal_xp: number};
+export type ReferralSummary = {code: string; custom_code?: string; custom_code_supported?: boolean; can_customize?: boolean; pending_signups: number; verified_signups: number; paid_providers: number; earned_xp: number; signup_xp: number; paid_provider_total_xp: number; paid_provider_additional_xp: number; minimum_withdrawal_xp: number};
 export async function loadReferralSummary(token: string): Promise<ReferralSummary> {
   const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/referrals/me`, {cache: 'no-store', headers: {Authorization: `Bearer ${token}`}}, 12000);
   if (!response.ok) throw Error(response.status === 404 ? 'Referrals are not available yet. Please check again later.' : 'Could not load your referrals. Please retry.');
   const counters = ['pending_signups', 'verified_signups', 'paid_providers', 'earned_xp', 'signup_xp', 'paid_provider_total_xp', 'paid_provider_additional_xp', 'minimum_withdrawal_xp'];
   if (!/^[A-Z0-9]{12}$/.test(body?.code || '') || counters.some(key => !Number.isSafeInteger(body?.[key]) || body[key] < 0) || body.paid_provider_total_xp !== body.signup_xp + body.paid_provider_additional_xp) throw Error('Referral details are unavailable. Please retry.');
+  if (body.custom_code_supported === true && (typeof body.custom_code !== 'string' || body.custom_code !== '' && !/^[A-Z0-9]{4,20}$/.test(body.custom_code) || body.can_customize !== (body.custom_code === ''))) throw Error('Referral details are unavailable. Please retry.');
   return body;
+}
+
+export async function chooseCustomReferralCode(token: string, raw: string): Promise<string> {
+  const code = raw.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4,20}$/.test(code)) throw Error('Use 4 to 20 letters or numbers without spaces.');
+  const {response, body} = await fetchJSONWithTimeout(`${API_URL}/api/v1/referrals/me/custom-code`, {method:'POST', headers:{Authorization:`Bearer ${token}`, 'Content-Type':'application/json'}, body:JSON.stringify({code})}, 12000);
+  if (!response.ok) throw Error(response.status === 409 ? 'This code is taken, or your one-time choice has already been saved. Check your code below.' : 'Could not confirm your custom code. Refresh referrals before trying again.');
+  if (body?.custom_code !== code || body?.can_customize !== false) throw Error('Could not confirm your custom code. Refresh referrals before trying again.');
+  return body.custom_code;
 }

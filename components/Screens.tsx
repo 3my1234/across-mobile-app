@@ -155,7 +155,7 @@ export function AuthScreen({ referralCode = "", onReferralCode = () => {}, works
                   <Text style={s.primaryButtonText}>Create free account</Text>
                   <Ionicons name="arrow-forward" size={18} color={theme.color("#FFFFFF")} />
                 </Pressable>
-                <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={12} style={s.input}/>
+                <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={20} style={s.input}/>
                 <View style={s.authDivider}>
                   <View style={s.authDividerLine} />
                   <Text style={s.authDividerText}>or continue with</Text>
@@ -197,7 +197,7 @@ export function AuthScreen({ referralCode = "", onReferralCode = () => {}, works
                 {mode !== "signin" && <TextInput value={fullName} onChangeText={setFullName} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Full name" autoCapitalize="words" style={s.input} />}
                 <TextInput editable={!busy && !googleBusy} value={email} onChangeText={setEmail} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Email" keyboardType="email-address" autoCapitalize="none" style={s.input} />
                 {mode === "signup" && <TextInput value={phone} onChangeText={setPhone} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Phone" keyboardType="phone-pad" style={s.input} />}
-                {mode === "signup" && <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={12} style={s.input}/>}
+                {mode === "signup" && <TextInput accessibilityLabel="Referral code (optional)" placeholder="Referral code (optional)" value={referralCode} onChangeText={onReferralCode} autoCapitalize="characters" maxLength={20} style={s.input}/>}
                 <View style={s.passwordWrap}><TextInput editable={!busy && !googleBusy} value={password} onChangeText={setPassword} onFocus={event => revealAuthForm(event.nativeEvent.target)} placeholder="Password" autoCapitalize="none" autoCorrect={false} secureTextEntry={!showPassword} style={s.passwordInput} /><Pressable accessibilityRole="button" accessibilityLabel={showPassword?'Hide password':'Show password'} style={s.passwordToggle} onPress={() => setShowPassword(v => !v)}><Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={theme.color("#30423D")} /></Pressable></View>
                 {mode==='signup'&&<Text style={s.authFormCopy}>At least 8 characters, with uppercase, lowercase and a special character such as !@#$.</Text>}
                 {mode === 'signin' && !!loginNotice && <Text accessibilityLiveRegion="polite" style={s.authFormCopy}>{loginNotice}</Text>}
