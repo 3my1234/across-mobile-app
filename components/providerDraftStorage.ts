@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 const prefix='atl:provider-listing-draft:v1:';let writes=Promise.resolve();
-export type SavedListingDraft={draft:Record<string,any>;numericText:Record<string,string>;at:number};
+export type SavedListingDraft={draft:Record<string,any>;numericText:Record<string,string>;step?:number;at:number};
 const key=(provider:string,kind:string)=>prefix+provider+':'+kind;
 export function saveListingDraft(provider:string,kind:string,value:SavedListingDraft){
  const raw=JSON.stringify(value);if(raw.length>250000)return Promise.reject(Error('This draft is too large to save on this phone. Save it to your account.'));

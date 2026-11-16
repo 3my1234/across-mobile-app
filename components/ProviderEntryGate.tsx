@@ -46,7 +46,7 @@ export function ProviderEntryGate({token, intent, onResolved}: {token: string; i
   useEffect(() => {finished.current = false; void load(); return invalidate;}, [load, invalidate]);
   const action = (label: string, fn: () => void) => <Pressable accessibilityRole="button" disabled={busy} onPress={fn} style={[accountDesign.action, {borderColor: c.line, backgroundColor: c.soft}]}><Text style={{color: c.accent}}>{label}</Text></Pressable>;
   return <View style={{flex: 1, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, paddingHorizontal: 20, justifyContent: 'center', gap: 16, backgroundColor: c.background}}>
-    <Text style={{fontSize: 23, fontWeight: '700'}}>Opening your workspace</Text>
+    <Text style={{fontSize: 23, fontWeight: '700', textAlign: 'center', alignSelf: 'center'}}>Opening your workspace</Text>
     {busy && <ActivityIndicator accessibilityLabel="Checking provider access"/>}
     {!!error && <><Text accessibilityRole="alert">{error}</Text>{action('Retry account access', () => void load())}{action('Open provider workspace', () => resolve(true))}{action('Continue as customer', () => resolve(false))}</>}
   </View>;
