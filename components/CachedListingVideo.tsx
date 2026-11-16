@@ -7,7 +7,8 @@ function Player({uri,cached,muted}:{uri:string;cached:boolean;muted:boolean}) {
  const [state,setState]=useState('loading');
  const player=useVideoPlayer({uri,useCaching:cached},p=>{p.loop=true;p.muted=muted;p.staysActiveInBackground=false;p.bufferOptions=videoBufferOptions;});
  useEffect(()=>{player.play();const sub=player.addListener('statusChange',event=>setState(event.status));setState(player.status);return()=>sub.remove();},[player]);
- return <><VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls allowsPictureInPicture={false}/>{(state==='loading'||state==='idle')&&<ActivityIndicator color="#75FFCB" style={StyleSheet.absoluteFill}/>} {state==='error'&&<Text style={{color:'#FFF',padding:20}}>Video unavailable. Check your connection and reopen it.</Text>}</>;
+ return <><VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls allowsPictureInPicture={false}/>{(state==='loading'||state==='idle')&&<ActivityIndicator color="#75FFCB" style={StyleSheet.absoluteFill}/>}
+  {state==='error'&&<Text style={{color:'#FFF',padding:20}}>Video unavailable. Check your connection and reopen it.</Text>}</>;
 }
 export function CachedListingVideo({uri,active=true,muted=true}:{uri:string;active?:boolean;muted?:boolean}) {
  const [foreground,setForeground]=useState(AppState.currentState==='active'),[cached,setCached]=useState<boolean|null>(null);
