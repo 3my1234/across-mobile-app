@@ -2,6 +2,7 @@ import { API_URL } from './config';
 import { fetchJSONWithTimeout } from './utils';
 export const jobWorkTypes = [['full_time', 'Full-time'], ['part_time', 'Part-time'], ['contract', 'Contract'], ['temporary', 'Temporary'], ['internship', 'Internship'], ['one_day', 'One-day shift'], ['volunteer', 'Volunteer']] as const;
 export type Job = {
+    image_urls?: string[];
     id: string;
     provider_id: string;
     provider_name?: string;
@@ -56,7 +57,7 @@ export function jobDeadlineISO(value: string) { const match = /^(\d{4})-(\d{2})-
     throw Error('Enter a real application deadline.'); return date.toISOString(); }
 export function jobMailURL(email: string, title: string) { if (!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email) || /[\r\n]/.test(email))
     throw Error('This recruitment address is invalid.'); return `mailto:${email}?subject=${encodeURIComponent(`Application for ${title}`)}`; }
-export function newJob(id: string): Job { return { id, provider_id: '', title: '', city: '', state: '', country_code: 'NG', work_type: 'full_time', work_duration: '', description: '', requirements: '', pay_min: null, pay_max: null, currency_code: 'NGN', pay_period: 'month', application_method: 'chat', application_url: '', application_email: '', application_instructions: '', deadline: null, status: 'draft', revision: 0 }; }
+export function newJob(id: string): Job { return { id, image_urls:[], provider_id: '', title: '', city: '', state: '', country_code: 'NG', work_type: 'full_time', work_duration: '', description: '', requirements: '', pay_min: null, pay_max: null, currency_code: 'NGN', pay_period: 'month', application_method: 'chat', application_url: '', application_email: '', application_instructions: '', deadline: null, status: 'draft', revision: 0 }; }
 export function jobLinkID(raw: string): string | null { try {
     const u = new URL(raw);
     const path = u.protocol === 'across:' && u.hostname === 'jobs' ? u.pathname : u.protocol === 'https:' && ['atlxpres.com', 'www.atlxpres.com'].includes(u.hostname) && u.pathname.startsWith('/jobs/') ? u.pathname.slice(5) : '';
