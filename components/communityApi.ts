@@ -1,6 +1,6 @@
 import { API_URL, AUTH_TIMEOUT_MS } from "./config";
 export class CommunityRequestError extends Error {
-    constructor(message:string,public status:number,public requestID:string,public retryAfterSeconds?:number){super(message);this.name='CommunityRequestError';}
+    constructor(message:string,public status:number,public requestID:string,public retryAfterSeconds?:number,public reason?:string){super(message);this.name='CommunityRequestError';}
 }
 // Mutations remain explicit user actions: never replay a POST automatically.
 // Remember bounded server cooldowns for both manual sends and automatic reads.
@@ -24,7 +24,7 @@ export async function communityRequest(token: string, path: string, options: Req
         const fallback=response.status===401?'Sign in again to continue.':response.status===429?'Too many requests. Please wait before trying again.':options.method==='POST'?'Your message could not be sent. Please try again.':'Messages could not be loaded. Please try again.';
         const supplied=[data?.message,data?.error].find(value=>typeof value==='string'&&value.trim().length>0&&value.length<=500);
         const message=(supplied||fallback)+(retryAfter?` Try again in ${retryAfter} seconds.`:'');
-        const error=new CommunityRequestError(message,response.status,response.headers.get('X-Request-ID')||'',retryAfter);
+        const error=new CommunityRequestError(message,response.status,response.headers.get('X-Request-ID')||'',retryAfter,['removed','request_closed','request_expired'].includes(data?.reason)?data.reason:undefined);
         if((mutation||read)&&retryAfter){
             if(requestCooldowns.size>=64&&!requestCooldowns.has(cooldownKey))requestCooldowns.delete(requestCooldowns.keys().next().value!);
             requestCooldowns.set(cooldownKey,{until:Date.now()+retryAfter*1000+(read?Math.floor(Math.random()*501):0),error});

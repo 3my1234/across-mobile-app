@@ -4,6 +4,7 @@ import {chooseLibraryMedia,chooseUploadDocument} from './mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
 import {refreshAutomaticDriverAvailability} from './automaticDriverAvailability';
 import {ProviderVerificationDocuments} from './ProviderVerificationDocuments';
+import {TownHallBubble} from './TownHallBubble';
 import {DriverPresenceNotice} from './DriverPresenceNotice';
 import {NativeProviderPromotions} from './NativeProviderPromotions';
 import {ProviderPanelBackContext} from './ProviderPanel';
@@ -151,7 +152,7 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
   });
   const paid = provider ? hasPaidProviderAccess(provider) : false;
   const roots = ['overview', 'catalog', 'requests', 'messages', 'more'];
-  const selected = view === 'overview' ? 'overview' : ['catalog', 'products', 'listings', 'jobs'].includes(view) ? 'catalog' : view === 'requests' ? 'requests' : view === 'messages' && !legacyRoute.includes('town-hall') ? 'messages' : 'more';
+  const selected = view === 'overview' ? 'overview' : ['catalog', 'products', 'listings', 'jobs'].includes(view) ? 'catalog' : view === 'requests' ? 'requests' : view === 'messages' ? 'messages' : 'more';
   const labels: Record<string, string> = {overview: 'Provider workspace', catalog: 'Listings', jobs:'Jobs', requests: 'Bookings', messages: 'Chats', more: 'More', products: 'Products', listings: 'Services', verification: 'Verification documents', subscription: 'Subscriptions', profile: 'Business profile', driver: 'Driver availability', 'merchant-orders': 'Previous paid orders', notifications: 'Notifications', referrals: 'Refer and earn XP'};
   const row = (label: string, icon: React.ComponentProps<typeof Ionicons>['name'], action: () => void) => <Pressable key={label} accessibilityRole="button" onPress={action} disabled={busy} style={({pressed}) => [s.menuRow, {backgroundColor: pressed ? c.soft : c.surface, borderColor: c.line}]}><View style={[s.menuIcon, {backgroundColor: c.soft}]}><Ionicons name={icon} size={23} color={c.accent}/></View><Text style={{flex: 1, fontWeight: '600'}}>{label}</Text><Ionicons name="chevron-forward" size={18} color={c.muted}/></Pressable>;
   const tools = provider && <>
@@ -200,8 +201,9 @@ export function NativeProviderAccount({token, route = '', onClose, onOpenSupport
     {!roots.includes(view) && !['jobs', 'products', 'listings', 'merchant-orders', 'notifications', 'referrals', 'messages'].includes(view) && <View style={{paddingHorizontal: 16}}>{view==='verification'?<Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={back} style={{flexDirection:'row',alignItems:'center',gap:10,minHeight:48}}><Ionicons name="arrow-back" size={24} color={c.accent}/><Text style={{fontSize:18,fontWeight:'700'}}>Verification documents</Text></Pressable>:button('Back', back)}</View>}
     {!!error && <View style={{padding: 12, gap: 8}}><Text accessibilityRole="alert" style={{color: c.danger}}>{error}</Text>{button('Refresh account', () => void load())}</View>}
     {!!notice && <Text style={{padding: 12, color: c.accent}}>{notice}</Text>}{busy && <ActivityIndicator/>}
-    <DriverPresenceNotice token={token} alwaysVisible={!!provider?.is_driver}/>
+    {provider?.is_driver&&['overview','driver'].includes(view)&&<DriverPresenceNotice token={token} alwaysVisible onManage={()=>go('driver')}/>}
     <View style={{flex: 1}}>{!ready ? <ActivityIndicator accessibilityLabel="Loading provider account"/> : !provider ? <ScrollView contentContainerStyle={{padding: 16}}><NativeProviderOnboarding token={token} onSaved={async isDriver => {setKind(''); setView('verification'); await load();}} onRefresh={() => void load()}/>{row('Switch to customer', 'swap-horizontal-outline', onClose)}</ScrollView> : tools}</View>
+    {provider&&roots.includes(view)&&!notificationsOpen&&<TownHallBubble token={token} bottomInset={insets.top+insets.bottom} onOpen={()=>go('messages','view=messages&mode=town-hall')}/>}
     {notificationsOpen&&<NativeProviderNotifications key={token} embedded popover top={56} token={token} hasProvider={!!provider} onReadAll={onNotificationReadAll} onClose={()=>setNotificationsOpen(false)} onOpen={notification=>{setNotificationsOpen(false);onOpenNotification?.(notification);}}/>}
     <View accessibilityLabel="Provider navigation" style={[s.tabs, {backgroundColor: c.surface, borderColor: c.line}]}>{([['overview', 'Overview', 'home-outline'], ['catalog', 'Listings', 'list-outline'], ['requests', 'Bookings', 'calendar-outline'], ['messages', 'Chats', 'chatbubbles-outline'], ['more', 'More', 'ellipsis-horizontal']] as const).map(([id, label, icon]) => <Pressable key={id} accessibilityRole="tab" accessibilityState={{selected: selected === id, disabled: busy}} disabled={busy} onPress={() => tab(id)} style={({pressed}) => ({flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 60, gap: 4, backgroundColor: pressed ? c.soft : c.surface})}><Ionicons name={icon} size={22} color={selected === id ? c.accent : c.muted}/><Text style={{fontSize: 11, color: selected === id ? c.accent : c.muted}}>{label}</Text></Pressable>)}</View>
   </KeyboardFrame></Modal></ProviderPanelBackContext.Provider>;

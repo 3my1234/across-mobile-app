@@ -1,4 +1,5 @@
 import {KeyboardScrollView as ScrollView} from './KeyboardScroll';
+import {TownHallRoomTools} from './TownHallRoomTools';
 import {TownHallIcon} from "./TownHallIcon";
 import type {ChatLocation} from './chatLocation';
 import {useInboxDeliveryReceipts} from './messageReceipts';
@@ -47,6 +48,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     const alive = useRef(true), sequence = useRef(0), threadSequence = useRef(0), current = useRef<Conversation | null>(null), etags = useRef(new Map<string, string>()), messageRef = useRef<ProviderMessage[]>([]), scroll = useRef<ScrollView>(null);
     const openedInitial = useRef("");
     const lastHallRoom=useRef(initialHallRoomId);
+    const [roomNotice,setRoomNotice]=useState('');
     const [search,setSearch]=useState("");const inboxConfirmed=useRef(false);
     const openSequence=useRef(0),readFlights=useRef(new Set<string>()),readPending=useRef(new Set<string>());
     const readAcknowledged = useRef(new Map<string, string>());
@@ -114,8 +116,14 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
             }
         }
         catch (err) {
-            if (alive.current && request === threadSequence.current)
-                setError(err instanceof Error ? err.message : "Please retry");
+            if (alive.current && request === threadSequence.current && current.current?.id===conversation.id) {
+                const failure=err as {status?:number;reason?:string};
+                if(conversation.kind==='town_hall'&&[403,410].includes(failure.status||0)) {
+                    const reason=failure.reason;
+                    setRoomNotice(reason==='removed'?'You were removed from this request by the customer.':reason==='request_expired'?'This request has expired.':failure.status===410?'The customer has ended or closed this request.':'You no longer have access to this request.');
+                    lastHallRoom.current='';openSequence.current++;threadSequence.current++;current.current=null;setSelected(null);setMessages([]);messageRef.current=[];setCanSend(false);setMode('town-hall');setError('');
+                } else setError(err instanceof Error ? err.message : "Please retry");
+            }
         }
         finally {
             readFlights.current.delete(flight);if (alive.current && request === threadSequence.current)
@@ -126,7 +134,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         openSequence.current++;
         if(conversation.kind==='town_hall')lastHallRoom.current=conversation.id;
         current.current = conversation;
-        setSelected(conversation);
+        setSelected(conversation);setRoomNotice('');
         setError("");
         setCanSend(conversation.state === "open");
         const cached = history.get(token, conversation.id);
@@ -190,11 +198,11 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
         throw Error("This chat is no longer available."); await open(data.items[0]); }
     const tabs = <View style={s.tabs}>{([['chats', 'Chats'], ['town-hall', 'Town Hall']] as const).map(([key, label]) => <Pressable key={key} onPress={() => { setMode(key); setCursor(""); }} style={[s.tab, mode === key && s.active]}><Text style={s.tabText}>{label}</Text></Pressable>)}</View>;
     if (mode === "town-hall" && !selected)
-        return <View style={s.fill}>{tabs}<CommunityTownHall token={token} bottomInset={bottomInset} initialRoomId={lastHallRoom.current} openChat={openChatID} allowCreate={!providerWorkspace}/></View>;
+        return <View style={s.fill}>{tabs}{!!roomNotice&&<Text accessibilityRole="alert" style={{padding:14,color:theme.dark?'#FFB4AB':'#A62525'}}>{roomNotice}</Text>}<CommunityTownHall token={token} bottomInset={bottomInset} initialRoomId={lastHallRoom.current} openChat={openChatID} allowCreate={!providerWorkspace}/></View>;
     if (!token)
         return <View style={s.panel}><Text>Sign in to use Chats and Town Hall.</Text></View>;
     if (selected)
-        return <ProviderConversation receiptContext={{channel:selected.source==='legacy'?'business':'shared',conversationId:selected.id}} townHallOrigin={Boolean(selected.context?.town_hall_request_id)} roomStyle={selected.kind==='town_hall'} key={`${token}:${selected.id}`} token={token} title={selected.title} provider={selected.title} identity={selected.actor_role==='provider'?undefined:selected.provider_identity} avatarURL={selected.avatar_url} messages={messages} loading={chatLoading} busy={busy} paused={!canSend} pausedLabel={selected.kind === "town_hall" ? "This room is closed or your paid plan needs renewal." : "This conversation is read-only or blocked."} error={error} bottomInset={bottomInset} hasEarlier={!!chatCursor} onClose={() => { threadSequence.current++; current.current = null; setSelected(null); setError(""); }} onRefresh={() => void loadThread(selected)} onEarlier={() => void loadThread(selected, chatCursor)} onSend={send} toolbar={selected.source === "shared" && selected.kind === "direct" ? <View style={s.toolbar}>{button("Block", () => Alert.alert("Block this person?", "They will no longer be able to send you direct messages.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: () => void act(async () => { await call(`/chat/blocks/${selected.peer_user_id}`, { method: "POST" }); setCanSend(false); }) }]), true)}{button("Report", () => Alert.alert("Report this chat?", "Send this conversation to moderation for review.", [{ text: "Cancel", style: "cancel" }, { text: "Report", onPress: () => void act(async () => { await call(`/chat/conversations/${selected.id}/reports`, { method: "POST", body: JSON.stringify({ reason: "User reported this conversation for inappropriate messages or spam" }) }); Alert.alert("Report received", "Your report has been recorded for review."); }) }]))}</View> : undefined}/>;
+        return <ProviderConversation receiptContext={{channel:selected.source==='legacy'?'business':'shared',conversationId:selected.id}} townHallOrigin={Boolean(selected.context?.town_hall_request_id)} roomStyle={selected.kind==='town_hall'} key={`${token}:${selected.id}`} token={token} title={selected.title} provider={selected.title} identity={selected.actor_role==='provider'?undefined:selected.provider_identity} avatarURL={selected.avatar_url} messages={messages} loading={chatLoading} busy={busy} paused={!canSend} pausedLabel={selected.kind === "town_hall" ? "This room is closed or your paid plan needs renewal." : "This conversation is read-only or blocked."} error={error} bottomInset={bottomInset} hasEarlier={!!chatCursor} onClose={() => { lastHallRoom.current='';openSequence.current++;threadSequence.current++; current.current = null; setSelected(null); setError(""); }} onRefresh={() => void loadThread(selected)} onEarlier={() => void loadThread(selected, chatCursor)} onSend={send} toolbar={selected.kind==='town_hall'?<TownHallRoomTools token={token} id={selected.id} onChanged={()=>void loadThread(selected)}/>:selected.source === "shared" && selected.kind === "direct" ? <View style={s.toolbar}>{button("Block", () => Alert.alert("Block this person?", "They will no longer be able to send you direct messages.", [{ text: "Cancel", style: "cancel" }, { text: "Block", style: "destructive", onPress: () => void act(async () => { await call(`/chat/blocks/${selected.peer_user_id}`, { method: "POST" }); setCanSend(false); }) }]), true)}{button("Report", () => Alert.alert("Report this chat?", "Send this conversation to moderation for review.", [{ text: "Cancel", style: "cancel" }, { text: "Report", onPress: () => void act(async () => { await call(`/chat/conversations/${selected.id}/reports`, { method: "POST", body: JSON.stringify({ reason: "User reported this conversation for inappropriate messages or spam" }) }); Alert.alert("Report received", "Your report has been recorded for review."); }) }]))}</View> : undefined}/>;
     return <KeyboardFrame style={s.fill} behavior="height">{tabs}
  <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, paddingBottom: bottomInset + 20 }} refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void load()} tintColor={theme.color("#FF4747")}/>}>
  {!!error && <Pressable onPress={() => void load()}><Text style={s.error}>{error}</Text></Pressable>}
