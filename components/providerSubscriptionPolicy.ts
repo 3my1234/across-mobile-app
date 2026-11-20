@@ -1,5 +1,5 @@
 import type {TierBenefits} from "./providerTierBenefits";
-export type ProviderPlan = {id: string; name: string; amount_ngn: number; card_available?: boolean; description?: string; listing_limit?: number; post_policy?: TierBenefits; period_prices?: {duration_months: number; amount_ngn: number}[]};
+export type ProviderPlan = {id: string; code?: string; badge_tier?: string; name: string; amount_ngn: number; card_available?: boolean; description?: string; listing_limit?: number; post_policy?: TierBenefits; period_prices?: {duration_months: number; amount_ngn: number}[]};
 export type PendingProviderCheckout = {provider_id: string; tx_ref?: string; checkout_link?: string; payment_method?: 'card' | 'banktransfer'; created_at: string};
 const uuid = (value: string) => /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 export function providerCheckoutPayload(plan: ProviderPlan, months: number, method: string, redirect: string) {
@@ -40,4 +40,9 @@ export function isProviderSubscriptionReturn(raw: string) {
 export function providerPeriodPrice(plan: ProviderPlan, months: number) {
   const amount = months === 1 ? plan.amount_ngn : plan.period_prices?.find(price => price.duration_months === months)?.amount_ngn;
   return Number.isFinite(amount) && amount! > 0 ? amount : undefined;
+}
+
+export function transportPlanAllowed(provider: {is_driver?:boolean;transport_role?:string}, plan:ProviderPlan) {
+ if(!provider.is_driver) return true;
+ return provider.transport_role === 'driver' ? plan.code === 'provider-business' && plan.amount_ngn === 5000 : provider.transport_role === 'rider' ? plan.code === 'provider-growth' && plan.amount_ngn === 2500 : false;
 }

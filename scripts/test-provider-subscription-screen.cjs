@@ -24,6 +24,7 @@ const request=async(token,path,options={})=>{
  return path.endsWith('subscription-plans')?{items:[plan]}:renewal;
 };
 const context={exports:{},Error,process:{env:{EXPO_PUBLIC_DISTRIBUTION_CHANNEL:'direct'}},require:name=>{
+ if(name==='./ProviderIdentity')return {ProviderBadge:'Badge'};
  if(name==='./ProviderTierDetails')return{ProviderTierDetails:'TierDetails',ProviderTierUsage:'TierUsage'};
  if(name==='./providerTierBenefits')return{tierExplanation:'Verified provider plan benefits'};
  if(name==='react')return react;
@@ -53,6 +54,7 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  selected=context.exports.NativeProviderSubscription({token:'synthetic-owner',provider,onChanged});assert.ok(nodes(selected).some(node=>node.props.managementOnly===true),'existing direct subscribers retain cancellation without external purchase routing');
  provider.subscription={status:'inactive'};context.process.env.EXPO_PUBLIC_DISTRIBUTION_CHANNEL='direct';
  provider.verification_status='pending';render();await settle();
+ button('Billing & payments ⌄').props.onPress();await settle();button('Compare plans').props.onPress();await settle();nodes(tree).find(n=>n.type==='Button'&&text(n).includes('Basic')&&text(n).includes('/ month')).props.onPress();await settle();
  assert.equal(button('Continue: NGN 500').props.disabled,true,'unapproved provider cannot start payment');assert.ok(text(tree).includes('Provider approval is required before subscribing'));
  // Even invoking a disabled handler programmatically must not reach checkout.
  button('Continue: NGN 500').props.onPress();alert[2].find(item=>item.text==='Continue to payment').onPress();await settle();assert.equal(checkouts().length,0);assert.equal(stored,null,'approval refusal creates no pending payment marker');
@@ -98,7 +100,7 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  button('Reopen saved checkout').props.onPress();await settle();assert.equal(browserCalls.at(-1)[0],savedTransfer.checkout_link,'reopen uses the exact existing checkout');assert.equal(checkouts().length,transferCheckouts);
  paymentState='settled';const beforeReturn=confirms().length;for(const fn of appListeners){fn('active');fn('active');}await settle();assert.equal(confirms().length,beforeReturn+1,'foreground payment verification is single-flight');assert.equal(stored,null,'only server-confirmed settlement clears the saved transfer');
 
- renewal={...renewal,has_pending_checkout:true};button('Refresh billing status').props.onPress();await settle();assert.ok(nodes(tree).some(node=>node.type==='Button'&&text(node)==='Cancel unpaid checkout'),'server pending checkout recovers without local marker');
+ button('Billing & payments ⌄').props.onPress();await settle();renewal={...renewal,has_pending_checkout:true};button('Refresh billing status').props.onPress();await settle();assert.ok(nodes(tree).some(node=>node.type==='Button'&&text(node)==='Cancel unpaid checkout'),'server pending checkout recovers without local marker');
  renewal={...renewal,has_pending_checkout:false};button('Check payment status').props.onPress();await settle();
  provider.subscription={status:'active',current_period_end:'2027-01-01T00:00:00Z'};renewal={...renewal,renewal_status:'active',current_plan_id:id};render();
  button('Stop automatic renewal').props.onPress();alert[2].find(item=>item.text==='Confirm').onPress();await settle();
@@ -108,6 +110,7 @@ const checkouts=()=>calls.filter(call=>call.path.endsWith('subscription-checkout
  provider.subscription={status:'expired',current_period_end:'2020-01-01T00:00:00Z',billing_mode:'recurring'};
  button('Refresh billing status').props.onPress();await settle();render();
  assert.ok(button('Retry cancellation'),'expired uncertain subscription exposes manual reconciliation');
+ button('Compare plans').props.onPress();await settle();nodes(tree).find(n=>n.type==='Button'&&text(n).includes('Basic')&&text(n).includes('/ month')).props.onPress();await settle();
  assert.equal(button('Continue: NGN 500').props.disabled,true,'unresolved renewal cannot start replacement checkout');
  button('Retry cancellation').props.onPress();alert[2].find(item=>item.text==='Confirm').onPress();await settle();
  assert.ok(text(tree).includes('Cancellation not confirmed'),'failed reconciliation remains uncertain');

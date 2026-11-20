@@ -1,6 +1,6 @@
 export type ProviderAccount = {
   id: string; business_name: string; verification_status: string; verification_notes?: string;
-  is_active: boolean; is_driver?: boolean; contact_email?: string; contact_phone?: string;
+  is_active: boolean; is_driver?: boolean; transport_role?: '' | 'driver' | 'rider'; contact_email?: string; contact_phone?: string;
   can_sell_products?: boolean; can_offer_services?: boolean;
   description?: string; website_url?: string; address_line?: string; city?: string; state?: string; country_code?: string;
   provider_identity?: {avatar_url?: string; banner_url?: string; tier?: string};

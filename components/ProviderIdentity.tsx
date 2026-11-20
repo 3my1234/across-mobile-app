@@ -22,15 +22,16 @@ export function ProviderBadge({identity,size=18,animate=false}:{identity:Provide
  const tier=identity.verified && identity.paid_active && identity.tier && identity.tier in finishes ? identity.tier : "neutral";
  useEffect(()=>{phase.setValue(-32);if(!animate || reduce || !foreground || tier==="neutral")return;const loop=Animated.loop(Animated.timing(phase,{toValue:32,duration:6000,useNativeDriver:false}));loop.start();return()=>loop.stop();},[animate,reduce,foreground,tier,phase]);
  if(!identity.verified)return null;
+ if(tier==="neutral")return <Text accessibilityLabel="Free plan" style={{fontSize:Math.max(9,size*.52),fontWeight:"700"}}>FREE</Text>;
  const colors=finishes[tier];
- const label=identity.label || ("Verified provider - " + (tier!=="neutral" ? tier[0].toUpperCase()+tier.slice(1)+" subscription" : "Free plan"));
+ const label=identity.label || ("Verified provider - " + tier[0].toUpperCase()+tier.slice(1)+" subscription");
  return <Pressable hitSlop={8} accessibilityRole="button" accessibilityLabel={label} accessibilityHint="Explains provider verification and subscription badge" onPress={()=>Alert.alert(label,"Verification means the provider’s documents were approved. Badge colour indicates subscription tier, not service quality or a payment guarantee.")} style={{width:size,height:size,shadowColor:colors[1],shadowOpacity:.18,shadowRadius:3}}>
   <Svg width={size} height={size} viewBox="0 0 32 32">
    <Defs><LinearGradient id={`metal${uid}`} x1="0" y1="0" x2="1" y2="1"><Stop offset="0" stopColor={colors[0]}/><Stop offset=".48" stopColor={colors[1]}/><Stop offset="1" stopColor={colors[2]}/></LinearGradient>
     <AnimatedGradient id={`shine${uid}`} gradientUnits="userSpaceOnUse" x1={phase} x2={Animated.add(phase,32)} y1={0} y2={32}><Stop offset="0" stopColor="#FFFFFF" stopOpacity="0"/><Stop offset=".5" stopColor="#FFFFFF" stopOpacity=".35"/><Stop offset="1" stopColor="#FFFFFF" stopOpacity="0"/></AnimatedGradient>
    </Defs>
    <Path d={seal} fill={`url(#metal${uid})`} stroke={colors[0]} strokeWidth=".5"/>
-   {animate && !reduce && foreground && tier!=="neutral" && <Path d={seal} fill={`url(#shine${uid})`}/>}
+   {animate && !reduce && foreground && <Path d={seal} fill={`url(#shine${uid})`}/>}
    <Path d="M9.5 16.2 L14 20.5 L22.5 11.5" fill="none" stroke={tier==="bronze"?"#FFFFFF":"#20332C"} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
   </Svg>
  </Pressable>;

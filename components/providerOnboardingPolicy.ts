@@ -3,10 +3,12 @@ export const providerTypes = [
   ['property_host', 'Property and accommodation'], ['mobility_provider', 'Vehicles and roadside services'],
   ['mixed', 'Products and services'], ['other', 'Something else'],
 ] as const;
-export type ProviderApplication = {business_name: string; provider_type: string; provider_type_other: string; description: string; contact_email: string; contact_phone: string; website_url: string; address_line: string; city: string; state: string; country_code: string; is_driver: boolean};
+export type ProviderApplication = {business_name: string; provider_type: string; provider_type_other: string; description: string; contact_email: string; contact_phone: string; website_url: string; address_line: string; city: string; state: string; country_code: string; is_driver: boolean; transport_role?: string};
 export function providerApplicationPayload(form: ProviderApplication) {
   const payload = {...form};
   for (const key of Object.keys(payload) as (keyof ProviderApplication)[]) if (key !== 'is_driver') (payload[key] as string) = String(payload[key]).trim();
+  if(payload.is_driver && !["driver","rider"].includes(payload.transport_role || "")) throw Error("Choose car driver or rider.");
+  if(!payload.is_driver) payload.transport_role = "";
   payload.country_code = payload.country_code.toUpperCase();
   if (!payload.business_name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.contact_email) || !payload.contact_phone) throw new Error('Enter your business name, valid contact email and phone number.');
   if (!payload.city || !payload.state) throw new Error('Enter your business city and state / region.');
