@@ -24,7 +24,7 @@ const groups:Record<string,string[]>={
   amberSoft:["#FFF5E6","#FFF0D6","#FFF1DD","#FFFAEB","#FEDF89"],
   blue:["#52679A"]
 };
-const darkColours:Record<string,string>={surface:"#1C2522",background:"#111815",border:"#394540",text:"#F1F4F3",muted:"#B5C0BC",redSoft:"#3A2428",red:"#FF9299",green:"#75D6AF",greenSoft:"#20392F",amber:"#FFD18A",amberSoft:"#3B3021",blue:"#A7BFF4"};
+const darkColours:Record<string,string>={surface:"#101614",background:"#060A08",border:"#2A3630",text:"#F1F4F3",muted:"#B5C0BC",redSoft:"#3A2428",red:"#FF9299",green:"#75D6AF",greenSoft:"#13251C",amber:"#FFD18A",amberSoft:"#3B3021",blue:"#A7BFF4"};
 const colourGroups=new Map(Object.entries(groups).flatMap(([group,colours])=>colours.map(colour=>[colour.toUpperCase(),group] as const)));
 export function themeColor(value:string,role="color",dark=false):string {
   if(!dark || role==="shadowColor")return value;
@@ -34,7 +34,7 @@ export function themeColor(value:string,role="color",dark=false):string {
   if(role==="backgroundColor"){
     // Black image overlays, launch screens and selected controls stay dark.
     if(group==="text")return value;
-    if(group==="border")return "#29342F";
+    if(group==="border")return "#19221D";
     if(["red","green","amber","blue"].includes(group))return value;
     return darkColours[group] || value;
   }

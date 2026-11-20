@@ -18,7 +18,7 @@ export function ThemeProvider({children}:{children:React.ReactNode}) {
   const writes=useRef(Promise.resolve());
   useEffect(()=>{let alive=true; void AsyncStorage.getItem(KEY).then(value=>{if(alive && (value==="light" || value==="dark" || value==="system"))setChoice(value);}).catch(()=>{}).finally(()=>{if(alive)setReady(true);});return()=>{alive=false;};},[]);
   const dark=preference==="dark" || (preference==="system" && system==="dark");
-  useEffect(()=>{void SystemUI.setBackgroundColorAsync(dark ? "#111815" : "#F5F5F5").catch(()=>{});},[dark]);
+  useEffect(()=>{void SystemUI.setBackgroundColorAsync(dark ? "#060A08" : "#F5F5F5").catch(()=>{});},[dark]);
   function setPreference(value:ThemePreference) {
     const previous=preference, version=++revision.current;
     setChoice(value);

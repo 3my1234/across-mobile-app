@@ -46,6 +46,11 @@ async function main(){
  labeled('Remove location pin').props.onPress();let release;heldGPS=new Promise(resolve=>release=resolve);labeled('Share location pin').props.onPress();assert.equal(labeled('Share location pin').props.disabled,true);assert.equal(labeled('Attach photos').props.disabled,true);
  rn.AppState.currentState='background';release(gpsPosition);await flush();assert.equal(find(render(),n=>n.type==='Pin'),undefined,'a background return cannot install a new chat draft');rn.AppState.currentState='active';heldGPS=new Promise(resolve=>release=resolve);
  labeled('Share location pin').props.onPress();props.token='another-account';render();release(gpsPosition);await flush();assert.equal(find(render(),n=>n.type==='Pin'),undefined,'late GPS cannot become a pin for another account');heldGPS=null;
+ props.customerSafety=true;props.loading=false;props.messages=[];props.error='';
+ const wording=tree=>typeof tree==='string'?tree:tree?.children?.map(wording).join(' ')||'';
+ let card=render();assert.match(wording(card),/compare the driver's face and vehicle/);assert.match(wording(card),/Do not make any payment/);assert.match(wording(card),/Report suspected fraud/);
+ props.customerSafety=false;assert.doesNotMatch(wording(render()),/Before you proceed/,'providers do not see a customer first-contact warning');props.customerSafety=true;props.roomStyle=true;assert.doesNotMatch(wording(render()),/Before you proceed/,'Town Hall rooms are separate');props.roomStyle=false;
+ props.messages=[{id:'sent',body:'hello',sender_type:'buyer',created_at:new Date().toISOString(),is_mine:true}];assert.doesNotMatch(wording(render()),/Before you proceed/,'existing chats do not get a repeated first-contact card');
  console.log('Chat composer passed: stale/coarse GPS rejection, first-send freshness, manual map point, dialog dismissal and immutable retry after movement, with existing send/error/idempotency behavior.');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
