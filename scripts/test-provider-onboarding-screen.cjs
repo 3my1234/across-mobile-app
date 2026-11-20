@@ -30,6 +30,7 @@ async function settle() {for (let i = 0; i < 6; i++) {await new Promise(resolve 
   render(); submit().props.onPress(); await settle(); assert.equal(calls.length, 0, 'invalid business cannot be submitted');
   for (const [label, value] of [['Business name', 'Synthetic business'], ['Business contact email', 'owner@example.test'], ['Business contact phone', '+2340000000000'], ['City', 'Lagos'], ['State / region', 'Lagos']]) nodes(tree).find(n => n.props.accessibilityLabel === label).props.onChangeText(value);
   nodes(tree).find(n => n.props.accessibilityRole === 'radio').props.onPress(); nodes(tree).find(n => n.type === 'Switch').props.onValueChange(true); render();
+  nodes(tree).find(n=>n.type==='Button'&&text(n).includes('Car driver')).props.onPress();render();
   assert.match(text(tree), /Required driver\/rider documents/);assert.equal((text(tree).match(/Required:/g)||[]).length,5);assert.match(text(tree),/licence also counts as ID/);assert.ok(!/insurance|roadworthiness|LASRRA|LASDRI/i.test(text(tree)),'retired documents are not demanded during registration');
   let release; held = new Promise(resolve => {release = resolve;});
   submit().props.onPress(); submit().props.onPress(); await settle(); assert.equal(calls.length, 1, 'double tap submits once'); assert.equal(submit().props.disabled, true);

@@ -24,3 +24,10 @@ assert.throws(()=>policy.providerPaymentReturn(redirect,marker));
 assert.equal(policy.isProviderSubscriptionReturn(redirect+'?status=successful'),true);
 for(const url of ['bad','across://providers:99/subscription','across://providers/subscription/','across://user@providers/subscription'])assert.equal(policy.isProviderSubscriptionReturn(url),false);
 console.log('Provider subscription policy passed: authoritative quotes, owned recovery, safe checkout destinations and untrusted payment returns.');
+
+const transportPlans=[{code:'provider-monthly',amount_ngn:1000},{code:'provider-growth',amount_ngn:2500},{code:'provider-business',amount_ngn:5000},{code:'provider-diamond',amount_ngn:10000}];
+assert.equal(transportPlans.filter(p=>policy.transportPlanAllowed({is_driver:true,transport_role:'driver'},p)).length,1);
+assert.equal(transportPlans.filter(p=>policy.transportPlanAllowed({is_driver:true,transport_role:'rider'},p)).length,1);
+assert.equal(transportPlans.filter(p=>policy.transportPlanAllowed({is_driver:true},p)).length,0);
+assert.equal(transportPlans.filter(p=>policy.transportPlanAllowed({},p)).length,4);
+assert.equal(policy.transportPlanAllowed({is_driver:true,transport_role:'driver'},{code:'provider-business',amount_ngn:2000}),false);

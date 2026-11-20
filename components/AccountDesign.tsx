@@ -4,9 +4,9 @@ import {Ionicons} from '@expo/vector-icons';
 import {ThemedText as Text,useTheme} from './ThemeProvider';
 
 export function useAccountDesign(){const {dark}=useTheme();return {dark,
- background:dark?'#0D211B':'#EFF8F4',surface:dark?'#182F28':'#FFFFFF',
+ background:dark?'#060A08':'#EFF8F4',surface:dark?'#101614':'#FFFFFF',
  text:dark?'#F0F8F4':'#14231E',muted:dark?'#C0CEC7':'#5B6B63',
- line:dark?'#345047':'#DCECE4',soft:dark?'#1D493B':'#E3F8EF',
+ line:dark?'#2A3630':'#DCECE4',soft:dark?'#13251C':'#E3F8EF',
  accent:dark?'#69E4BB':'#087B58',danger:dark?'#FF999E':'#B42332'};}
 export function AccountIcon({name}:{name:React.ComponentProps<typeof Ionicons>['name']}){const c=useAccountDesign();return <View style={[accountDesign.icon,{backgroundColor:c.soft}]}><Ionicons name={name} size={23} color={c.accent}/></View>;}
 export function AccountSectionHeading({icon,title,subtitle}:{icon:React.ComponentProps<typeof Ionicons>['name'];title:string;subtitle?:string}){const c=useAccountDesign();return <View style={accountDesign.heading}><AccountIcon name={icon}/><View style={{flex:1,gap:3}}><Text preserveTypography style={[accountDesign.title,{color:c.text}]}>{title}</Text>{!!subtitle&&<Text style={[accountDesign.body,{color:c.muted}]}>{subtitle}</Text>}</View></View>;}

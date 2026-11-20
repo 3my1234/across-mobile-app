@@ -75,8 +75,16 @@ export function PlayProviderSubscription({token, provider, onChanged}: {token: s
       })().catch(() => {action.current = false; if (alive.current) {setBusy(''); setError('Checkout did not complete. Restore purchases before paying again.');}});
     }}]);
   };
+  const chooseTransport = async(role:'driver'|'rider')=>{
+    if(action.current)return;action.current=true;setBusy(role);setError('');
+    try{await providerRequest(token,'/providers/me/transport-role',{method:'POST',body:JSON.stringify({transport_role:role})});await onChanged();await refresh();}
+    catch(failure){if(alive.current)setError(failure instanceof Error?failure.message:'Could not save transport type. Refresh before retrying.');}
+    finally{action.current=false;if(alive.current)setBusy('');}
+  };
   const button = (label: string, id: string, onPress: () => void, disabled = false) => <Pressable accessibilityRole="button" accessibilityState={{busy: busy === id, disabled: !!busy || disabled}} disabled={!!busy || disabled} onPress={onPress} style={({pressed}) => ({padding: 14, borderRadius: 12, borderWidth: 1, borderColor: c.line, backgroundColor: pressed ? c.soft : c.surface, opacity: disabled ? .5 : 1})}><Text style={{color: c.accent, fontWeight: '700'}}>{label}</Text>{busy === id && <ActivityIndicator/>}</Pressable>;
   return <View style={{gap: 12}}>
+    {provider.is_driver && !provider.transport_role && <View style={{padding:14,gap:10,borderRadius:14,borderWidth:1,borderColor:c.line}}><Text style={{fontWeight:'700'}}>Choose your transport type</Text><Text>This sets your next purchase options. Existing paid access stays unchanged. Contact Support for later corrections.</Text>{(['driver','rider'] as const).map(role=><View key={role}>{button(role==='driver'?'Car driver · ₦5,000/month':'Rider · ₦2,500/month',role,()=>Alert.alert('Confirm transport type','Monthly or discounted annual access. Your existing paid period stays unchanged.',[{text:'Cancel',style:'cancel'},{text:'Confirm',onPress:()=>void chooseTransport(role)}]))}</View>)}</View>}
+
     <Text>Provider subscriptions through Google Play</Text>
     <Text>{hasPaidProviderAccess(provider) ? `Your paid access ends ${new Date(provider.subscription!.current_period_end!).toLocaleString()}.` : 'No current paid access. Your existing conversations remain available.'}</Text>
     {catalog?.state && <Text>{catalog.auto_renews ? 'Automatic renewal is on in Google Play.' : 'Google Play automatic renewal is off or this purchase is inactive.'}</Text>}
