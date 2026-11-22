@@ -6,6 +6,7 @@ import {openDiscovery,recordDiscoveryDetail,recordDiscoveryContact} from './disc
 import type {Product} from './types';
 import {ListingMediaGallery} from "./ListingMediaGallery";
 import {NearbyDrivers} from './NearbyDrivers';
+import * as Notifications from 'expo-notifications';
 import type {ChatLocation} from './chatLocation';
 import {ProviderProfileHeader, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {providerChatHistory} from "./chatHistoryCache";
@@ -555,9 +556,10 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
       try{if(conversationRef.current?.id)await threadLoader.current(conversationRef.current,"",true);else if(mode==="messages")await loadConversations(true);else if(mode==="requests")await loadRequests(true);}
       finally{busy=false;}
     };
-    const timer=setInterval(()=>void refresh(),5000);
+    const timer=setInterval(()=>void refresh(),selectedConversation?.id?5000:30000);
     const foreground=AppState.addEventListener("change",state=>{if(state==="active")void refresh();});
-    return()=>{stopped=true;clearInterval(timer);foreground.remove();};
+    const push=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(AppState.currentState==='active'&&conversationRef.current?.id&&data?.conversation_id===conversationRef.current.id)void refresh();});
+    return()=>{stopped=true;clearInterval(timer);foreground.remove();push.remove();};
   },[active,token,mode,selectedConversation?.id,authHeaders,loadConversations,loadRequests]);
 
   async function openListing(item: Listing) {
@@ -747,7 +749,7 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
       </View>
       {mode === "explore" ? (
         <>
-          <Pressable accessibilityLabel="Find available drivers and couriers nearby" onPress={()=>{if(!token){Alert.alert("Sign in","Sign in to find nearby drivers.");return;}setShowDrivers(true);}} style={{padding:12,backgroundColor:theme.dark?"#173E32":"#D9F2E8",borderRadius:16,marginHorizontal:12,marginTop:8}}><Text style={{fontWeight:"700"}}>🚗 Drivers nearby · Find a ride</Text></Pressable>
+          <Pressable accessibilityLabel="Find available drivers and couriers nearby" onPress={()=>{if(!token){Alert.alert("Sign in","Sign in to find nearby drivers.");return;}setShowDrivers(true);}} style={{padding:12,backgroundColor:theme.dark?"#13251C":"#D9F2E8",borderRadius:16,marginHorizontal:12,marginTop:8}}><Text style={{fontWeight:"700"}}>🚗 Drivers nearby · Find a ride</Text></Pressable>
           <View style={styles.searchTools}>
             <View style={styles.search}><Ionicons name="search" size={18} color={theme.color("#777")} /><TextInput value={search} onChangeText={setSearch} placeholder="Search services" style={styles.searchInput} returnKeyType="search" /></View>
             <Pressable hitSlop={4} accessibilityLabel={nearby ? "Refresh my location" : "Find services near me"} style={[styles.nearbyButton, nearby && styles.nearbyButtonActive]} onPress={() => void refreshNearby()}><Ionicons name={nearby ? "refresh" : "location-outline"} size={16} color={theme.color(nearby ? "#FFFFFF" : "#FF4747")} /><Text maxFontSizeMultiplier={1.2} style={[styles.nearbyText, nearby && styles.nearbyTextActive]}>Near me</Text></Pressable>

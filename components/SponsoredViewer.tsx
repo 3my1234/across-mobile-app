@@ -42,7 +42,7 @@ function AdVideo({uri,muted,onError,cached=false,playing=true}:{uri:string;muted
  useEffect(()=>{if(playing)player.play();else player.pause();},[player,playing]);
  return <><VideoView player={player} style={StyleSheet.absoluteFill} contentFit="contain" nativeControls={false} allowsPictureInPicture={false}/>{loading&&<ActivityIndicator color="#75FFCB" style={StyleSheet.absoluteFill}/>}</>;
 }
-export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,market}:{market:{country:string;state?:string;city?:string;search?:string};cards:DiscoveryCard[];selected:DiscoveryCard;token:string|null;active:boolean;onClose:()=>void;onDetails:(card:DiscoveryCard)=>void}) {
+export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,market,entry=false}:{market:{country:string;state?:string;city?:string;search?:string};cards:DiscoveryCard[];selected:DiscoveryCard;token:string|null;active:boolean;onClose:()=>void;onDetails:(card:DiscoveryCard)=>void;entry?:boolean}) {
  // Snapshot the eligible row so catalogue refreshes cannot move the ad under a finger.
  const [feed,setFeed]=useState(()=>sponsoredCards(cards,selected));
  const [cacheReady,setCacheReady]=useState<boolean|null>(null);
@@ -121,7 +121,7 @@ export function SponsoredViewer({cards,selected,token,active,onClose,onDetails,m
     </View>
    </View>}/>}
    <View style={[styles.header,{top:inset.top+8}]}>
-    <Pressable accessibilityRole="button" accessibilityLabel="Back to catalogue" onPress={close} style={styles.icon}><Ionicons name="chevron-back" size={28} color="#FFF"/></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={entry?'Go to Home':'Back to catalogue'} onPress={close} style={styles.icon}><Ionicons name={entry?'home-outline':'chevron-back'} size={entry?22:28} color="#FFF"/>{entry&&<Text style={{color:'#FFF',fontSize:10}}>Home</Text>}</Pressable>
     <Text style={[styles.title,{flex:1,fontSize:18}]}>Sponsored {selected.kind==='product'?'products':'services'}</Text>
     {!!sponsoredVideo(card)&&<><Pressable accessibilityRole="button" accessibilityLabel={paused?'Play video':'Pause video'} onPress={()=>setPaused(value=>!value)} style={styles.icon}><Ionicons name={paused?'play':'pause'} size={22} color="#FFF"/></Pressable><Pressable accessibilityRole="button" accessibilityLabel={muted?'Unmute video':'Mute video'} onPress={()=>setSound({id:card.id,muted:!muted})} style={styles.icon}><Ionicons name={muted?'volume-mute':'volume-high'} size={22} color="#FFF"/></Pressable></>}
    </View>

@@ -47,13 +47,13 @@ const loading=callbacks.find(n=>n.getText(marketplace).includes('const timer = s
 const polling=callbacks.find(n=>n.getText(marketplace).includes('let stopped=false, busy=false'));
 assert.ok(loading);assert.ok(polling);
 let calls=0,subscriptions=0,next=0;const timers=new Map();
-const context={active:false,token:'buyer',mode:'explore',chatBusy:{current:false},threadInFlight:{current:false},conversationRef:{current:null},threadLoader:{current:async()=>{}},
+const context={active:false,token:'buyer',mode:'explore',selectedConversation:null,chatBusy:{current:false},threadInFlight:{current:false},conversationRef:{current:null},threadLoader:{current:async()=>{}},
  loadListings:()=>calls++,loadRequests:()=>calls++,loadConversations:()=>calls++,
  setTimeout:fn=>{timers.set(++next,fn);return next;},clearTimeout:id=>timers.delete(id),setInterval:fn=>{timers.set(++next,fn);return next;},clearInterval:id=>timers.delete(id),
- AppState:{currentState:'active',addEventListener:()=>{subscriptions++;return{remove(){subscriptions--;}};}}};
+ AppState:{currentState:'active',addEventListener:()=>{subscriptions++;return{remove(){subscriptions--;}};}},Notifications:{addNotificationReceivedListener:()=>{subscriptions++;return{remove(){subscriptions--;}};}}};
 function effect(node){return vm.runInNewContext(compile('('+node.getText(marketplace)+')'),context)();}
 assert.equal(effect(loading),undefined);assert.equal(effect(polling),undefined);assert.equal(timers.size,0);assert.equal(subscriptions,0);assert.equal(calls,0);
-context.active=true;const cleanLoad=effect(loading),cleanPoll=effect(polling);assert.equal(timers.size,2);assert.equal(subscriptions,1);
+context.active=true;const cleanLoad=effect(loading),cleanPoll=effect(polling);assert.equal(timers.size,2);assert.equal(subscriptions,2);
 timers.values().next().value();assert.equal(calls,1,'visible services still load');
 cleanLoad();cleanPoll();assert.equal(timers.size,0);assert.equal(subscriptions,0,'leaving the tab removes polling and foreground listeners');
 context.active=false;effect(loading);effect(polling);assert.equal(timers.size,0);

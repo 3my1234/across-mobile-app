@@ -1,3 +1,6 @@
+import {ProviderBadge} from './components/ProviderIdentity';
+import {providerRequest} from './components/nativeProviderApi';
+import type {ProviderAccount} from './components/nativeProviderPolicy';
 import {NotificationBell,NotificationPopover} from './components/NotificationPopover';
 import {jobLinkID} from './components/jobsApi';
 import {googleSessionRequest} from './components/googleSessionRequest';
@@ -5,6 +8,7 @@ import {chooseLibraryMedia} from './components/mediaLibraryPicker';
 import {KeyboardScrollView as ScrollView} from './components/KeyboardScroll';
 import {DriverPresenceNotice,useDriverPresenceLifecycle} from './components/DriverPresenceNotice';
 import {DiscoverySections} from './components/DiscoverySections';
+import {CustomerEntryAds} from './components/CustomerEntryAds';
 import {AccountDeletionRequest} from './components/AccountDeletionRequest';
 import {openDiscovery,DiscoveryCard} from './components/discoveryClient';
 import {NativeReferrals} from './components/NativeReferrals';
@@ -161,6 +165,7 @@ function AcrossApp() {
   const [referralCode,setReferralCode] = useState("");
   const [showReferrals,setShowReferrals] = useState(false);
   const [workspaceIntent, setWorkspaceIntent] = useState<WorkspaceIntent>("auto");
+  const [showCustomerEntryAds, setShowCustomerEntryAds] = useState(false);
   const googleWorkspaceIntent = useRef<WorkspaceIntent>('auto');
   const googleVerificationInFlight = useRef<AuthAttempt | null>(null);
   const [workspaceEntryToken, setWorkspaceEntryToken] = useState<string | null>(null);
@@ -323,6 +328,8 @@ function AcrossApp() {
   const [editingProfile, setEditingProfile] = useState(false);
   const editingProfileRef = useRef(editingProfile); editingProfileRef.current = editingProfile;
   const [profileName, setProfileName] = useState("");
+  const [accountProvider,setAccountProvider]=useState<{token:string;provider:ProviderAccount}|null>(null);
+  useEffect(()=>{let current=true; setAccountProvider(null); if(token && activeTab==='account' && !providerWorkspaceVisible) void providerRequest(token,'/providers/me').then(provider=>{if(current)setAccountProvider({token,provider});}).catch(()=>{}); return()=>{current=false;};},[token,activeTab,providerWorkspaceVisible]);
   const [profilePhone, setProfilePhone] = useState("");
   const [profileRegion, setProfileRegion] = useState("");
   const [profileAddress, setProfileAddress] = useState("");
@@ -1924,7 +1931,7 @@ function AcrossApp() {
   if (stage === "booting") return <LaunchScreen />;
 	if (stage === "auth") return <AuthScreen referralCode={referralCode} onReferralCode={setReferralCode} workspaceIntent={workspaceIntent} onWorkspaceIntent={setWorkspaceIntent} mode={authMode} countryCode={catalogCountry} buyerMarkets={buyerMarkets} onCountryChange={setSelectedMarketCountry} busy={busy} googleReady={privyReady && !googleSessionClearing} googleTimedOut={googleInitTimedOut} googleBusy={oauthBusy} noticeText={countryNotice} loginNotice={loginNotice} onCancelLogin={cancelPasswordLogin} onModeChange={mode => { if (oauthBusy) return; cancelPasswordLogin(); if (!authAttempts.current.pending) setAuthMode(mode); }} onSubmit={authenticate} onResend={resendVerification} onForgotPassword={requestPasswordReset} onGoogle={authenticateWithGoogle} />;
 
-  if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (provider && notificationNavigationRequest.current === workspaceEntryNavigation.current.request) setProviderWorkspaceVisible(true);}}/>;
+  if (stage === 'app' && token && workspaceEntryToken !== token) return <ProviderEntryGate key={token} token={token} intent={workspaceIntent} onResolved={provider => {if (sessionTokenRef.current !== token) return; setWorkspaceEntryToken(token); if (notificationNavigationRequest.current === workspaceEntryNavigation.current.request) {if(provider)setProviderWorkspaceVisible(true);else setShowCustomerEntryAds(true);}}}/>;
 
   const LOGO_FULL_HEIGHT = 52;
   const logoHeight = scrollY.interpolate({ inputRange: [0, LOGO_FULL_HEIGHT], outputRange: [LOGO_FULL_HEIGHT, 0], extrapolate: "clamp" });
@@ -2032,7 +2039,7 @@ function AcrossApp() {
                 : <View style={[s.accountAvatar,{backgroundColor:accountColors.dark?"#174B39":"#14533D",borderWidth:2,borderColor:accountColors.accent}]}><Text style={{fontSize:25,fontWeight:"700",color:"#FFF"}}>{(profileName||"A").slice(0,1).toUpperCase()}</Text></View>}
               </Pressable>
               <View style={{ flex: 1 }}>
-                <Text preserveTypography style={s.accountName}>{profileName || "Atlantic Express buyer"}</Text>
+                <View style={{flexDirection:"row",alignItems:"center",gap:7}}><Text preserveTypography style={[s.accountName,{flexShrink:1}]}>{profileName || "Atlantic Express buyer"}</Text>{accountProvider?.token===token && accountProvider.provider.provider_identity && <ProviderBadge identity={accountProvider.provider.provider_identity} size={22}/>}</View>
                 <Text style={s.accountMeta}>{profileRegion || "Nigeria"} · {profilePhone || "Add phone"}</Text>
               </View>
               <Pressable accessibilityLabel="Open settings" onPress={()=>setShowSettings(true)} style={{padding:10}}><Ionicons name="settings-outline" size={24} color={theme.color("#12805F")}/></Pressable>
@@ -2265,7 +2272,8 @@ function AcrossApp() {
           {token && <AccountDeletionRequest key={token} token={token} onOpenSupport={()=>{setProviderToolReturn(null);setShowSettings(false);setSelectedTicket(null);setTicketMessages([]);setSupportCursor('');setActiveTab('support');}}/>}
           <Pressable style={[accountDesign.action,{borderColor:accountColors.danger,backgroundColor:accountColors.dark?'#382329':'#FFF0F1'}]} onPress={()=>{setShowSettings(false);void logout();}}><Ionicons name="log-out-outline" size={21} color={accountColors.danger}/><Text style={{fontWeight:'700',color:accountColors.danger}}>Sign out</Text></Pressable>
         </ScrollView></View></Modal>
-      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} notificationUnreadCount={unreadCount} onNotificationReadAll={()=>{void loadNotifications(token);}} route={providerWorkspaceRoute} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderToolReturn({token,route:'view=more'});setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{setProviderToolReturn({token,route:'view=more'});void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {providerWorkspaceVisible&&token&&<ProviderWorkspace key={token} token={token} notificationUnreadCount={unreadCount} onNotificationReadAll={()=>{void loadNotifications(token);}} route={providerWorkspaceRoute} onOpenNotification={notification=>{void openNotification(notification);}} onClose={()=>{setProviderWorkspaceVisible(false);setActiveTab('home');setShowCustomerEntryAds(true);void loadProfile(token);}} onSignedOut={()=>void logout()} onOpenSettings={()=>{setProviderToolReturn({token,route:'view=more'});setProviderWorkspaceVisible(false);setActiveTab('account');setShowSettings(true);}} onOpenSupport={ticketId=>{setProviderToolReturn({token,route:'view=more'});void openNotification({notification_type:'ticket_reply',ticket_id:ticketId});}}/>}
+      {!providerWorkspaceVisible&&token&&showCustomerEntryAds&&<CustomerEntryAds key={token} token={token} market={{country:catalogCountry,state:catalogState,city:catalogCity}} onClose={()=>setShowCustomerEntryAds(false)} onDetails={openDiscoveryCard}/>}
       {showReferrals&&token&&<NativeReferrals key={token} token={token} onClose={()=>setShowReferrals(false)} onOpenXP={()=>{setShowReferrals(false);void openNotification({notification_type:"xp_earned"});}}/>}
     </View>
   );

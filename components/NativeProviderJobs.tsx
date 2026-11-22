@@ -29,22 +29,31 @@ export function NativeProviderJobs({ token, onClose, onNavigationGuard }: {
     const [busy, setBusy] = useState(false), [loading, setLoading] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
     const live = useRef(true), epoch = useRef(0), mutation = useRef(false);
     useEffect(() => { live.current = true; return () => { live.current = false; epoch.current++; }; }, []);
-    const load = useCallback(async (next = '') => { const version = ++epoch.current; setLoading(true); try {
-        const [data, allowance] = await Promise.all([jobsRequest(token, `/providers/me/jobs?status=${tab}&limit=25${next ? `&cursor=${encodeURIComponent(next)}` : ''}`), jobsRequest(token, '/providers/me/jobs/allowance')]);
-        if (live.current && version === epoch.current) {
-            setItems(old => next ? [...old, ...data.items.filter((j: Job) => !old.some(x => x.id === j.id))] : data.items);
-            setCursor(data.next_cursor || '');
-            setLimits(allowance);
+    const load = useCallback(async (next = '') => {
+        const version = ++epoch.current;
+        setLoading(true);
+        // List and allowance are independent reads: a slow allowance must not hide jobs.
+        const allowance = jobsRequest(token, '/providers/me/jobs/allowance').then(value => {
+            if (live.current && version === epoch.current) setLimits(value);
+        }).catch(() => {
+            if (live.current && version === epoch.current) {
+                setLimits(null);
+                setError('Job allowance could not load. Refresh before publishing.');
+            }
+        });
+        try {
+            const data = await jobsRequest(token, `/providers/me/jobs?status=${tab}&limit=25${next ? `&cursor=${encodeURIComponent(next)}` : ''}`);
+            if (live.current && version === epoch.current) {
+                setItems(old => next ? [...old, ...data.items.filter((j: Job) => !old.some(x => x.id === j.id))] : data.items);
+                setCursor(data.next_cursor || '');
+            }
+        } catch (e) {
+            if (live.current && version === epoch.current) setError(e instanceof Error ? e.message : 'Could not load jobs');
+        } finally {
+            if (live.current && version === epoch.current) setLoading(false);
         }
-    }
-    catch (e) {
-        if (live.current && version === epoch.current)
-            setError(e instanceof Error ? e.message : 'Could not load jobs');
-    }
-    finally {
-        if (live.current && version === epoch.current)
-            setLoading(false);
-    } }, [token, tab]);
+        void allowance;
+    }, [token, tab]);
     useEffect(() => { void load(); return () => { epoch.current++; }; }, [load]);
     useEffect(() => { const sub = AppState.addEventListener('change', state => { if (state === 'active')
         void load(); }); return () => sub.remove(); }, [load]);

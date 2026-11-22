@@ -3,7 +3,7 @@ export type ProviderAccount = {
   is_active: boolean; is_driver?: boolean; transport_role?: '' | 'driver' | 'rider'; contact_email?: string; contact_phone?: string;
   can_sell_products?: boolean; can_offer_services?: boolean;
   description?: string; website_url?: string; address_line?: string; city?: string; state?: string; country_code?: string;
-  provider_identity?: {avatar_url?: string; banner_url?: string; tier?: string};
+  provider_identity?: {id?:string; name:string; avatar_url?:string; banner_url?:string; verified:boolean; paid_active?:boolean; tier?:''|'bronze'|'silver'|'gold'|'diamond'; label?:string};
   subscription?: {status: string; current_period_end?: string; billing_mode?: string; billing_provider?: 'flutterwave' | 'google_play'};
 };
 export const verificationKinds = [

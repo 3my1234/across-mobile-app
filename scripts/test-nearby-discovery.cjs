@@ -33,7 +33,7 @@ function press(label){const button=nodes(tree).find(n=>n.type==='Button'&&(text(
  now+=3000;timers.find(t=>t.ms===1000).fn();await settle();assert.equal(nodes(tree).find(n=>n.type==='List').props.data.length,0,'expired results vanish even between network polls');
  nodes(row).find(n=>n.props.accessibilityLabel==='View service and message Local driver').props.onPress();await settle();assert.deepEqual(opened,['driver'],'stale row tap cannot open an expired provider');
  const empty=nodes(tree).find(n=>n.type==='List').props.ListEmptyComponent;nodes(empty).find(n=>n.type==='Button').props.onPress();assert.equal(closed,1,'empty state keeps the route back to ordinary services');
- appState.currentState='background';listener('background');await settle();const count=requests.length;for(const t of timers.filter(t=>t.ms===10000))t.fn();await settle();assert.equal(requests.length,count,'no nearby polling in background');
+ appState.currentState='background';listener('background');await settle();const count=requests.length;for(const t of timers.filter(t=>t.ms===5000))t.fn();await settle();assert.equal(requests.length,count,'no nearby polling in background');
  // A deliberately selected pickup remains pinned after travel/backgrounding.
  const manualCalls=gpsCalls;gpsPoint={latitude:9.2,longitude:7.6};appState.currentState='active';listener('active');await settle();assert.equal(gpsCalls,manualCalls,'manual pickup must not be replaced by phone GPS');query=new URL(requests.at(-1).url).searchParams;assert.equal(query.get('latitude'),'9.08');
  // Phone-location searches must reacquire GPS on foreground, not reuse the previous town.
@@ -50,7 +50,7 @@ function press(label){const button=nodes(tree).find(n=>n.type==='Button'&&(text(
  // A late GPS result cannot overwrite a new manually selected pickup.
  let lateGPS;pendingGPS=new Promise(resolve=>{lateGPS=resolve;});press('Use my location');await settle();press('Choose pickup on map');await settle();nodes(tree).find(n=>n.type==='Map').props.onChoose({latitude:8.9,longitude:7.3});await settle();lateGPS({coords:{latitude:10,longitude:8}});pendingGPS=null;await settle();query=new URL(requests.at(-1).url).searchParams;assert.equal(query.get('latitude'),'8.9','late GPS must not overwrite a manual pin');
  // Discovery must update while staying on this screen: OFF -> ON -> OFF -> ON.
- const poll=async()=>{const timer=timers.find(t=>t.ms===10000);assert.ok(timer,'visible discovery polls every ten seconds');timer.fn();await settle();};
+ const poll=async()=>{const timer=timers.find(t=>t.ms===5000);assert.ok(timer,'visible discovery polls every five seconds');timer.fn();await settle();};
  const resultRows=()=>nodes(tree).find(n=>n.type==='List').props.data;
  driverOnline=false;await poll();assert.equal(resultRows().length,0);
  driverOnline=true;freshFor=120;await poll();assert.equal(resultRows().length,1,'driver appears without leaving nearby');
@@ -72,5 +72,5 @@ function press(label){const button=nodes(tree).find(n=>n.type==='Button'&&(text(
  press('Use my location');await settle();active=false;render();await settle();let finishTabGPS;pendingGPS=new Promise(resolve=>{finishTabGPS=resolve;});const beforeTab=requests.length;
  active=true;render();await settle();assert.equal(requests.length,beforeTab,'do not search the old pickup while tab GPS is pending');
  finishTabGPS({coords:{...gpsPoint}});pendingGPS=null;await settle();assert.equal(requests.length,beforeTab+1,'same-coordinate GPS completion still triggers one fresh search');assert.equal(resultRows().length,1);
- hooks.forEach(h=>h?.cleanup?.());assert.equal(timers.length,0);console.log('Nearby discovery passed: online/offline transitions, visible-only ten-second polling, immediate tab return, late-response rejection, search TTL on failed refresh, compact real-photo rows, initials fallback, staged filters/Android dismissal, GPS/manual pickup, existing contact route, transient refresh continuity, expiry/stale taps and background cleanup.');
+ hooks.forEach(h=>h?.cleanup?.());assert.equal(timers.length,0);console.log('Nearby discovery passed: online/offline transitions, visible-only five-second polling, immediate tab return, late-response rejection, search TTL on failed refresh, compact real-photo rows, initials fallback, staged filters/Android dismissal, GPS/manual pickup, existing contact route, transient refresh continuity, expiry/stale taps and background cleanup.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

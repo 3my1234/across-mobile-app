@@ -2,6 +2,7 @@ import type {ChatLocation} from './chatLocation';
 import {providerChatHistory} from "./chatHistoryCache";
 import React,{useEffect,useRef,useState} from "react";
 import {AppState} from "react-native";
+import * as Notifications from 'expo-notifications';
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {API_URL} from "./config";
 import {fetchHistoryJSON,fetchJSONWithTimeout} from "./utils";
@@ -51,9 +52,10 @@ export function ProductSellerChat({product,token,onClose,service=false}:{product
  }
  useEffect(()=>{
   alive.current=true;if(cached.current){setMessages(cached.current.messages);setCursor(cached.current.cursor);}void load();
-  const timer=setInterval(()=>{if(AppState.currentState==="active")void load("",true);},15000);
+  const timer=setInterval(()=>{if(AppState.currentState==="active")void load("",true);},5000);
   const foreground=AppState.addEventListener("change",state=>{if(state==="active")void load("",true);});
-  return()=>{alive.current=false;invalidate();clearInterval(timer);foreground.remove();};
+  const push=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(AppState.currentState==='active'&&conversation.current&&data?.conversation_id===conversation.current)void load('',true);});
+  return()=>{alive.current=false;invalidate();clearInterval(timer);foreground.remove();push.remove();};
  // Product/token changes remount this component and discard the private state.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);

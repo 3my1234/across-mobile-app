@@ -4,7 +4,7 @@ import {SafeAreaView} from 'react-native-safe-area-context';
 import {Ionicons} from '@expo/vector-icons';
 import {currentForegroundLocation} from './foregroundLocation';
 import {ThemedText as Text,useTheme} from './ThemeProvider';
-import {ProviderIdentityData} from './ProviderIdentity';
+import {ProviderBadge,ProviderIdentityData} from './ProviderIdentity';
 import {ResilientImage} from './ResilientImage';
 import {NativeProviderLocationPicker} from './NativeProviderLocationPicker';
 import {nearbyFreshUntil,TransportKind} from './transportServices';
@@ -36,11 +36,11 @@ export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;a
    try{const query=new URLSearchParams({latitude:String(pin.latitude),longitude:String(pin.longitude),radius_km:String(radius),kind});const{response,body}=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/drivers/nearby?${query}`,{cache:'no-store',headers:{Authorization:`Bearer ${token}`}},8000);if(!response.ok)throw Object.assign(Error(body.message||'Nearby providers could not load.'),{status:response.status});if(alive&&screenActive.current&&AppState.currentState==='active'){const received=Date.now(),searchTTL=Number.isFinite(body.expires_in)?Math.max(0,Math.min(30,body.expires_in)):30;setItems((body.items||[]).map((item:Driver)=>({...item,received,freshUntil:nearbyFreshUntil(Math.min(item.fresh_for_seconds,searchTTL),started,received)})));setChecked(true);}}
    catch(e){if(alive){if(e&&typeof e==='object'&&'status' in e&&[401,403].includes(Number(e.status)))setItems([]);setError(e instanceof Error?e.message:'Please retry.');}}
    finally{flight=false;if(alive)setBusy(false);}}
-  void load();const timer=setInterval(()=>void load(),10000);return()=>{alive=false;clearInterval(timer);};
+  void load();const timer=setInterval(()=>void load(),5000);return()=>{alive=false;clearInterval(timer);};
  },[token,active,foreground,pickup?.latitude,pickup?.longitude,kind,radius,reload]);
  useEffect(()=>{if(!active)return;const listener=AppState.addEventListener('change',state=>{if(!screenActive.current)return;setSafetyDriver(null);setMap(false);setFilters(false);setForeground(state==='active');setItems([]);setChecked(false);setBusy(false);gpsSequence.current++;gps.current='';if(pickupMode.current==='gps'){setPickup(null);if(state==='active')void locate();}else if(state==='active')setReload(n=>n+1);});return()=>listener.remove();},[token,active]);
  useEffect(()=>{if(!active||!foreground)return;setNow(Date.now());const tick=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(tick);},[active,foreground]);
- const colors={surface:theme.dark?'#102D25':'#FFFFFF',panel:theme.dark?'#0E3329':'#E8F6EF',border:theme.dark?'#335B4E':'#C5DED2',muted:theme.dark?'#AFC5BB':'#50695D',accent:theme.dark?'#50E3AF':'#007C55',background:theme.dark?'#081E17':'#F3F8F5'};
+ const colors={surface:theme.dark?'#101614':'#FFFFFF',panel:theme.dark?'#13251C':'#E8F6EF',border:theme.dark?'#2A3630':'#C5DED2',muted:theme.dark?'#AFC5BB':'#50695D',accent:theme.dark?'#50E3AF':'#007C55',background:theme.dark?'#060A08':'#F3F8F5'};
  const visible=active&&foreground?items.filter(item=>item.freshUntil>now):[];
  const selected=transports.find(([value])=>value===kind)!;
  function openFilters(){setDraftKind(kind);setDraftRadius(radius);setFilters(true);}
@@ -80,7 +80,7 @@ export function NearbyDrivers({token,onClose,onOpen,active=true}:{token:string;a
        <View style={[styles.avatar,{backgroundColor:colors.panel}]}>{identity?.avatar_url?<ResilientImage uri={identity.avatar_url} fallbackUri="" contentFit="cover" style={styles.photo}/>:<Text style={[styles.initial,{color:colors.accent}]}>{name.trim().slice(0,1).toUpperCase()}</Text>}</View>
        {identity?.verified&&<View style={[styles.verified,{borderColor:colors.surface}]}><Ionicons name="checkmark" size={10} color="#FFFFFF"/></View>}
       </View>
-      <View style={styles.flex}><Text numberOfLines={1} style={styles.bold}>{name}</Text><Text numberOfLines={1} style={[styles.caption,{color:colors.muted}]}>{serviceLabel}</Text><View style={styles.distance}><Ionicons name="location-outline" size={12} color={colors.muted}/><Text numberOfLines={1} style={[styles.caption,{color:colors.muted}]}>{distance}</Text></View></View>
+      <View style={styles.flex}><View style={{flexDirection:'row',alignItems:'center',gap:6}}><Text numberOfLines={1} style={[styles.bold,{flexShrink:1}]}>{name}</Text>{identity&&<ProviderBadge identity={identity}/>}</View><Text numberOfLines={1} style={[styles.caption,{color:colors.muted}]}>{serviceLabel}</Text><View style={styles.distance}><Ionicons name="location-outline" size={12} color={colors.muted}/><Text numberOfLines={1} style={[styles.caption,{color:colors.muted}]}>{distance}</Text></View></View>
      </Pressable>
      <View style={styles.driverAction}><Pressable accessibilityRole="button" accessibilityLabel={`View service and message ${name}`} onPress={()=>openDriver(item)} style={[styles.message,styles.outline,{borderColor:colors.accent}]}><Ionicons name="chatbubble-ellipses-outline" size={15} color={colors.accent}/><Text style={[styles.controlText,{color:colors.accent}]}>View & chat</Text></Pressable><View accessible accessibilityLabel={`Available nearby${identity?.verified?', verified provider':''}`} style={styles.available}><View style={styles.dot}/><Text style={[styles.caption,{color:colors.muted}]}>Available</Text></View></View>
     </View>;
