@@ -9,6 +9,7 @@ import {KeyboardScrollView as ScrollView} from './components/KeyboardScroll';
 import {DriverPresenceNotice,useDriverPresenceLifecycle} from './components/DriverPresenceNotice';
 import {DiscoverySections} from './components/DiscoverySections';
 import {CustomerEntryAds} from './components/CustomerEntryAds';
+import {subscribeRealtime} from './components/realtimeClient';
 import {AccountDeletionRequest} from './components/AccountDeletionRequest';
 import {openDiscovery,DiscoveryCard} from './components/discoveryClient';
 import {NativeReferrals} from './components/NativeReferrals';
@@ -617,6 +618,8 @@ function AcrossApp() {
     void registerPushNotifications(token);
     void pollBuyerActivity(token);
     const interval = setInterval(() => { if (AppState.currentState === "active") { void pollBuyerActivity(token); void registerPushNotifications(token); } }, 60000);
+    let realtimeTimer:ReturnType<typeof setTimeout>|null=null;
+    const realtime=subscribeRealtime(token,notice=>{if(notice==='disconnected'||realtimeTimer)return;realtimeTimer=setTimeout(()=>{realtimeTimer=null;void pollBuyerActivity(token);},1000);});
     const pushForeground = AppState.addEventListener("change", next => { if (next === "active") void registerPushNotifications(token, undefined, true); });
     const received = Notifications.addNotificationReceivedListener(notification => {
       const data = notification.request.content.data;
@@ -638,6 +641,8 @@ function AcrossApp() {
     }).catch(() => {});
     return () => {
       clearInterval(interval);
+      if(realtimeTimer)clearTimeout(realtimeTimer);
+      realtime();
       pushForeground.remove();
       received.remove();
       responded.remove();

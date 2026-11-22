@@ -3,27 +3,29 @@ import {providerChatHistory} from "./chatHistoryCache";
 import React,{useEffect,useRef,useState} from "react";
 import {AppState} from "react-native";
 import * as Notifications from 'expo-notifications';
+import {subscribeRealtime} from './realtimeClient';
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {API_URL} from "./config";
 import {fetchHistoryJSON,fetchJSONWithTimeout} from "./utils";
 import {Product} from "./types";
 import {mergeChatMessages} from "./chatImages";
+import {catchUpChat} from './chatCatchup';
 import {ProviderConversation,ProviderMessage} from "./ProviderConversation";
 
 export function ProductSellerChat({product,token,onClose,service=false}:{product:Pick<Product,'id'|'title'|'provider_name'|'provider_identity'>;token:string;onClose:()=>void;service?:boolean}) {
  const inset=useSafeAreaInsets();
- const [messages,setMessages]=useState<ProviderMessage[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(""),[cursor,setCursor]=useState(""),[paused,setPaused]=useState(false);
+ const [messages,setMessages]=useState<ProviderMessage[]>([]),[busy,setBusy]=useState(false),[loading,setLoading]=useState(true),[error,setError]=useState(""),[cursor,setCursor]=useState(""),[paused,setPaused]=useState(false),[realtimeReady,setRealtimeReady]=useState(false);
  const etag=useRef("");
  const cached=useRef(providerChatHistory.get(token,`${service?'service':'product'}:${product.id}`));
- const alive=useRef(true),conversation=useRef(""),flight=useRef(false),sending=useRef(false),sequence=useRef(0);
+ const alive=useRef(true),conversation=useRef(""),flight=useRef(false),refreshPending=useRef(false),sending=useRef(false),sequence=useRef(0);
  const invalidate=()=>{sequence.current++;};
  const headers={Authorization:`Bearer ${token}`};
- function merge(incoming:ProviderMessage[]) {setMessages(current=>{
+ function merge(incoming:ProviderMessage[],replace=false) {setMessages(current=>{
   if(!alive.current)return current;
-  const merged=mergeChatMessages(current,incoming);providerChatHistory.put(token,`${service?'service':'product'}:${product.id}`,merged,cached.current?.cursor || "");return merged;
+  const merged=mergeChatMessages(replace?[]:current,incoming);cached.current={messages:merged,cursor:cached.current?.cursor||'',saved:Date.now()};providerChatHistory.put(token,`${service?'service':'product'}:${product.id}`,merged,cached.current.cursor);return merged;
  });}
  async function load(earlier="",quiet=false) {
-  if(flight.current)return;
+  if(flight.current){if(quiet&&!earlier)refreshPending.current=true;return;}
   flight.current=true;const version=sequence.current;
   if(!quiet)setLoading(true);
   try {
@@ -39,26 +41,29 @@ export function ProductSellerChat({product,token,onClose,service=false}:{product
     if(response.status===304)return;
     if(!response.ok)throw new Error(body.message || "Messages could not be loaded");
     if(!alive.current || version!==sequence.current)return;
+    const caught=earlier?{items:body.items||[],cursor:body.next_cursor||'',bridged:true}:await catchUpChat(body.items||[],body.next_cursor||'',cached.current?.messages||[],async cursor=>{const result=await fetchHistoryJSON(`${API_URL}/api/v1/marketplace/conversations/${conversation.current}/messages?limit=50&mark_read=false&cursor=${encodeURIComponent(cursor)}`,{headers});if(!result.response.ok)throw new Error(result.body.message||'Messages could not be loaded');return {items:result.body.items||[],next_cursor:result.body.next_cursor};});
+    if(!alive.current || version!==sequence.current)return;
     const tag=response.headers?.get("ETag");if(tag)etag.current=tag;
-    if(earlier || !cached.current?.messages.length){setCursor(body.next_cursor || "");cached.current={messages:body.items || [],cursor:body.next_cursor || "",saved:Date.now()};}
-    merge(body.items || []);
+    if(earlier || !cached.current?.messages.length || !caught.bridged){setCursor(caught.cursor);cached.current={messages:cached.current?.messages||[],cursor:caught.cursor,saved:Date.now()};}
+    merge(caught.items,!caught.bridged);
     setLoading(false);
     const newest=body.items?.at(-1);
     if(newest?.id && AppState.currentState==="active")try{const ack=await fetchJSONWithTimeout(`${API_URL}/api/v1/marketplace/conversations/${conversation.current}/read`,{method:"POST",headers:{...headers,"Content-Type":"application/json"},body:JSON.stringify({message_id:newest.id})});if(!ack.response.ok)etag.current="";}catch{etag.current="";}
    }
    if(alive.current)setError("");
   }catch(problem){if(alive.current)setError(problem instanceof Error?problem.message:"Please try again.");}
-  finally{flight.current=false;if(alive.current)setLoading(false);}
+  finally{flight.current=false;if(alive.current)setLoading(false);if(refreshPending.current&&alive.current){refreshPending.current=false;void load('',true);}}
  }
  useEffect(()=>{
   alive.current=true;if(cached.current){setMessages(cached.current.messages);setCursor(cached.current.cursor);}void load();
-  const timer=setInterval(()=>{if(AppState.currentState==="active")void load("",true);},5000);
   const foreground=AppState.addEventListener("change",state=>{if(state==="active")void load("",true);});
   const push=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(AppState.currentState==='active'&&conversation.current&&data?.conversation_id===conversation.current)void load('',true);});
-  return()=>{alive.current=false;invalidate();clearInterval(timer);foreground.remove();push.remove();};
+  const realtime=subscribeRealtime(token,notice=>{if(notice==='disconnected'){setRealtimeReady(false);return;}setRealtimeReady(true);if(AppState.currentState==='active')void load('',true);});
+  return()=>{alive.current=false;invalidate();foreground.remove();push.remove();realtime();};
  // Product/token changes remount this component and discard the private state.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[]);
+ useEffect(()=>{const timer=setInterval(()=>{if(AppState.currentState==='active')void load('',true);},realtimeReady?30000:5000);return()=>clearInterval(timer);},[realtimeReady]);
  async function send(text:string,mediaKeys:string[]=[],clientID?:string,location?:ChatLocation) {
   if(sending.current)return;
   sending.current=true;setBusy(true);setError("");

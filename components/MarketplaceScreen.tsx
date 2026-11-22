@@ -7,6 +7,7 @@ import type {Product} from './types';
 import {ListingMediaGallery} from "./ListingMediaGallery";
 import {NearbyDrivers} from './NearbyDrivers';
 import * as Notifications from 'expo-notifications';
+import {subscribeRealtime} from './realtimeClient';
 import type {ChatLocation} from './chatLocation';
 import {ProviderProfileHeader, ProviderIdentity, ProviderIdentityData} from "./ProviderIdentity";
 import {providerChatHistory} from "./chatHistoryCache";
@@ -149,6 +150,7 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
   const conversationsRef = useRef(conversations); conversationsRef.current = conversations;
   const [conversationListCursor, setConversationListCursor] = useState("");
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [realtimeReady,setRealtimeReady]=useState(false);
   const [conversationMessages, setConversationMessages] = useState<ConversationMessage[]>([]);
   const [conversationCursor, setConversationCursor] = useState("");
   const [chatSending, setChatSending] = useState(false);
@@ -549,18 +551,20 @@ export function MarketplaceScreen({ token, active=true, bottomInset = 0, initial
   },[active,token,initialConversationId,jobConversation]);
   useEffect(()=>{
     if (!active) return;
-    let stopped=false, busy=false;
+    let stopped=false, busy=false,retryTimer:ReturnType<typeof setTimeout>|null=null;
     const refresh=async()=>{
-      if(stopped||busy||!token||AppState.currentState!=="active"||chatBusy.current||threadInFlight.current)return;
+      if(stopped||!token||AppState.currentState!=="active")return;
+      if(busy||chatBusy.current||threadInFlight.current){if(!retryTimer)retryTimer=setTimeout(()=>{retryTimer=null;void refresh();},1000);return;}
       busy=true;
       try{if(conversationRef.current?.id)await threadLoader.current(conversationRef.current,"",true);else if(mode==="messages")await loadConversations(true);else if(mode==="requests")await loadRequests(true);}
       finally{busy=false;}
     };
-    const timer=setInterval(()=>void refresh(),selectedConversation?.id?5000:30000);
+    const timer=setInterval(()=>void refresh(),selectedConversation?.id&&!realtimeReady?5000:30000);
     const foreground=AppState.addEventListener("change",state=>{if(state==="active")void refresh();});
     const push=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(AppState.currentState==='active'&&conversationRef.current?.id&&data?.conversation_id===conversationRef.current.id)void refresh();});
-    return()=>{stopped=true;clearInterval(timer);foreground.remove();push.remove();};
-  },[active,token,mode,selectedConversation?.id,authHeaders,loadConversations,loadRequests]);
+    const realtime=subscribeRealtime(token||'',notice=>{if(notice==='disconnected'){setRealtimeReady(false);return;}setRealtimeReady(true);void refresh();});
+    return()=>{stopped=true;if(retryTimer)clearTimeout(retryTimer);clearInterval(timer);foreground.remove();push.remove();realtime();};
+  },[active,token,mode,selectedConversation?.id,realtimeReady,authHeaders,loadConversations,loadRequests]);
 
   async function openListing(item: Listing) {
     recordDiscoveryDetail(token,'service',item.id,[item.category]);

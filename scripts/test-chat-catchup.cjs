@@ -1,0 +1,10 @@
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
+const ctx={exports:{},Set,Error};vm.runInNewContext(ts.transpileModule(fs.readFileSync('components/chatCatchup.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,ctx);
+const {catchUpChat}=ctx.exports;
+(async()=>{const messages=Array.from({length:161},(_,i)=>({id:String(i)}));let calls=0;
+ const page=async cursor=>{calls++;const start=Number(cursor);return {items:messages.slice(start,start+40),next_cursor:start+40<messages.length?String(start+40):''};};
+ const result=await catchUpChat(messages.slice(0,40),'40',[messages[150]],page);assert.equal(result.bridged,true);assert.equal(result.items.length,160);assert.equal(calls,3);
+ calls=0;const bounded=await catchUpChat(messages.slice(0,40),'40',[messages[150]],page,2);assert.equal(bounded.bridged,false);assert.equal(bounded.cursor,'80');assert.equal(calls,1);
+ await assert.rejects(()=>catchUpChat([{id:'new'}],'same',[{id:'old'}],async()=>({items:[],next_cursor:'same'})),/could not be refreshed/);
+ const initial=await catchUpChat(messages.slice(0,40),'40',[],page);assert.equal(initial.items.length,160);assert.equal(initial.cursor,'160');console.log('Chat catch-up passed: 150-message gap, bounded continuation, cursor loop and first load.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

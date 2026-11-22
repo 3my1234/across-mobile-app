@@ -1,6 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {AppState,DeviceEventEmitter} from 'react-native';
 import {communityRequest} from './communityApi';
+import {subscribeRealtime} from './realtimeClient';
 export type ReceiptContext={channel:'business'|'shared'|'support';conversationId:string};
 export type MessageReceipt={status:'sent'|'delivered'|'read';delivered_count:number;read_count:number};
 const uuid=/^[a-f0-9-]{36}$/i;
@@ -45,10 +46,10 @@ export function useMessageReceipts(token:string,context:ReceiptContext|undefined
  const fingerprint=messages.map(m=>m.id+':'+m.mine).join(',')+'|'+visible.join(',');
  useEffect(()=>{
   setReceipts({});if(!token||!context?.conversationId||!uuid.test(context.conversationId))return;
-  let alive=true,busy=false,privacyVersion=0;const delivered=new Set<string>(),read=new Set<string>();
+  let alive=true,busy=false,pending=false,privacyVersion=0;const delivered=new Set<string>(),read=new Set<string>();
   const base={channel:context.channel,conversation_id:context.conversationId};
   const sync=async()=>{
-   if(!alive||busy||AppState.currentState!=='active')return;busy=true;const version=privacyVersion;const currentResponse=()=>alive&&version===privacyVersion;
+   if(!alive||AppState.currentState!=='active')return;if(busy){pending=true;return;}busy=true;const version=privacyVersion;const currentResponse=()=>alive&&version===privacyVersion;
    try{
     const incoming=current.current.messages.filter(m=>!m.mine&&uuid.test(m.id)).map(m=>m.id);
     const delivery=incoming.filter(id=>!delivered.has(id)).slice(0,100);
@@ -59,12 +60,13 @@ export function useMessageReceipts(token:string,context:ReceiptContext|undefined
     const ids=[...new Set([...own.filter(m=>current.current.visible.includes(m.id)),...own.slice(-100)].map(m=>m.id))].slice(0,100);
     if(ids.length){const {data}=await communityRequest(token,'/messaging/receipts?'+new URLSearchParams({...base,message_ids:ids.join(',')}));if(currentResponse())setReceipts(previous=>Object.entries(data.items||{}).every(([id,value]:[string,any])=>previous[id]?.status===value.status&&previous[id]?.delivered_count===value.delivered_count&&previous[id]?.read_count===value.read_count)?previous:{...previous,...data.items});}
    }catch{/* Retry receipt synchronization later; never block or resend chat messages. */}
-   finally{busy=false;}
+   finally{busy=false;if(pending&&alive){pending=false;void sync();}}
   };
   wake.current=()=>void sync();void sync();
   const timer=setInterval(()=>void sync(),5000),foreground=AppState.addEventListener('change',state=>{if(state==='active')void sync();});
   const preference=DeviceEventEmitter.addListener('message-receipts-preference',()=>{privacyVersion++;setReceipts({});read.clear();void sync();});
-  return()=>{alive=false;wake.current=()=>{};clearInterval(timer);foreground.remove();preference.remove();};
+  const realtime=subscribeRealtime(token,notice=>{if(notice!=='disconnected')void sync();});
+  return()=>{alive=false;wake.current=()=>{};clearInterval(timer);foreground.remove();preference.remove();realtime();};
  },[token,context?.channel,context?.conversationId]);
  useEffect(()=>{wake.current();},[fingerprint]);
  return receipts;

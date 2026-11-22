@@ -14,8 +14,10 @@ import { ProviderIdentity, ProviderBadge, ProviderIdentityData } from "./Provide
 import { communityRequest } from "./communityApi";
 import { createChatHistoryCache } from "./chatHistoryCache";
 import { mergeChatMessages } from "./chatImages";
+import {catchUpChat} from './chatCatchup';
 import { CommunityTownHall } from "./CommunityTownHall";
 import * as Notifications from "expo-notifications";
+import {subscribeRealtime} from './realtimeClient';
 export type CommunityMode = "chats" | "town-hall";
 type Conversation = {
     id: string;
@@ -44,13 +46,13 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     const [inbox, setInbox] = useState<Conversation[]>(() => snapshots.get(token, "inbox")?.messages || []);
     useInboxDeliveryReceipts(token,inbox);
     const [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [cursor, setCursor] = useState("");
-    const [selected, setSelected] = useState<Conversation | null>(null), [messages, setMessages] = useState<ProviderMessage[]>([]), [chatCursor, setChatCursor] = useState(""), [chatLoading, setChatLoading] = useState(false), [canSend, setCanSend] = useState(true);
+    const [selected, setSelected] = useState<Conversation | null>(null), [messages, setMessages] = useState<ProviderMessage[]>([]), [chatCursor, setChatCursor] = useState(""), [chatLoading, setChatLoading] = useState(false), [canSend, setCanSend] = useState(true),[realtimeReady,setRealtimeReady]=useState(false);
     const alive = useRef(true), sequence = useRef(0), threadSequence = useRef(0), current = useRef<Conversation | null>(null), etags = useRef(new Map<string, string>()), messageRef = useRef<ProviderMessage[]>([]), scroll = useRef<ScrollView>(null);
     const openedInitial = useRef("");
     const lastHallRoom=useRef(initialHallRoomId);
     const [roomNotice,setRoomNotice]=useState('');
     const [search,setSearch]=useState("");const inboxConfirmed=useRef(false);
-    const openSequence=useRef(0),readFlights=useRef(new Set<string>()),readPending=useRef(new Set<string>());
+    const openSequence=useRef(0),readFlights=useRef(new Set<string>()),readPending=useRef(new Set<string>()),refreshPending=useRef(new Set<string>());
     const readAcknowledged = useRef(new Map<string, string>());
     useEffect(() => { alive.current = true; return () => { alive.current = false; sequence.current++; threadSequence.current++; }; }, [token]);
     const call = useCallback(async (path: string, options: RequestInit = {}) => communityRequest(token, path, options), [token]);
@@ -85,7 +87,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
     useEffect(()=>{if(selected?.kind==='town_hall')setMode('town-hall');},[selected?.kind]);
     const acknowledge=useCallback((room:string,message:string)=>{if(readPending.current.has(room)||readAcknowledged.current.get(room)===message)return;readPending.current.add(room);void call('/chat/conversations/'+room+'/read',{method:'POST',body:JSON.stringify({message_id:message})}).then(()=>{if(alive.current){readAcknowledged.current.set(room,message);void load();}}).catch(()=>{}).finally(()=>readPending.current.delete(room));},[call,load]);
     const loadThread = useCallback(async (conversation: Conversation, older = "") => {
-        const flight=openSequence.current+":"+conversation.id;if(readFlights.current.has(flight))return;readFlights.current.add(flight);
+        const flight=openSequence.current+":"+conversation.id;if(readFlights.current.has(flight)){if(!older)refreshPending.current.add(flight);return;}readFlights.current.add(flight);
         const request = ++threadSequence.current;
         setChatLoading(true);
         try {
@@ -99,17 +101,18 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
                 }
                 return;
             }
-            if (etag && !older)
-                etags.current.set(conversation.id, etag);
-            const incoming = (data.items || []).map((message: ProviderMessage) => ({ ...message, sender_type: conversation.source === "legacy" ? message.sender_type : message.is_mine ? "buyer" : "provider", is_mine: conversation.source === "legacy" ? message.sender_type === conversation.actor_role : message.is_mine }));
+            const caught=older?{items:data.items||[],cursor:data.next_cursor||'',bridged:true}:await catchUpChat(data.items||[],data.next_cursor||'',messageRef.current,async cursor=>{const page=await call(`/chat/conversations/${conversation.id}/messages?limit=40&mark_read=false&cursor=${encodeURIComponent(cursor)}`);return {items:page.data.items||[],next_cursor:page.data.next_cursor};});
+            if (!alive.current || request !== threadSequence.current || current.current?.id !== conversation.id) return;
+            if (etag && !older) etags.current.set(conversation.id, etag);
+            const incoming = caught.items.map((message: ProviderMessage) => ({ ...message, sender_type: conversation.source === "legacy" ? message.sender_type : message.is_mine ? "buyer" : "provider", is_mine: conversation.source === "legacy" ? message.sender_type === conversation.actor_role : message.is_mine }));
             const oldFirst=messageRef.current[0],newFirst=incoming[0],keepCursor=!older&&oldFirst&&newFirst&&oldFirst.created_at<newFirst.created_at;
-            const nextCursor=keepCursor?(history.get(token,conversation.id)?.cursor||data.next_cursor||""):(data.next_cursor||"");
-            const next = mergeChatMessages(messageRef.current, incoming);
+            const nextCursor=!caught.bridged?caught.cursor:keepCursor?(history.get(token,conversation.id)?.cursor||caught.cursor||""):(caught.cursor||"");
+            const next = mergeChatMessages(caught.bridged?messageRef.current:[], incoming);
             messageRef.current = next;
             setMessages(next);
             setChatCursor(nextCursor);
             setCanSend(data.can_send !== false);
-            history.put(token, conversation.id, next, nextCursor);if(!older&&conversation.kind!=="town_hall")privateChatStore.put(token,conversation.id,{messages:incoming,cursor:data.next_cursor||""});
+            history.put(token, conversation.id, next, nextCursor);if(!older&&conversation.kind!=="town_hall")privateChatStore.put(token,conversation.id,{messages:next,cursor:nextCursor});
             setError("");
             if (!older && next.length && AppState.currentState === "active") {
                 acknowledge(conversation.id,next[next.length-1].id);
@@ -126,8 +129,9 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
             }
         }
         finally {
-            readFlights.current.delete(flight);if (alive.current && request === threadSequence.current)
+            readFlights.current.delete(flight);const refreshAgain=refreshPending.current.delete(flight);if (alive.current && request === threadSequence.current)
                 setChatLoading(false);
+            if(refreshAgain&&alive.current&&current.current?.id===conversation.id&&flight===openSequence.current+":"+conversation.id)void loadThread(conversation);
         }
     }, [call, acknowledge, token]);
     const open = useCallback(async (conversation: Conversation) => {
@@ -154,7 +158,7 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
             return; if (current.current)
             void loadThread(current.current);
         else
-            void load(); }, 20000);
+            void load(); }, selected?.id && !realtimeReady ? 5000 : 30000);
         const listener = AppState.addEventListener("change", state => { if (state === "active") {
             if (current.current)
                 void loadThread(current.current);
@@ -162,8 +166,9 @@ export function CommunityScreen({ token, bottomInset = 0, initialMode = "chats",
                 void load();
         } });
         return () => { clearInterval(timer); listener.remove(); };
-    }, [loadThread, load]);
+    }, [loadThread, load, selected?.id,realtimeReady]);
     useEffect(()=>{const subscription=Notifications.addNotificationReceivedListener(notification=>{const data=notification.request.content.data;if(current.current&&(data.chat_room_id===current.current.id||data.conversation_id===current.current.id))void loadThread(current.current);else if(!current.current&&mode==='chats')void load();});return()=>subscription.remove();},[loadThread,load,mode]);
+    useEffect(()=>subscribeRealtime(token,notice=>{if(notice==='disconnected'){setRealtimeReady(false);return;}setRealtimeReady(true);if(AppState.currentState!=='active')return;if(current.current)void loadThread(current.current);else if(mode==='chats')void load();}),[token,loadThread,load,mode]);
     async function act(action: () => Promise<void>) { if (busy)
         return; setBusy(true); setError(""); try {
         await action();
